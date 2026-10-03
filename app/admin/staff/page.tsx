@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import { api, useAutoRefresh, useMe } from "@/lib/client";
+import { reiwa } from "@/lib/era";
 import { LEVEL_NAMES, type Level } from "@/lib/permissions";
 import { parseStaffPaste } from "@/lib/staff-paste";
 import type { BulkStaffResult } from "@/lib/service";
@@ -76,6 +77,7 @@ export default function StaffPage() {
             <div>
               <b>{s.name}</b> <span className="sub">{storeName(s.storeId)}</span>{s.displayOnly && <span className="chip warn">表示専用（お店の端末）</span>}
               <div className="sub">社員番号 {s.employeeCode}{s.status === "disabled" && " ／ 退職（無効）"}{s.status === "active" && !s.displayOnly && (s.onShift ? " ／ シフトに入る" : " ／ シフトに入らない")}</div>
+              {s.status === "active" && s.retireOn && <div className="sub" style={{ marginTop: 2, color: "#b45309" }}>退職予定日：{reiwa(s.retireOn)}（この日になると自動で退職になります）</div>}
               {s.status === "active" && <PresenceBadge s={s} />}
             </div>
             <div className="actions">
@@ -85,6 +87,21 @@ export default function StaffPage() {
                   const code = prompt("社員番号（変えないときはそのまま）", s.employeeCode); if (code === null) return;
                   run(() => api(`/api/staff/${s.id}/profile`, { name, employeeCode: code }));
                 }}>名前・番号を変える</button>
+              )}
+              {me.level === 4 && s.status === "active" && (
+                <button className="ghost" style={{ color: "var(--blue)" }} onClick={() => {
+                  const v = prompt(`${s.name} さんの退職予定日（例 2026-12-31 または 2026/12）。月だけ入れると、その月の月末になります。この日になると自動で退職になります。取り消すときは空にしてください。`, s.retireOn ?? "");
+                  if (v === null) return;
+                  const t = v.trim().replace(/[年/]/g, "-").replace(/月/g, "-").replace(/日/g, "").replace(/-$/, "");
+                  let date: string | null = null;
+                  if (t) {
+                    const m = t.match(/^(\d{4})-(\d{1,2})(?:-(\d{1,2}))?$/);
+                    if (!m) { setMsg("「2026-12-31」や「2026/12」の形で入力してください"); return; }
+                    const y = Number(m[1]), mo = Number(m[2]), d = m[3] ? Number(m[3]) : new Date(Date.UTC(y, mo, 0)).getUTCDate();
+                    date = `${y}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+                  }
+                  run(() => api(`/api/staff/${s.id}/retire-on`, { date }));
+                }}>退職予定日</button>
               )}
               {me.level === 4 && s.status === "disabled" && !s.employeeCode.includes("-退職") && (
                 <button className="ghost" style={{ color: "var(--blue)" }}

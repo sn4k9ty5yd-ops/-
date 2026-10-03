@@ -17,7 +17,7 @@ async function person(co: string, code: string, name: string, level: number, st:
 
 beforeAll(async () => {
   db = await newDb();
-  expect(await migrate(db)).toEqual(["0001_tenant_core.sql", "0002_periods_requests.sql", "0003_store_changes.sql", "0004_shifts.sql", "0005_break_rule.sql", "0006_attendance.sql", "0007_products_stocktake.sql", "0008_stock.sql", "0009_display_accounts.sql", "0010_presence.sql", "0011_saturday_hours.sql"]);
+  expect(await migrate(db)).toEqual(["0001_tenant_core.sql", "0002_periods_requests.sql", "0003_store_changes.sql", "0004_shifts.sql", "0005_break_rule.sql", "0006_attendance.sql", "0007_products_stocktake.sql", "0008_stock.sql", "0009_display_accounts.sql", "0010_presence.sql", "0011_saturday_hours.sql", "0012_scheduled_retirement.sql"]);
   expect(await migrate(db)).toEqual([]); // 2回目は何もしない
   const a = (await db.query<{ id: string }>("insert into companies (code, name) values ('co-a','A社') returning id")).rows[0].id;
   const b = (await db.query<{ id: string }>("insert into companies (code, name) values ('co-b','B社') returning id")).rows[0].id;
@@ -163,5 +163,21 @@ describe("管理者も、ほかのスタッフと同じように扱える", () =
     const admin2 = await person(co, "9001", "管理者2", 4, store.a1);
     await svc.disableStaff(db, admin2, admin2);
     expect((await svc.listStaff(db, id.office)).find((x) => x.id === admin2)!.status).toBe("disabled");
+  });
+});
+
+describe("退職予定日", () => {
+  it("予定日の前は使え、予定日になると自動で退職になりログインできなくなる。最後の管理者は対象外", async () => {
+    const co = (await db.query<{ company_id: string }>("select company_id from memberships where id=$1", [id.office])).rows[0].company_id;
+    const p = await svc.addStaff(db, id.office, { name: "予定の人", employeeCode: "6600", storeId: store.a1, level: 1 });
+    await expect(svc.setRetireDate(db, id.mgr, p.id, "2099-01-01")).rejects.toThrow(svc.ForbiddenError);
+    await svc.setRetireDate(db, id.office, p.id, "2099-01-01");
+    expect((await svc.listStaff(db, id.office)).find((s) => s.id === p.id)).toMatchObject({ status: "active", retireOn: "2099-01-01" });
+    expect((await login(db, { companyCode: "co-a", employeeCode: "6600", passcode: p.passcode })).ok).toBe(true);
+    await svc.setRetireDate(db, id.office, p.id, "2000-01-01"); // 過去の日付＝今日が過ぎている
+    expect((await login(db, { companyCode: "co-a", employeeCode: "6600", passcode: p.passcode })).ok).toBe(false);
+    expect((await svc.listStaff(db, id.office)).find((s) => s.id === p.id)).toMatchObject({ status: "disabled" });
+    await expect(svc.setRetireDate(db, id.office, id.office, "2000-01-01")).rejects.toThrow("ほかに有効な管理者"); // 最後の管理者は決められない
+    void co;
   });
 });

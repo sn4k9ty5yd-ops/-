@@ -28,7 +28,8 @@ export async function login(
   }>(
     `select m.id, m.passcode_hash, m.failed_attempts, coalesce(m.locked_until > now(), false) as locked
        from memberships m join companies c on c.id = m.company_id
-      where c.code = $1 and m.employee_code = $2 and m.status = 'active' and c.status = 'active'`,
+      where c.code = $1 and m.employee_code = $2 and m.status = 'active' and c.status = 'active'
+        and (m.retire_on is null or m.retire_on > (now() at time zone 'Asia/Tokyo')::date)`,
     [input.companyCode.trim().toLowerCase(), input.employeeCode.trim()],
   );
   const m = rows[0];
@@ -68,7 +69,8 @@ export async function validateSession(db: Db, token: string | undefined): Promis
     `select s.membership_id from sessions s
        join memberships m on m.id = s.membership_id
        join companies c on c.id = m.company_id
-      where s.token_hash = $1 and s.expires_at > now() and m.status = 'active' and c.status = 'active'`,
+      where s.token_hash = $1 and s.expires_at > now() and m.status = 'active' and c.status = 'active'
+        and (m.retire_on is null or m.retire_on > (now() at time zone 'Asia/Tokyo')::date)`,
     [sha256(token)],
   );
   return rows[0]?.membership_id ?? null;

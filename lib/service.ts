@@ -14,7 +14,7 @@ export interface StoreRow { id: string; name: string; status: "active" | "closed
 export type Presence = "online" | "idle" | "loggedout" | "never";
 export const ONLINE_SECONDS = 120; // これ以内に開いていれば「オンライン」
 export interface StaffRow {
-  presence?: Presence; seenAgoSec?: number | null;
+  presence?: Presence; seenAgoSec?: number | null; retireOn?: string | null;
   id: string; name: string; employeeCode: string; storeId: string; level: Level; status: "active" | "disabled"; manageable: boolean; onShift: boolean; displayOnly: boolean;
 }
 
@@ -115,10 +115,11 @@ export async function listStaff(db: Database, userId: string): Promise<StaffRow[
     q.query<StaffRow>(
       `select id, name, employee_code as "employeeCode", store_id as "storeId", level, status, on_shift as "onShift", display_only as "displayOnly" from memberships order by store_id, level desc, name`));
   // ログインの状況は管理者(Lv4)だけに見せる（管理用接続で読む）
-  const pres = new Map<string, { presence: Presence; seenAgoSec: number | null }>();
+  const pres = new Map<string, { presence: Presence; seenAgoSec: number | null; retireOn: string | null }>();
   if (me.level === 4 && rows.length > 0) {
-    const p = await db.query<{ id: string; ever: boolean; has_session: boolean; ago: number | null }>(
-      `select m.id, (m.last_login_at is not null) as ever,
+    await applyScheduledRetirements(db);
+    const p = await db.query<{ id: string; ever: boolean; has_session: boolean; ago: number | null; retire_on: string | null }>(
+      `select m.id, (m.last_login_at is not null) as ever, m.retire_on::text as retire_on,
               exists (select 1 from sessions s where s.membership_id = m.id and s.expires_at > now()) as has_session,
               extract(epoch from (now() - m.last_seen_at))::float8 as ago
          from memberships m where m.id = any($1::uuid[])`, [rows.map((r) => r.id)]);
@@ -127,7 +128,7 @@ export async function listStaff(db: Database, userId: string): Promise<StaffRow[
       const presence: Presence = !r.ever && !r.has_session ? "never"
         : r.has_session && ago !== null && ago <= ONLINE_SECONDS ? "online"
         : r.has_session ? "idle" : "loggedout";
-      pres.set(r.id, { presence, seenAgoSec: ago });
+      pres.set(r.id, { presence, seenAgoSec: ago, retireOn: r.retire_on });
     }
   }
   // 「操作できる人」かは、画面のボタン表示のための目安（本当の判定はDBが行う）。社員番号の小さい順に並べる
@@ -209,6 +210,39 @@ export async function updateStaffProfile(db: Database, userId: string, targetId:
     if ((e as { code?: string }).code === "23505") throw new Error("その社員番号はすでに使われています");
     throw e instanceof ForbiddenError || e instanceof Error && e.message.includes("社員番号") ? e : new ForbiddenError();
   }
+}
+
+/** 退職予定日を決める／消す（管理者のみ）。その日になると自動で退職（無効）扱いになる */
+export async function setRetireDate(db: Database, userId: string, targetId: string, date: string | null): Promise<void> {
+  const me = await getMe(db, userId);
+  if (!me || me.level < 4) throw new ForbiddenError();
+  if (date !== null && !/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error("日付が正しくありません");
+  const visible = await asUser(db, userId, (q) => q.query("select 1 from memberships where id = $1 and status = 'active'", [targetId]));
+  if (visible.rows.length === 0) throw new ForbiddenError();
+  if (date !== null) {
+    const other = await db.query(
+      `select 1 from memberships t join memberships o on o.company_id = t.company_id
+        where t.id = $1 and t.level = 4 and o.level = 4 and o.status = 'active' and o.id <> t.id and o.retire_on is null limit 1`, [targetId]);
+    const isAdmin = (await db.query("select 1 from memberships where id = $1 and level = 4", [targetId])).rows.length > 0;
+    if (isAdmin && other.rows.length === 0) throw new Error("ほかに有効な管理者がいないので、この人の退職予定日は決められません");
+  }
+  await db.query("update memberships set retire_on = $2 where id = $1", [targetId, date]);
+  await applyScheduledRetirements(db, true);
+}
+
+let lastRetireRun = 0;
+/** 退職予定日になった人を、自動で退職（無効）にする。リクエストのついでに1分に1回だけ確認する */
+export async function applyScheduledRetirements(db: Database, force = false): Promise<number> {
+  if (!force && Date.now() - lastRetireRun < 60_000) return 0;
+  lastRetireRun = Date.now();
+  const { rows } = await db.query<{ id: string }>(
+    `update memberships m set status = 'disabled', left_on = m.retire_on
+      where m.status = 'active' and m.retire_on is not null and m.retire_on <= (now() at time zone 'Asia/Tokyo')::date
+        and (m.level < 4 or exists (select 1 from memberships o where o.company_id = m.company_id and o.level = 4 and o.status = 'active' and o.id <> m.id
+                                      and (o.retire_on is null or o.retire_on > (now() at time zone 'Asia/Tokyo')::date)))
+      returning m.id`);
+  if (rows.length > 0) await db.query("delete from sessions where membership_id = any($1::uuid[])", [rows.map((r) => r.id)]);
+  return rows.length;
 }
 
 /** 退職した人の社員番号を「◯◯-退職」に変えて、元の番号を空ける（管理者のみ・退職者のみ） */

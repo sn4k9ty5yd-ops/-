@@ -2,7 +2,7 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { validateSession } from "./auth/login";
 import { getDb } from "./db";
-import { ForbiddenError } from "./service";
+import { applyScheduledRetirements, ForbiddenError } from "./service";
 
 export const COOKIE = "session";
 export const COOKIE_MAX_AGE = 60 * 60 * 24 * 30;
@@ -16,6 +16,7 @@ export async function currentUserId(): Promise<string | null> {
 /** 「いま開いている」印。30秒に1回だけ書く（画面は30秒ごとに自動更新するので、開いている間は続く） */
 async function touchPresence(userId: string) {
   try {
+    await applyScheduledRetirements(await getDb());
     await (await getDb()).query(
       "update memberships set last_seen_at = now() where id = $1 and (last_seen_at is null or last_seen_at < now() - interval '30 seconds')", [userId]);
   } catch { /* 印がつけられなくても、本来の処理は続ける */ }
