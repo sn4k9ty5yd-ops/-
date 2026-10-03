@@ -17,7 +17,7 @@ async function person(co: string, code: string, name: string, level: number, st:
 
 beforeAll(async () => {
   db = await newDb();
-  expect(await migrate(db)).toEqual(["0001_tenant_core.sql", "0002_periods_requests.sql", "0003_store_changes.sql", "0004_shifts.sql", "0005_break_rule.sql", "0006_attendance.sql", "0007_products_stocktake.sql", "0008_stock.sql", "0009_display_accounts.sql", "0010_presence.sql", "0011_saturday_hours.sql", "0012_scheduled_retirement.sql", "0013_manual.sql", "0014_ranks.sql", "0015_short_name.sql", "0016_day_limits.sql", "0017_material_orders.sql", "0018_material_tax.sql"]);
+  expect(await migrate(db)).toEqual(["0001_tenant_core.sql", "0002_periods_requests.sql", "0003_store_changes.sql", "0004_shifts.sql", "0005_break_rule.sql", "0006_attendance.sql", "0007_products_stocktake.sql", "0008_stock.sql", "0009_display_accounts.sql", "0010_presence.sql", "0011_saturday_hours.sql", "0012_scheduled_retirement.sql", "0013_manual.sql", "0014_ranks.sql", "0015_short_name.sql", "0016_day_limits.sql", "0017_material_orders.sql", "0018_material_tax.sql", "0019_material_manager.sql"]);
   expect(await migrate(db)).toEqual([]); // 2回目は何もしない
   const a = (await db.query<{ id: string }>("insert into companies (code, name) values ('co-a','A社') returning id")).rows[0].id;
   const b = (await db.query<{ id: string }>("insert into companies (code, name) values ('co-b','B社') returning id")).rows[0].id;
@@ -267,5 +267,25 @@ describe("材料費（発注額）", () => {
     expect(mem.items).toEqual(expect.arrayContaining(["シャンプー", "カラー剤"]));
     expect(mem.aliases).toContainEqual({ raw: "シャンプ一", name: "シャンプー" });
     expect((await svc.getMaterialMemory(db, id.staff2, store.a1)).items).toEqual([]);   // 他店の人には見えない
+  });
+  it("材料担当: 管理者が決めると、他店でも全店の材料費を見て書ける。統括は管理者と材料担当だけ", async () => {
+    await expect(svc.materialSummaryData(db, id.staff, "2026-01-01", "2026-12-31")).rejects.toThrow(svc.ForbiddenError);
+    await expect(svc.materialSummaryData(db, id.mgr, "2026-01-01", "2026-12-31")).rejects.toThrow(svc.ForbiddenError);
+    await expect(svc.setMaterialManager(db, id.mgr, id.staff2, true)).rejects.toThrow(svc.ForbiddenError);   // 管理者だけが決められる
+    const before = await svc.materialSummaryData(db, id.office, "2026-01-01", "2026-12-31");
+    expect(before.orders.length).toBeGreaterThan(0);
+    expect(before.orders.some((o) => o.storeId === store.a1) && before.orders.some((o) => o.storeId === store.a2)).toBe(true);
+    await svc.setMaterialManager(db, id.office, id.staff2, true);
+    try {
+      expect((await svc.getMe(db, id.staff2))?.materialManager).toBe(true);
+      const seen = await svc.listMaterialOrders(db, id.staff2, store.a1, "2026-10-01", "2026-10-31");
+      expect(seen.length).toBeGreaterThan(0);
+      await expect(svc.addMaterialOrder(db, id.staff2, store.a1, inp)).resolves.toBeTruthy();
+      const all = await svc.materialSummaryData(db, id.staff2, "2026-01-01", "2026-12-31");
+      expect(all.orders.some((o) => o.storeId === store.a1)).toBe(true);
+      expect((await svc.listMaterialLog(db, id.staff2, store.a1)).length).toBeGreaterThan(0);
+    } finally { await svc.setMaterialManager(db, id.office, id.staff2, false); }
+    expect(await svc.listMaterialOrders(db, id.staff2, store.a1, "2026-10-01", "2026-10-31")).toHaveLength(0);
+    await expect(svc.materialSummaryData(db, id.staff2, "2026-01-01", "2026-12-31")).rejects.toThrow(svc.ForbiddenError);
   });
 });

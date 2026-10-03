@@ -80,6 +80,7 @@ export default function StaffPage() {
               {s.status === "active" && s.shortName && <div className="sub" style={{ marginTop: 2 }}>カレンダーの名前：{s.shortName}</div>}
               {s.status === "active" && s.rank && <div className="sub" style={{ marginTop: 2 }}>ランク：{s.rank === "stylist" ? "スタイリスト" : "アシスタント"}</div>}
               {s.status === "active" && s.canEvaluate && <div className="sub" style={{ marginTop: 2 }}>✔ 技術評価をつけられる人</div>}
+              {s.status === "active" && s.materialManager && <div className="sub" style={{ marginTop: 2 }}>✔ 材料担当（全店の材料費を見られる・書ける）</div>}
               {s.status === "active" && s.retireOn && <div className="sub" style={{ marginTop: 2, color: "#b45309" }}>退職予定日：{reiwa(s.retireOn)}（この日になると自動で退職になります）</div>}
               {s.status === "active" && <PresenceBadge s={s} />}
             </div>
@@ -100,6 +101,11 @@ export default function StaffPage() {
               {me.level === 4 && s.status === "active" && !s.displayOnly && (
                 <button className="ghost" style={{ color: "var(--blue)" }} onClick={() => run(() => api(`/api/staff/${s.id}/evaluate`, { on: !s.canEvaluate }))}>
                   {s.canEvaluate ? "技術評価をつけられる人：外す" : "技術評価をつけられる人にする"}
+                </button>
+              )}
+              {me.level === 4 && s.status === "active" && !s.displayOnly && (
+                <button className="ghost" style={{ color: "var(--blue)" }} onClick={() => run(() => api(`/api/staff/${s.id}/material-manager`, { on: !s.materialManager }))}>
+                  {s.materialManager ? "材料担当：外す" : "材料担当にする"}
                 </button>
               )}
               {me.level === 4 && s.status === "active" && (

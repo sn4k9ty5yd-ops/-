@@ -330,3 +330,12 @@ main.login button[type=submit]{margin-top:28px;width:100%;padding:15px;font-size
 }
 .mday .holname{display:block;font-size:9px;margin-top:1px}
 .mday .num .holname{display:block}
+
+/* 材料費統括 */
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:12px}
+.stats .card{margin:0}.stats .big{font-size:30px;font-weight:700;letter-spacing:-.03em;margin-top:2px}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;margin-bottom:12px}.grid2 .card{margin:0}
+.bar{display:block;height:8px;border-radius:999px;background:color-mix(in srgb,var(--ink) 8%,transparent);overflow:hidden;margin-top:4px}
+.bar i{display:block;height:100%;border-radius:999px;background:var(--blue)}
+.monthrow{display:flex;align-items:center;gap:12px;width:100%;margin:0;padding:10px 0;background:transparent;color:var(--ink);border-radius:0;border-bottom:1px solid var(--hair);font-size:14px;text-align:left}
+.monthrow:hover{background:transparent !important}.monthrow .ml{width:36px;color:var(--sub)}.monthrow .mv{min-width:170px;text-align:right}

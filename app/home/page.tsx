@@ -19,6 +19,7 @@ function Cards() {
     { href: "/manual", title: "マニュアル", sub: "教育・営業マニュアル、技術動画、技術評価", show: true },
     { href: "/shifts", title: "シフトを見る", sub: "今日の出勤・月のシフト・みんなの休み", show: true },
     { href: "/material", title: "材料費（発注額）", sub: "発注した額を記録・月ごとの合計", show: true },
+    { href: "/material/summary", title: "材料費統括", sub: "月ごと・お店ごと・商品ごとの割合（管理者・材料担当）", show: me.level === 4 || !!me.materialManager },
     { href: "/admin/attendance", title: "出勤簿", sub: "出勤・退勤・休憩・実働", show: me.level >= 3 },
     { href: "/admin/stock", title: "在庫", sub: low ? `少なくなっている商品が ${low} 件あります` : "いまの在庫・入庫と出庫・発注の目安", show: me.level >= 2 },
     { href: "/admin/stocktake", title: "棚卸し", sub: "店販・業務の棚卸し（印刷・コピーもできます）", show: me.level >= 2 },

@@ -37,7 +37,8 @@ function Page() {
   const [log, setLog] = useState<MaterialLogRow[] | null>(null);
   const [budgetEdit, setBudgetEdit] = useState<string | null>(null);
 
-  const own = me.level === 4 || storeId === me.storeId;
+  const mgr = !!me.materialManager;
+  const own = me.level === 4 || mgr || storeId === me.storeId;
   const canEdit = own && !me.displayOnly;
   const canBudget = me.level === 4 || (me.level === 3 && storeId === me.storeId);
   const month = `${ym}-01`;
@@ -107,9 +108,10 @@ function Page() {
     <main className="wide">
       <Link href="/home" className="back">← ホーム</Link>
       <h1>材料費（発注額）</h1>
+      {(me.level === 4 || mgr) && <Link href="/material/summary" className="storelink" style={{ display: "inline-block", marginBottom: 12 }}>材料費統括を見る（全店の割合・月ごと）</Link>}
       <div className="toolbar">
         <select aria-label="お店" value={storeId} onChange={(e) => setStoreId(e.target.value)}>
-          {(me.level >= 3 ? stores : stores.filter((x) => x.id === me.storeId)).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+          {(me.level >= 3 || mgr ? stores : stores.filter((x) => x.id === me.storeId)).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
         </select>
         <button className="ghost" onClick={() => setYm(shiftMonth(ym, -1))} aria-label="前の月">‹</button>
         <b>{ym.slice(0, 4)}年{Number(ym.slice(5))}月</b>
@@ -133,7 +135,7 @@ function Page() {
         {canEdit && <button onClick={() => { setMsg(""); setForm({ orderedOn: todayJst(), supplier: "", item: "", kind: "supply", amount: "", note: "", pics: [], lines: [], tax: "ex" }); }}>＋ 発注を記録する</button>}
         <button className="ghost" style={{ color: "var(--blue)" }} onClick={async () => setNote((await copyText(tsv())) ? "表をコピーしました（Excelやメールに貼れます）" : "コピーできませんでした")}>表をコピー</button>
         <button className="ghost" style={{ color: "var(--blue)" }} onClick={() => window.print()}>印刷</button>
-        {me.level >= 3 && <button className="ghost" style={{ color: "var(--blue)" }} onClick={async () => setLog(await api<MaterialLogRow[]>(`/api/material?storeId=${storeId}&log=1`))}>変更の記録</button>}
+        {(me.level >= 3 || mgr) && <button className="ghost" style={{ color: "var(--blue)" }} onClick={async () => setLog(await api<MaterialLogRow[]>(`/api/material?storeId=${storeId}&log=1`))}>変更の記録</button>}
       </div>
       <p className="print-only" style={{ display: "none" }}>{storeName}　{ym}</p>
 

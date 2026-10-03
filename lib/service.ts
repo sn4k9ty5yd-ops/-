@@ -8,14 +8,14 @@ import type { Level } from "./permissions";
 
 // 画面(API)から呼ばれる業務処理。権限の判定はすべてDB側(RLS)で行い、ここでは再実装しない。
 
-export interface Me { id: string; name: string; level: Level; storeId: string; companyId: string; companyName: string; closingStartDay: number; breakRule: BreakRule; displayOnly: boolean; }
+export interface Me { id: string; name: string; level: Level; storeId: string; companyId: string; companyName: string; closingStartDay: number; breakRule: BreakRule; displayOnly: boolean; materialManager?: boolean; }
 export interface StoreRow { id: string; name: string; status: "active" | "closed"; defaultOpen: string; defaultClose: string; satOpen: string | null; satClose: string | null; }
 /** 管理者だけが見られる、ログインの状況 */
 export type Presence = "online" | "idle" | "loggedout" | "never";
 export const ONLINE_SECONDS = 120; // これ以内に開いていれば「オンライン」
 export interface StaffRow {
   presence?: Presence; seenAgoSec?: number | null; retireOn?: string | null;
-  id: string; name: string; employeeCode: string; storeId: string; level: Level; status: "active" | "disabled"; manageable: boolean; onShift: boolean; displayOnly: boolean; canEvaluate?: boolean; rank?: "assistant" | "stylist" | null; shortName?: string | null;
+  id: string; name: string; employeeCode: string; storeId: string; level: Level; status: "active" | "disabled"; manageable: boolean; onShift: boolean; displayOnly: boolean; canEvaluate?: boolean; materialManager?: boolean; rank?: "assistant" | "stylist" | null; shortName?: string | null;
 }
 
 export class ForbiddenError extends Error {
@@ -26,7 +26,7 @@ export async function getMe(db: Database, userId: string): Promise<Me | null> {
   const { rows } = await asUser(db, userId, (q) =>
     q.query<Omit<Me, "breakRule"> & { cap: number | null; tiers: { overMinutes: number; breakMinutes: number }[] }>(
       `select m.id, m.name, m.level, m.store_id as "storeId", m.company_id as "companyId", c.name as "companyName", c.closing_start_day as "closingStartDay",
-              c.work_cap_minutes as cap, c.break_tiers as tiers, m.display_only as "displayOnly"
+              c.work_cap_minutes as cap, c.break_tiers as tiers, m.display_only as "displayOnly", m.material_manager as "materialManager"
          from memberships m join companies c on c.id = m.company_id where m.id = $1`, [userId]),
   );
   const r = rows[0];
@@ -113,7 +113,7 @@ export async function listStaff(db: Database, userId: string): Promise<StaffRow[
   if (!me) return [];
   const { rows } = await asUser(db, userId, (q) =>
     q.query<StaffRow>(
-      `select id, name, employee_code as "employeeCode", store_id as "storeId", level, status, on_shift as "onShift", display_only as "displayOnly", can_evaluate as "canEvaluate", rank, short_name as "shortName" from memberships order by store_id, level desc, name`));
+      `select id, name, employee_code as "employeeCode", store_id as "storeId", level, status, on_shift as "onShift", display_only as "displayOnly", can_evaluate as "canEvaluate", material_manager as "materialManager", rank, short_name as "shortName" from memberships order by store_id, level desc, name`));
   // ログインの状況は管理者(Lv4)だけに見せる（管理用接続で読む）
   const pres = new Map<string, { presence: Presence; seenAgoSec: number | null; retireOn: string | null }>();
   if (me.level === 4 && rows.length > 0) {
@@ -1537,5 +1537,36 @@ export async function getMaterialMemory(db: Database, userId: string, storeId: s
     const st = (await q.query<{ supplier: string; tax_mode: "ex" | "in" }>(
       `select distinct on (supplier) supplier, tax_mode from material_orders where store_id = $1 and deleted_at is null and supplier <> '' order by supplier, created_at desc`, [storeId])).rows;
     return { suppliers, items, aliases, supplierTax: Object.fromEntries(st.map((r) => [r.supplier, r.tax_mode])) };
+  });
+}
+
+
+/** 材料担当にする／外す（管理者のみ）。材料担当は、全店の材料費を見られて、書き込めて、統括の画面も見られる */
+export async function setMaterialManager(db: Database, userId: string, targetId: string, on: boolean): Promise<void> {
+  const me = await getMe(db, userId);
+  if (!me || me.level < 4) throw new ForbiddenError();
+  const ok = await asUser(db, userId, (q) => q.query("select 1 from memberships where id = $1 and status = 'active'", [targetId]));
+  if (ok.rows.length === 0) throw new ForbiddenError();
+  await db.query("update memberships set material_manager = $2 where id = $1", [targetId, on]);
+}
+
+export interface SummaryOrder { id: string; storeId: string; orderedOn: string; supplier: string; item: string; kind: MaterialKind; amount: number }
+export interface SummaryLine { orderId: string; name: string; qty: number; amount: number }
+
+/** 統括: 期間の発注（取り消しは除く）と明細。管理者・材料担当だけ（見える範囲はDBの権限で決まる） */
+export async function materialSummaryData(db: Database, userId: string, from: string, to: string): Promise<{ orders: SummaryOrder[]; lines: SummaryLine[] }> {
+  const me = await getMe(db, userId);
+  if (!me) throw new ForbiddenError();
+  const ok = me.level >= 4 || (await asUser(db, userId, (q) => q.query<{ m: boolean }>("select app.is_material_mgr() as m"))).rows[0]?.m;
+  if (!ok) throw new ForbiddenError();
+  return asUser(db, userId, async (q) => {
+    const orders = (await q.query<SummaryOrder>(
+      `select id, store_id as "storeId", ordered_on::text as "orderedOn", supplier, item, kind, amount
+         from material_orders where deleted_at is null and ordered_on between $1 and $2 order by ordered_on, created_at`, [from, to])).rows;
+    const lines = (await q.query<SummaryLine>(
+      `select o.id as "orderId", l->>'name' as name, (l->>'qty')::int as qty, (l->>'amount')::int as amount
+         from material_orders o, jsonb_array_elements(o.lines) l
+        where o.deleted_at is null and o.ordered_on between $1 and $2`, [from, to])).rows;
+    return { orders, lines };
   });
 }
