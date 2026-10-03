@@ -3,6 +3,7 @@ import { PasteOff } from "./PasteOff";
 import { LimitAll } from "./LimitAll";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, useAutoRefresh, useMe } from "@/lib/client";
+import { holidayName } from "@/lib/holidays";
 import { daysOf, dow, hoursOn, md, WEEKDAYS } from "@/lib/labels";
 import { PeriodNav, periodFor, todayJst, tintStyle } from "@/lib/period-nav";
 import type { Period } from "@/lib/periods";
@@ -109,8 +110,8 @@ export default function ShiftsPage() {
           <>
             <div className="daystrip">
               {days.map((d) => (
-                <button key={d} className={`${d === day ? "on" : ""} ${dow(d) === 0 ? "su" : dow(d) === 6 ? "sa" : ""}`} onClick={() => setDay(d)}>
-                  <small>{WEEKDAYS[dow(d)]}</small><b>{md(d)}</b><small>{dayCount(d)}人</small>
+                <button key={d} className={`${d === day ? "on" : ""} ${holidayName(d) ? "hol" : ""} ${dow(d) === 0 ? "su" : dow(d) === 6 ? "sa" : ""}`} onClick={() => setDay(d)}>
+                  <small>{holidayName(d) ?? WEEKDAYS[dow(d)]}</small><b>{md(d)}</b><small>{dayCount(d)}人</small>
                 </button>
               ))}
             </div>
@@ -149,9 +150,9 @@ export default function ShiftsPage() {
               {days.map((d) => {
                 const s = byKey.get(`${personId}|${d}`), r = reqKey.get(`${personId}|${d}`);
                 return (
-                  <button key={d} className={`d cellp ${kindClass(s)} ${picked.has(d) ? "pick" : ""}`} disabled={!editable}
+                  <button key={d} className={`d cellp ${kindClass(s)} ${picked.has(d) ? "pick" : ""} ${holidayName(d) ? "hol" : ""}`} disabled={!editable}
                     onClick={() => setPicked((p) => { const n = new Set(p); n.has(d) ? n.delete(d) : n.add(d); return n; })}>
-                    <span>{md(d)}</span><small>{cellText(s)}</small>{r && <i className="dot" title="希望休" />}
+                    <span>{md(d)}</span>{holidayName(d) && <small className="holname">{holidayName(d)}</small>}<small>{cellText(s)}</small>{r && <i className="dot" title="希望休" />}
                   </button>
                 );
               })}
@@ -182,7 +183,7 @@ export default function ShiftsPage() {
         {mode === "table" && (
           <div className="scroll">
             <table className="shifttable">
-              <thead><tr><th>名前</th>{days.map((d) => <th key={d} className={dow(d) === 0 ? "su" : dow(d) === 6 ? "sa" : ""}>{md(d)}<br /><small>{WEEKDAYS[dow(d)]}</small></th>)}</tr></thead>
+              <thead><tr><th>名前</th>{days.map((d) => <th key={d} className={dow(d) === 0 || holidayName(d) ? "su" : dow(d) === 6 ? "sa" : ""}>{md(d)}<br /><small>{WEEKDAYS[dow(d)]}</small>{holidayName(d) && <><br /><small className="holname" style={{ fontSize: 9 }}>{holidayName(d)}</small></>}</th>)}</tr></thead>
               <tbody>
                 {roster.map((p) => (
                   <tr key={p.id}><td className="name">{p.name}</td>

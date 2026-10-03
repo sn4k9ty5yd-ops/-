@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, MeProvider, useAutoRefresh, useMe } from "@/lib/client";
+import { holidayName } from "@/lib/holidays";
 import { dow, hoursOn, md, daysOf, shortNames, WEEKDAYS } from "@/lib/labels";
 import { ShiftSheet } from "@/app/admin/shifts/ShiftSheet";
 import { PeriodNav, periodFor, todayJst, tintStyle } from "@/lib/period-nav";
@@ -106,8 +107,8 @@ function Page() {
               const list = (byDay.get(d) ?? []).filter((s) => (show === "work" ? s.kind === "work" : s.kind !== "work"));
                             return (
                 <div key={d} role="button" tabIndex={0} aria-label={`${md(d)}の詳細`} onClick={() => { setLimitInput(""); setLimitMsg(""); setDetail(d); }} onKeyDown={(e) => { if (e.key === "Enter") setDetail(d); }}
-                  className={`mday ${d === today ? "today" : ""} ${myOff.has(d) ? "myoff" : ""} ${dow(d) === 0 ? "sun" : dow(d) === 6 ? "sat" : ""}`} style={{ cursor: "pointer" }}>
-                  <div className="num"><span>{md(d)}</span>{myOff.has(d) && <small className="myoff-tag"> 休み</small>}{conflicts.has(d) && <small style={{ color: "#d70015", fontWeight: 800 }}> ⚠{conflicts.get(d)!.count}/{conflicts.get(d)!.maxOff}</small>}</div>
+                  className={`mday ${d === today ? "today" : ""} ${myOff.has(d) ? "myoff" : ""} ${holidayName(d) ? "hol" : ""} ${dow(d) === 0 ? "sun" : dow(d) === 6 ? "sat" : ""}`} style={{ cursor: "pointer" }}>
+                  <div className="num"><span>{md(d)}</span>{holidayName(d) && <small className="holname"> {holidayName(d)}</small>}{myOff.has(d) && <small className="myoff-tag"> 休み</small>}{conflicts.has(d) && <small style={{ color: "#d70015", fontWeight: 800 }}> ⚠{conflicts.get(d)!.count}/{conflicts.get(d)!.maxOff}</small>}</div>
                   {list.length === 0 && show === "off" ? <small className="sub">なし</small> : (
                     <div className="names">
                       {list.map((s, i) => (
@@ -136,7 +137,7 @@ function Page() {
         return (
           <div className="sheet-bg" onClick={() => setDetail(null)}>
             <div className="sheet" onClick={(e) => e.stopPropagation()} role="dialog" aria-label={`${md(detail)}の詳細`} style={{ maxHeight: "85vh", overflow: "auto" }}>
-              <b style={{ fontSize: 20 }}>{md(detail)}（{WEEKDAYS[dow(detail)]}）</b>
+              <b style={{ fontSize: 20 }}>{md(detail)}（{WEEKDAYS[dow(detail)]}）</b>{holidayName(detail) && <small className="holname"> {holidayName(detail)}</small>}
               {me.level >= 2 && db && (
                 <div className="card" style={{ margin: "8px 0", padding: 10 }}>
                   <div className="sub">この日に休める人数の上限（シフトを作る人が決めます）</div>

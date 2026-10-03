@@ -3,6 +3,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useCallback } from "react";
 import { api, useAutoRefresh, useMe } from "@/lib/client";
+import { holidayName } from "@/lib/holidays";
 import { daysOf, dow, KIND_LABEL, md, shortNames, WEEKDAYS } from "@/lib/labels";
 import { PeriodNav, periodFor, todayJst, tintStyle } from "@/lib/period-nav";
 import type { Period } from "@/lib/periods";
@@ -56,8 +57,8 @@ export default function RequestsOverview() {
             {days.map((d) => {
               const off = people.filter((n) => key.has(`${n.id}|${d}`));
               return (
-                <div key={d} className={`mday req ${d === today ? "today" : ""} ${dow(d) === 0 ? "sun" : dow(d) === 6 ? "sat" : ""}`}>
-                  <div className="num">{md(d)}{off.length > 0 && <b className="cnt">{off.length}</b>}</div>
+                <div key={d} className={`mday req ${d === today ? "today" : ""} ${holidayName(d) ? "hol" : ""} ${dow(d) === 0 ? "sun" : dow(d) === 6 ? "sat" : ""}`}>
+                  <div className="num">{md(d)}{holidayName(d) && <small className="holname"> {holidayName(d)}</small>}{off.length > 0 && <b className="cnt">{off.length}</b>}</div>
                   {off.length > 0 && <div className="names">{off.map((n, i) => <span key={n.id} className={n.id === me.id ? "me" : ""}>{i > 0 && "・"}{short.get(n.id)}{key.get(`${n.id}|${d}`) === "paid" ? "(有)" : ""}</span>)}</div>}
                 </div>
               );
@@ -66,7 +67,7 @@ export default function RequestsOverview() {
         ) : (
           <div className="scroll">
             <table>
-              <thead><tr><th>名前</th>{days.map((d) => <th key={d} className={dow(d) === 0 ? "su" : dow(d) === 6 ? "sa" : ""}>{md(d)}</th>)}<th>計</th></tr></thead>
+              <thead><tr><th>名前</th>{days.map((d) => <th key={d} title={holidayName(d) ?? undefined} className={dow(d) === 0 || holidayName(d) ? "su" : dow(d) === 6 ? "sa" : ""}>{md(d)}</th>)}<th>計</th></tr></thead>
               <tbody>
                 {people.map((n) => {
                   const cnt = days.filter((d) => key.has(`${n.id}|${d}`)).length;

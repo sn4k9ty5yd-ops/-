@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { api, MeProvider, useAutoRefresh, useMe } from "@/lib/client";
+import { holidayName } from "@/lib/holidays";
 import { daysOf, dow, KIND_LABEL, md, WEEKDAYS } from "@/lib/labels";
 import { PeriodNav, periodFor, todayJst, tintStyle } from "@/lib/period-nav";
 import type { Period } from "@/lib/periods";
@@ -59,9 +60,9 @@ function Page() {
           {days.map((d) => {
             const kind = mine.get(d);
             return (
-              <button key={d} disabled={!open && !kind} className={`d ${kind ? "on" : ""}`}
+              <button key={d} disabled={!open && !kind} className={`d ${kind ? "on" : ""} ${holidayName(d) ? "hol" : ""}`}
                 onClick={() => { setMsg(""); setPick(d); }}>
-                <span>{md(d)}</span>{kind && <small>{KIND_LABEL[kind]}</small>}
+                <span>{md(d)}</span>{holidayName(d) && <small className="holname">{holidayName(d)}</small>}{kind && <small>{KIND_LABEL[kind]}</small>}
               </button>
             );
           })}

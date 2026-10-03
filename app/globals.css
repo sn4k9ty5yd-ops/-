@@ -200,3 +200,11 @@ main.xwide{max-width:1400px;margin:0 auto;padding:16px}
 .mday .names{font-size:11px;line-height:1.45;word-break:keep-all;overflow-wrap:anywhere}
 .mday .names .me{font-weight:800;color:var(--blue)}
 @media (min-width:700px){.mday .names{font-size:13px}}
+
+/* 祝日: 日付と名前を赤文字に */
+.holname{color:#d70015;font-weight:700;font-size:9px;line-height:1.2}
+.mday.hol .num,.mday.hol .num span{color:#d70015}
+.mday.hol .num span.x{color:inherit}
+.cal2 .d.hol>span{color:#d70015}.cal2 .d .holname{display:block}
+.daystrip .hol b,.hol>b{color:#d70015}
+.daystrip .hol small:first-child{color:#d70015;font-weight:700}
