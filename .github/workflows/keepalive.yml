@@ -11,3 +11,5 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - run: curl -fsS --max-time 60 --retry 2 https://album-system.onrender.com/api/health
+      # 朝の「今日のメンバー」通知: 各店で決めた時刻になったら、その日1回だけ送る（何回呼んでも二重には送らない）
+      - run: curl -fsS --max-time 90 --retry 2 https://album-system.onrender.com/api/cron/tick

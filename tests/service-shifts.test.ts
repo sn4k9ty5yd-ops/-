@@ -155,8 +155,9 @@ describe("休みの上限・かぶりの知らせ・話し合い", () => {
     expect(await svc.notifyConflicts(db, id.shift1, periodId, st.s1)).toEqual({ days: 1, people: 2 });
     await expect(svc.notifyConflicts(db, id.a, periodId, st.s1)).rejects.toThrow(svc.ForbiddenError);
     const mine = await svc.listNotifications(db, id.a);
-    expect(mine.unread).toBe(1);
-    expect(mine.items[0].title).toContain("休みがかぶっています");
+    const conflictItems = mine.items.filter((n) => n.kind === "conflict");           // （シフト公開のお知らせも入っている）
+    expect(conflictItems).toHaveLength(1);
+    expect(conflictItems[0].title).toContain("休みがかぶっています");
     expect((await svc.listNotifications(db, id.c)).items).toHaveLength(0);                                            // 関係ない人には届かない
     // 話し合い
     const info = await svc.getDayInfo(db, id.a, periodId, st.s1, day);

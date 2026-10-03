@@ -3,6 +3,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { api, MeProvider, useMe } from "@/lib/client";
+import { pushState, type PushState } from "@/lib/push-client";
 import { LEVEL_NAMES } from "@/lib/permissions";
 
 function Cards() {
@@ -11,6 +12,8 @@ function Cards() {
   useEffect(() => { if (me.displayOnly) router.replace("/shifts"); }, [me.displayOnly, router]);   // お店のiPadは、すぐシフトの画面へ
   const [low, setLow] = useState(0);
   const [unread, setUnread] = useState(0);
+  const [push, setPush] = useState<PushState | null>(null);
+  useEffect(() => { pushState().then(setPush).catch(() => {}); }, []);
   useEffect(() => { if (!me.displayOnly) api<{ unread: number }>("/api/notifications").then((r) => setUnread(r.unread)).catch(() => {}); }, [me.displayOnly]);
   useEffect(() => { if (me.level >= 2) api<{ count: number }>(`/api/stock?storeId=${me.storeId}&low=1`).then((r) => setLow(r.count)).catch(() => {}); }, [me.level, me.storeId]);
   if (me.displayOnly) return null;
@@ -50,6 +53,9 @@ function Cards() {
       <p className="eyebrow">{hello}</p>
       <h1 className="hero">{me.name}</h1>
       <p className="role">{LEVEL_NAMES[me.level]}　·　株式会社ALBUM</p>
+      {push && push !== "on" && push !== "unsupported" && !me.displayOnly && (
+        <Link href="/notify" className="pushbanner"><span className="ic" style={{ ["--h" as string]: 8 }} aria-hidden>📣</span><span><b>スマホに通知を届けましょう（1分）</b><small>シフトの公開や、毎朝の「今日の出勤メンバー」が届きます。やり方を絵で案内します。</small></span><i>›</i></Link>
+      )}
       <div className="tiles">
         {big.map((c) => (
           <Link key={c.href} href={c.href} className="tile"><Icon href={c.href} /><b>{c.title}</b><span>{c.sub}</span></Link>

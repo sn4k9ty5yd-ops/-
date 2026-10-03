@@ -4,6 +4,8 @@ import { calcHours, DEFAULT_BREAK_RULE, validateBreakRule, type BreakRule } from
 import { upcomingPeriods } from "./periods";
 import { asUser } from "./db/user-context";
 import type { Database, Queryable } from "./db/types";
+import { md, shortNames } from "./labels";
+import { pushToUsers, vapidKeys } from "./push";
 import type { Level } from "./permissions";
 
 // 画面(API)から呼ばれる業務処理。権限の判定はすべてDB側(RLS)で行い、ここでは再実装しない。
@@ -357,6 +359,7 @@ export async function setPeriodStatus(
          input.openAt !== undefined, input.openAt ?? null, input.closeAt !== undefined, input.closeAt ?? null]))).rows.length;
   } catch { throw new ForbiddenError(); }
   if (n === 0) throw new ForbiddenError();
+  if (input.status === "published") await notifyShiftPublished(db, input.periodId, input.storeId).catch(() => 0);   // 通知が失敗しても、公開は成功
 }
 
 export async function listRequests(db: Database, userId: string, periodId: string): Promise<RequestRow[]> {
@@ -1325,6 +1328,8 @@ export async function postDayMessage(db: Database, userId: string, periodId: str
   if (!info) return;
   const link = `/conflict?periodId=${periodId}&storeId=${storeId}&day=${day}`;
   const editors = (await db.query<{ id: string }>("select id from memberships where store_id = $1 and level >= 2 and status = 'active'", [storeId])).rows.map((r) => r.id);
+  const targets = [...new Set([...info.people.map((p) => p.id), ...info.messages.map((m) => m.userId), ...editors])].filter((u) => u !== userId);
+  await pushToUsers(db, targets, { title: `${jpDay(day)} の話し合いに、${me.name} さんが書き込みました`, body: text.slice(0, 80), url: link, tag: `msg-${link}` }).catch(() => 0);
   for (const uid of new Set([...info.people.map((p) => p.id), ...info.messages.map((m) => m.userId), ...editors])) {
     if (uid === userId) continue;
     await db.query("delete from notifications where user_id = $1 and link = $2 and kind = 'message' and read_at is null", [uid, link]);
@@ -1352,6 +1357,7 @@ export async function notifyConflicts(db: Database, userId: string, periodId: st
          `${jpDay(c.day)} は、休みの上限が ${c.maxOff} 人ですが、いま ${c.count} 人が休みを希望しています。希望している人：${who.map((x) => x.name).join("、")}。押して、話し合ってください。`, link]);
       people++;
     }
+    await pushToUsers(db, who.map((w) => w.id), { title: `休みがかぶっています（${jpDay(c.day)}）`, body: `${jpDay(c.day)} は休みの上限 ${c.maxOff} 人に対して ${c.count} 人です。押して、話し合ってください。`, url: link, tag: `conflict-${c.day}` }).catch(() => 0);
   }
   return { days: conflicts.length, people };
 }
@@ -1589,4 +1595,93 @@ export async function purgeOldMaterialImages(db: Database, force = false, today?
         where o.id = i.order_id and o.ordered_on < c.d returning i.id
      ) select count(*)::int as n from gone`, [today ?? null]);
   return rows[0]?.n ?? 0;
+}
+
+
+// ------------------------------------------------------------------ スマホへの通知（Web Push）
+export async function getPushKey(db: Database): Promise<string> { return (await vapidKeys(db)).pub; }
+
+/** この端末を、通知の送り先として登録する（自分の分だけ） */
+export async function subscribePush(db: Database, userId: string, sub: { endpoint: string; p256dh: string; auth: string }, userAgent = ""): Promise<void> {
+  if (!/^https:\/\//.test(sub.endpoint) || sub.endpoint.length > 1000 || !sub.p256dh || !sub.auth) throw new Error("通知の登録に失敗しました");
+  const me = await getMe(db, userId);
+  if (!me) throw new ForbiddenError();
+  await asUser(db, userId, async (q) => {
+    await q.query("delete from push_subscriptions where endpoint = $1", [sub.endpoint]);
+    await q.query("insert into push_subscriptions (company_id, membership_id, endpoint, p256dh, auth, user_agent) values ($1,$2,$3,$4,$5,$6)",
+      [me.companyId, userId, sub.endpoint, sub.p256dh, sub.auth, userAgent.slice(0, 200)]);
+  });
+}
+export async function unsubscribePush(db: Database, userId: string, endpoint: string): Promise<void> {
+  await asUser(db, userId, (q) => q.query("delete from push_subscriptions where endpoint = $1", [endpoint]));
+}
+export async function countMyPushDevices(db: Database, userId: string): Promise<number> {
+  return Number((await asUser(db, userId, (q) => q.query<{ n: number }>("select count(*)::int as n from push_subscriptions"))).rows[0].n);
+}
+export async function sendTestPush(db: Database, userId: string): Promise<number> {
+  return pushToUsers(db, [userId], { title: "通知のテストです", body: "このメッセージが見えたら、通知は届いています。", url: "/home", tag: "test" });
+}
+
+export interface NoticeSetting { storeId: string; name: string; enabled: boolean; time: string; editable: boolean }
+export async function getNoticeSettings(db: Database, userId: string): Promise<NoticeSetting[]> {
+  const me = await getMe(db, userId);
+  if (!me) throw new ForbiddenError();
+  const rows = (await asUser(db, userId, (q) => q.query<{ id: string; name: string; enabled: boolean; time: string }>(
+    `select id, name, notice_enabled as enabled, to_char(notice_time, 'HH24:MI') as time from stores where status = 'active' order by sort_order, name`))).rows;
+  return rows.filter((r) => me.level >= 3 || r.id === me.storeId).map((r) => ({ storeId: r.id, name: r.name, enabled: r.enabled, time: r.time, editable: me.level === 4 || (me.level === 3 && r.id === me.storeId) }));
+}
+/** 朝の通知の「使う／使わない」と時刻（5分刻み）を変える（店長=自店・管理者=全店） */
+export async function setNoticeSetting(db: Database, userId: string, storeId: string, enabled: boolean, time: string): Promise<void> {
+  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(time) || Number(time.slice(3)) % 5 !== 0) throw new Error("時刻は、5分きざみで入れてください（例 08:30）");
+  let ok = false;
+  try { ok = await asUser(db, userId, async (q) => (await q.query<{ ok: boolean }>("select public.set_store_notice($1, $2, $3::time) as ok", [storeId, !!enabled, time])).rows[0].ok); } catch { throw new ForbiddenError(); }
+  if (!ok) throw new ForbiddenError();
+}
+
+const jstNow = () => new Date(Date.now() + 9 * 3600_000).toISOString();
+let lastNoticeRun = 0;
+/**
+ * 毎朝の「今日の出勤メンバー・休みメンバー」を、各店のスタッフに送る。
+ * お店ごとに決めた時刻（初期8:30）になったら、その日に1回だけ。公開されたシフトがある日だけ送る。
+ * 外から5分ごとに呼ばれる（GitHub Actions）＋ API 呼び出しのついで。何回呼んでも二重には送らない。
+ */
+export async function runMorningNotices(db: Database, force = false, at?: string): Promise<{ stores: number; sent: number }> {
+  if (!force && Date.now() - lastNoticeRun < 60_000) return { stores: 0, sent: 0 };
+  lastNoticeRun = Date.now();
+  const now = at ?? jstNow(), today = now.slice(0, 10), hhmm = now.slice(11, 16);
+  const stores = (await db.query<{ id: string; name: string }>(
+    `select id, name from stores where status = 'active' and notice_enabled and (notice_last_sent is null or notice_last_sent < $1::date)
+        and notice_time <= $2::time and notice_time > ($2::time - interval '3 hours')`, [today, hhmm])).rows;
+  let stCount = 0, sent = 0;
+  for (const st of stores) {
+    const claim = await db.query("update stores set notice_last_sent = $2::date where id = $1 and (notice_last_sent is null or notice_last_sent < $2::date) returning id", [st.id, today]);
+    if (claim.rows.length === 0) continue;
+    const rows = (await db.query<{ id: string; name: string; short_name: string | null; kind: string }>(
+      `select m.id, m.name, m.short_name, s.kind from shifts s join memberships m on m.id = s.membership_id
+        where s.store_id = $1 and s.day = $2::date and m.status = 'active' and app.is_published(s.period_id, s.store_id)`, [st.id, today])).rows;
+    if (rows.length === 0) continue;
+    const short = shortNames(rows.map((r) => ({ id: r.id, name: r.name, shortName: r.short_name })));
+    const work = rows.filter((r) => r.kind === "work").map((r) => short.get(r.id) ?? r.name);
+    const off = rows.filter((r) => r.kind !== "work" && r.kind !== "other").map((r) => short.get(r.id) ?? r.name);
+    const body = `出勤（${work.length}人）：${work.join("・") || "なし"}\n休み（${off.length}人）：${off.join("・") || "なし"}`;
+    const people = (await db.query<{ id: string }>("select id from memberships where store_id = $1 and status = 'active' and not display_only", [st.id])).rows.map((r) => r.id);
+    sent += await pushToUsers(db, people, { title: `${st.name} 今日の出勤（${jpDay(today)}）`, body, url: "/shifts", tag: `morning-${st.id}` });
+    stCount++;
+  }
+  return { stores: stCount, sent };
+}
+
+/** シフトが公開されたとき、そのお店の全員に通知（アプリの中のお知らせにも入れる） */
+export async function notifyShiftPublished(db: Database, periodId: string, storeId: string): Promise<number> {
+  const per = (await db.query<{ s: string; e: string; company_id: string }>("select start_date::text as s, end_date::text as e, company_id from shift_periods where id = $1", [periodId])).rows[0];
+  const st = (await db.query<{ name: string }>("select name from stores where id = $1", [storeId])).rows[0];
+  if (!per || !st) return 0;
+  const people = (await db.query<{ id: string }>("select id from memberships where store_id = $1 and status = 'active' and not display_only", [storeId])).rows.map((r) => r.id);
+  const title = `${st.name} のシフトが公開されました`;
+  const body = `${md(per.s)}〜${md(per.e)} のシフトを見られます。押して確認してください。`;
+  for (const uid of people) {
+    await db.query("delete from notifications where user_id = $1 and kind = 'shift' and link = '/shifts' and read_at is null", [uid]);
+    await db.query("insert into notifications (company_id, user_id, kind, title, body, link) values ($1,$2,'shift',$3,$4,'/shifts')", [per.company_id, uid, title, body]);
+  }
+  return pushToUsers(db, people, { title, body, url: "/shifts", tag: `published-${storeId}` });
 }

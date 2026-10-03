@@ -435,3 +435,11 @@ button:not(.ghost):not(.mvbtn):not(.linkcell):not(.logout):not(.monthrow):not(.d
 .list li{border:1px solid var(--hair)}
 .mday.today{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent) inset}
 .seg button.on{color:var(--accent) !important;font-weight:600}
+
+/* 通知の案内（絵つき） */
+.guide{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;margin-top:12px}
+.gstep{display:flex;flex-direction:column;align-items:center;gap:10px;background:var(--card);border:1px solid var(--hair);border-radius:22px;padding:18px 14px;text-align:left}
+.gstep>div:last-child{width:100%}.gstep p{margin:6px 0 0}
+.gnum{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;font-size:13px;font-weight:700;margin-right:8px}
+.pushbanner{display:flex;align-items:center;gap:14px;padding:16px 20px;margin:0 0 16px;border-radius:24px;text-decoration:none;color:#f5f5f7;background:linear-gradient(135deg,rgba(255,69,58,.28),rgba(191,90,242,.22));border:1px solid rgba(255,255,255,.14)}
+.pushbanner b{display:block;font-size:17px;font-weight:600}.pushbanner small{display:block;color:#c7c7cc;font-size:13px;margin-top:2px}.pushbanner i{margin-left:auto;font-style:normal;font-size:24px;color:#a1a1a6}
