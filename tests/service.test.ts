@@ -64,7 +64,7 @@ describe("サービス層（DBの権限ルールを通して動く）", () => {
     if (!l.ok) throw new Error("login");
     await svc.disableStaff(db, id.mgr, id.shift);
     expect(await validateSession(db, l.token)).toBeNull();
-    await expect(svc.disableStaff(db, id.office, id.office)).rejects.toThrow(svc.ForbiddenError);
+    await expect(svc.disableStaff(db, id.office, id.office)).rejects.toThrow("ほかに有効な管理者");
     await expect(svc.disableStaff(db, id.mgr, id.office)).rejects.toThrow(svc.ForbiddenError);
   });
   it("レベル変更はオフィスだけ。自分のレベルは変えられない", async () => {
@@ -150,5 +150,18 @@ describe("土曜日だけ違う営業時間", () => {
     await expect(svc.setStoreHours(db, id.mgr, store.a1, "10:00", "19:00", null)).rejects.toThrow(svc.ForbiddenError);
     await svc.setStoreHours(db, id.office, store.a1, "10:00", "19:00", null);
     expect((await svc.listStores(db, id.office)).find((s) => s.id === store.a1)!.satOpen).toBeNull();
+  });
+});
+
+describe("管理者も、ほかのスタッフと同じように扱える", () => {
+  it("自分をシフトに入れる／外せる。ほかに管理者がいれば自分を退職にもできる", async () => {
+    await svc.setOnShift(db, id.office, id.office, true);
+    expect((await svc.listStaff(db, id.office)).find((x) => x.id === id.office)!.onShift).toBe(true);
+    await svc.setOnShift(db, id.office, id.office, false);
+    expect((await svc.listStaff(db, id.office)).find((x) => x.id === id.office)!.onShift).toBe(false);
+    const co = (await db.query<{ company_id: string }>("select company_id from memberships where id=$1", [id.office])).rows[0].company_id;
+    const admin2 = await person(co, "9001", "管理者2", 4, store.a1);
+    await svc.disableStaff(db, admin2, admin2);
+    expect((await svc.listStaff(db, id.office)).find((x) => x.id === admin2)!.status).toBe("disabled");
   });
 });

@@ -173,8 +173,13 @@ async function assertCanManage(db: Database, userId: string, targetId: string) {
 }
 
 export async function disableStaff(db: Database, userId: string, targetId: string): Promise<void> {
+  if (targetId === userId) {
+    // 自分を退職にできるのは、ほかに有効な管理者がいるときだけ（だれもログインできなくなるのを防ぐ）
+    const other = await db.query("select 1 from memberships where level = 4 and status = 'active' and id <> $1 and company_id = (select company_id from memberships where id = $1) limit 1", [userId]);
+    if (other.rows.length === 0) throw new Error("ほかに有効な管理者がいないので、自分は退職にできません");
+  }
   const { rows } = await asUser(db, userId, (q) =>
-    q.query("update memberships set status = 'disabled', left_on = current_date where id = $1 and id <> $2 returning id", [targetId, userId]));
+    q.query("update memberships set status = 'disabled', left_on = current_date where id = $1 returning id", [targetId]));
   if (rows.length === 0) throw new ForbiddenError();
   await db.query("delete from sessions where membership_id = $1", [targetId]);
 }

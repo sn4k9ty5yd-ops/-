@@ -98,7 +98,7 @@ export default function StaffPage() {
                   {LEVELS.map((l) => <option key={l} value={l}>{LEVEL_NAMES[l]}</option>)}
                 </select>
               ) : <span className="chip">{LEVEL_NAMES[s.level]}</span>}
-              {s.manageable && s.status === "active" && s.id !== me.id && (
+              {s.manageable && s.status === "active" && (
                 <>
                   <button className="ghost" style={{ color: "var(--blue)" }}
                     onClick={() => confirm(`${s.name} さんのパスコードを新しくしますか？（今のパスコードは使えなくなります）`) &&
