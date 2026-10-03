@@ -32,9 +32,18 @@ function Cards() {
     { href: "/admin/settings", title: "設定", sub: "休憩・実働のルール", show: me.level >= 4 },
     { href: "/admin/stores", title: "店舗の編集", sub: "新店舗の追加・名前の変更・閉店（管理者のみ）", show: me.level >= 4 },
   ].filter((c) => c.show);
+  const ICON: Record<string, [string, number, string]> = {
+    "/inbox": ["🔔", 8, ""], "/manual": ["📖", 265, ""], "/shifts": ["📅", 212, ""], "/requests": ["🌴", 168, ""], "/material": ["🧴", 28, ""],
+    "/material/summary": ["📊", 28, "材料・在庫"], "/admin/stock": ["📦", 150, "材料・在庫"], "/admin/stocktake": ["📋", 190, "材料・在庫"], "/admin/products": ["🏷️", 320, "材料・在庫"],
+    "/admin/attendance": ["⏱️", 250, "シフト・勤怠"], "/admin/shifts": ["✏️", 212, "シフト・勤怠"], "/admin/requests": ["👥", 168, "シフト・勤怠"], "/admin/periods": ["🗓️", 235, "シフト・勤怠"],
+    "/admin/staff": ["🧑‍🤝‍🧑", 340, "スタッフ・設定"], "/admin/settings": ["⚙️", 220, "スタッフ・設定"], "/admin/stores": ["🏬", 280, "スタッフ・設定"],
+  };
+  const ic = (href: string) => ICON[href] ?? ["•", 210, ""];
   const big = cards.filter((c) => c.big), rest = cards.filter((c) => !c.big);
+  const groups = ["シフト・勤怠", "材料・在庫", "スタッフ・設定"].map((g) => [g, rest.filter((c) => ic(c.href)[2] === g)] as const).filter(([, l]) => l.length > 0);
   const hour = Number(new Date().toLocaleString("ja-JP", { hour: "numeric", hour12: false, timeZone: "Asia/Tokyo" }));
   const hello = hour < 5 ? "おつかれさまです" : hour < 11 ? "おはようございます" : hour < 18 ? "こんにちは" : "こんばんは";
+  const Icon = ({ href }: { href: string }) => <span className="ic" style={{ ["--h" as string]: ic(href)[1] }} aria-hidden>{ic(href)[0]}</span>;
   return (
     <main className="home">
       <div className="aurora" aria-hidden />
@@ -43,15 +52,19 @@ function Cards() {
       <p className="role">{LEVEL_NAMES[me.level]}　·　株式会社ALBUM</p>
       <div className="tiles">
         {big.map((c) => (
-          <Link key={c.href} href={c.href} className="tile"><b>{c.title}</b><span>{c.sub}</span></Link>
+          <Link key={c.href} href={c.href} className="tile"><Icon href={c.href} /><b>{c.title}</b><span>{c.sub}</span></Link>
         ))}
       </div>
-      {rest.length > 0 && <h2 className="grouphead">管理</h2>}
-      <div className="rows">
-        {rest.map((c) => (
-          <Link key={c.href} href={c.href} className="row"><span><b>{c.title}</b><small>{c.sub}</small></span><i>›</i></Link>
-        ))}
-      </div>
+      {groups.map(([g, list]) => (
+        <section key={g}>
+          <h2 className="grouphead">{g}</h2>
+          <div className="rows">
+            {list.map((c) => (
+              <Link key={c.href} href={c.href} className="row"><Icon href={c.href} /><span className="rt"><b>{c.title}</b><small>{c.sub}</small></span><i>›</i></Link>
+            ))}
+          </div>
+        </section>
+      ))}
       <button className="logout" onClick={logout}>ログアウト</button>
     </main>
   );

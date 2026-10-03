@@ -403,3 +403,35 @@ main.wide h1,main.xwide h1{font-size:clamp(34px,5vw,48px);letter-spacing:-.04em;
 @media (prefers-color-scheme: dark){.shell .demo{background:rgba(0,0,0,.72)}}
 @media (max-width:639px){.tile{min-height:96px;padding:20px 22px;border-radius:24px}.tile b{font-size:21px}}
 .sttable th.r{text-align:right}
+
+/* ---- 色: 機能ごとの色つきアイコン ---- */
+.ic{display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;width:44px;height:44px;border-radius:14px;font-size:22px;
+  background:linear-gradient(145deg,hsl(var(--h) 90% 64%),hsl(calc(var(--h) + 28) 85% 50%));box-shadow:0 6px 16px hsl(var(--h) 90% 50% / .35),inset 0 1px 0 rgba(255,255,255,.35)}
+.tile .ic{margin-bottom:auto;width:48px;height:48px;border-radius:16px;font-size:24px}
+.tile{min-height:168px}
+.row{justify-content:flex-start}.row .rt{flex:1;min-width:0}.row .ic{width:38px;height:38px;border-radius:12px;font-size:19px;box-shadow:none}
+.grouphead{margin-top:44px}
+@media (max-width:639px){.tile{min-height:132px}}
+
+/* ---- 仕事の画面（明るい側）: やわらかい色づかい ---- */
+:root{--accent:#0a84ff;--accent2:#5e5ce6;--ok:#30a46c;--warn:#f5a623;--bad:#e5484d}
+body:not(:has(main.home)):not(:has(main.login)){
+  background:
+    radial-gradient(60% 40% at 8% -5%,color-mix(in srgb,#5ac8fa 22%,transparent),transparent 70%),
+    radial-gradient(50% 35% at 95% 0%,color-mix(in srgb,#bf5af2 14%,transparent),transparent 70%),
+    var(--bg);
+  background-attachment:fixed;
+}
+button:not(.ghost):not(.mvbtn):not(.linkcell):not(.logout):not(.monthrow):not(.d):not(.on):not(.stepper button):not(.seg button):not(.pnav button):not(.daystrip button){
+  background:linear-gradient(135deg,var(--accent),var(--accent2));box-shadow:0 6px 16px color-mix(in srgb,var(--accent) 30%,transparent)}
+.tabs a.on{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;box-shadow:0 6px 14px color-mix(in srgb,var(--accent) 30%,transparent)}
+.card{border:1px solid var(--hair);background:color-mix(in srgb,var(--card) 92%,transparent)}
+.card-link{border:1px solid var(--hair)}
+.badge2.now{background:linear-gradient(135deg,var(--accent),var(--accent2))}
+.chip.warn{background:color-mix(in srgb,var(--warn) 22%,var(--card));color:#8a5a00}
+.stats .big{background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent}
+.bar i{background:linear-gradient(90deg,var(--accent),var(--accent2))}
+.sttable th{background:color-mix(in srgb,var(--accent) 7%,var(--bg))}
+.list li{border:1px solid var(--hair)}
+.mday.today{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent) inset}
+.seg button.on{color:var(--accent) !important;font-weight:600}
