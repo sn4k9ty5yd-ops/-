@@ -11,7 +11,7 @@ export type BlockBody =
   | { t: "callout"; icon: string; color: string; x?: string; children: Block[] }
   | { t: "toggle"; x: string; color?: string; children: Block[] }
   | { t: "cols"; cols: Block[][] }
-  | { t: "table"; header: boolean; headerCol?: boolean; rows: string[][]; choices?: (string[] | null)[] }   // choices: 列ごとの選べる値（点数など）
+  | { t: "table"; header: boolean; headerCol?: boolean; rows: string[][]; choices?: (string[] | null)[]; edit?: boolean }   // choices: 列ごとの選べる値（点数など）／edit: 書き込める人が、マスに入力できる表（評価表など）
   | { t: "img"; src: string; cap?: string }
   | { t: "video"; url: string }
   | { t: "file"; src: string; name: string }
@@ -59,6 +59,16 @@ export function plainText(blocks: Block[]): string {
   };
   walk(blocks);
   return parts.join(" ");
+}
+
+/** 書き込みできる場所（チェック・書き込み用の表）が、ページにあるか */
+export function hasEditable(blocks: Block[]): boolean {
+  return blocks.some((b) => b.t === "todo" || (b.t === "table" && !!b.edit) || (b.t === "cols" && b.cols.some(hasEditable)) || ("children" in b && !!b.children && hasEditable(b.children)));
+}
+
+/** ページの中の表を、すべて書き込める表にする（評価表のページ用） */
+export function markTablesEditable(blocks: Block[]): Block[] {
+  return blocks.map((b) => b.t === "table" ? { ...b, edit: true } : b.t === "cols" ? { ...b, cols: b.cols.map(markTablesEditable) } : "children" in b && b.children ? ({ ...b, children: markTablesEditable(b.children) } as Block) : b);
 }
 
 /** 書き込みできるブロック（チェック・表のマス）に、印(id)をつける。すでにあるものは変えない */

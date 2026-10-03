@@ -25,7 +25,7 @@ export function applyOp(body: Block[], op: EditOp): { body: Block[]; summary: st
     b.checked = !!op.checked;
     return { body: next, summary: `チェック「${b.x.replace(/<[^>]+>/g, "").slice(0, 30)}」を${b.checked ? "つけた" : "外した"}` };
   }
-  if (b.t !== "table") throw new Error("表の場所が違います");
+  if (b.t !== "table" || !b.edit) throw new Error("この表には書き込めません");
   const row = b.rows[op.r];
   if (!row || op.c < 0 || op.c >= row.length) throw new Error("表のマスが見つかりません");
   const text = String(op.text ?? "").replace(/[\r\n]+/g, " ").trim().slice(0, MAX_CELL);

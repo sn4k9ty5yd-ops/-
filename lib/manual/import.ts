@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import type { Queryable } from "../db/types";
-import { assignIds, collectSources, mapSources, plainText, type Block } from "./blocks";
+import { assignIds, collectSources, mapSources, markTablesEditable, plainText, type Block } from "./blocks";
 
 export interface ImportPage {
   sourceId: string;                 // 取り込み元のID（Notionの32けた）
@@ -14,6 +14,8 @@ export interface ImportPage {
   /** 取り込み元のお店の名前（ATENA天神 など）。お店の名前に合うときだけ設定 */
   storeName?: string;
   minLevel?: number; editLevel?: number; evaluatorsEdit?: boolean;
+  /** 表のマスに書き込める（評価表など） */
+  editableTables?: boolean;
 }
 export interface FetchedAsset { data: Buffer; mime: string; name: string }
 export interface ImportOptions {
@@ -70,7 +72,8 @@ export async function importManualPages(q: Queryable, companyId: string, pages: 
   let n = 0;
   for (const p of order) {
     n++;
-    const blocks = assignIds(await mapSources(p.blocks, saveAsset));
+    const mapped = await mapSources(p.blocks, saveAsset);
+    const blocks = assignIds(p.editableTables ? markTablesEditable(mapped) : mapped);
     const parentId = p.parentSourceId ? bySource.get(p.parentSourceId) ?? null : null;
     let ownerId: string | null = null;
     if (p.ownerName) {

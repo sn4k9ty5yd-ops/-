@@ -94,6 +94,9 @@ function Cell({ id, r, c, value, choices, ctx, header }: { id: string; r: number
   );
 }
 
+/** アプリに保存した画像か、インターネット上の画像だけ表示する（書き出したままの相対パスは、取り込み待ち） */
+const live = (src: string) => src.startsWith("asset:") || /^https?:\/\//.test(src);
+
 function BlockItem({ b, ctx }: { b: Block; ctx: ViewCtx }) {
   switch (b.t) {
     case "h": {
@@ -125,19 +128,23 @@ function BlockItem({ b, ctx }: { b: Block; ctx: ViewCtx }) {
           <tr key={r}>{row.map((cell, c) => {
             const head = (b.header && r === 0) || (b.headerCol && c === 0);
             const T = head ? "th" : "td";
-            return <T key={c}>{b.id ? <Cell id={b.id} r={r} c={c} value={cell} choices={b.choices?.[c]} ctx={ctx} header={!!head} /> : <Inline text={cell} refs={ctx.refs} />}</T>;
+            return <T key={c}>{b.id && b.edit ? <Cell id={b.id} r={r} c={c} value={cell} choices={b.choices?.[c]} ctx={ctx} header={!!head} /> : <Inline text={cell} refs={ctx.refs} />}</T>;
           })}</tr>
         ))}
       </tbody></table></div>
     );
-    case "img": return <figure className="mn-fig"><a href={assetUrl(b.src)} target="_blank" rel="noopener noreferrer"><img src={assetUrl(b.src)} alt={b.cap ?? ""} loading="lazy" /></a>{b.cap && <figcaption>{b.cap}</figcaption>}</figure>;
+    case "img": return live(b.src)
+      ? <figure className="mn-fig"><a href={assetUrl(b.src)} target="_blank" rel="noopener noreferrer"><img src={assetUrl(b.src)} alt={b.cap ?? ""} loading="lazy" /></a>{b.cap && <figcaption>{b.cap}</figcaption>}</figure>
+      : <p className="mn-p sub">🖼 画像（取り込み待ち）</p>;
     case "video": {
       const e = youtubeEmbed(b.url);
       return e
         ? <div className="mn-video"><iframe src={e} title="動画" loading="lazy" referrerPolicy="strict-origin-when-cross-origin" allow="accelerometer; encrypted-media; picture-in-picture; fullscreen" allowFullScreen /></div>
         : <p className="mn-p"><a href={b.url} target="_blank" rel="noopener noreferrer">▶ 動画を開く：{b.url}</a></p>;
     }
-    case "file": return <p className="mn-p"><a className="mn-file" href={assetUrl(b.src)} target="_blank" rel="noopener noreferrer">📎 {b.name}</a></p>;
+    case "file": return live(b.src)
+      ? <p className="mn-p"><a className="mn-file" href={assetUrl(b.src)} target="_blank" rel="noopener noreferrer">📎 {b.name}</a></p>
+      : <p className="mn-p sub">📎 {b.name}（取り込み待ち）</p>;
     case "link": return <p className="mn-p"><a href={b.url} target="_blank" rel="noopener noreferrer">{b.x || b.url}</a></p>;
     case "child": case "db": {
       const hit = ctx.refs[notionKey(b.ref)];

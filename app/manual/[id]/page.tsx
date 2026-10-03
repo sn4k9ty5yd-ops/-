@@ -3,6 +3,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { api, MeProvider, useAutoRefresh, useMe } from "@/lib/client";
+import { hasEditable } from "@/lib/manual/blocks";
 import { BlockView } from "@/lib/manual/BlockView";
 import type { ManualPage, StaffRow } from "@/lib/service";
 
@@ -101,7 +102,7 @@ function Page() {
       <Link href="/manual" className="back">← マニュアル</Link>
       <p className="mn-crumbs">{p.trail.map((t) => <span key={t.id}><Link href={`/manual/${t.id}`}>{t.title}</Link> ／ </span>)}</p>
       <h1>{p.icon} {p.title}</h1>
-      {p.canEdit && !me.displayOnly && <p className="hint" style={{ marginTop: -12 }}>このページには書き込めます（チェックや表のマスは、そのまま入力できます。自動で保存されます）。</p>}
+      {p.canEdit && !me.displayOnly && hasEditable(p.body) && <p className="hint" style={{ marginTop: -12 }}>このページには書き込めます（チェックや表のマスは、そのまま入力できます。自動で保存されます）。</p>}
       <BlockView blocks={p.body} ctx={{ refs: p.refs, canEdit: p.canEdit, onEdit: async (edit) => { await api(`/api/manual/${p.id}`, { action: "edit", edit }); } }} />
       {p.children.length > 0 && (
         <>

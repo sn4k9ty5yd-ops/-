@@ -34,7 +34,7 @@ beforeAll(async () => {
   id.mgrB = await person("6", "店長B", 3, storeB);
   const sheet: Block[] = [
     { t: "todo", id: "chk1", x: "シャンプー", checked: false },
-    { t: "table", id: "tbl1", header: true, choices: [null, ["1", "2", "3", "4", "5"]], rows: [["項目", "1回目"], ["流れ", ""]] },
+    { t: "table", id: "tbl1", edit: true, header: true, choices: [null, ["1", "2", "3", "4", "5"]], rows: [["項目", "1回目"], ["流れ", ""]] },
   ];
   await addPage("all", { title: "企業理念", body: [{ t: "p", x: "全員向け" }] });
   await addPage("admin", { title: "売上", minLevel: 4 });
@@ -103,7 +103,7 @@ describe("ランクと名前での権限", () => {
     await expect(svc.setRank(db, id.mgrA, stylist, "stylist")).rejects.toThrow(svc.ForbiddenError);
     await svc.setRank(db, id.admin, stylist, "stylist"); await svc.setRank(db, id.admin, assistant, "assistant");
     await expect(svc.setRank(db, id.admin, stylist, "boss")).rejects.toThrow("ランク");
-    const sheet: Block[] = [{ t: "table", id: "t2", header: true, rows: [["項目", "1回目"], ["流れ", ""]] }];
+    const sheet: Block[] = [{ t: "table", id: "t2", edit: true, header: true, rows: [["項目", "1回目"], ["流れ", ""]] }];
     await addPage("rank", { title: "評価ページ", body: sheet, evaluatorsEdit: true });
     await svc.editManualBlock(db, stylist, page.rank, { op: "cell", id: "t2", r: 1, c: 1, text: "3" });
     await expect(svc.editManualBlock(db, assistant, page.rank, { op: "cell", id: "t2", r: 1, c: 1, text: "5" })).rejects.toThrow(svc.ForbiddenError);
