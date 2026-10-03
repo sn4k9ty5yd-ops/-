@@ -1,5 +1,5 @@
 // Notion から書き出した内容を、マニュアルに取り込む。
-//   npx tsx scripts/manual-import.ts <書き出しファイル.json> [--prod]
+//   NODE_USE_ENV_PROXY=1 npx tsx scripts/manual-import.ts <書き出しファイル.json> [--prod]
 // --prod のときは、環境変数 MANUAL_DB_URL（NeonのURI）へHTTPSでつなぐ。なければ手元のお試しDB。
 import { readFileSync } from "node:fs";
 import sharp from "sharp";
