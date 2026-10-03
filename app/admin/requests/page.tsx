@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
-import { api, useMe } from "@/lib/client";
+import { useCallback } from "react";
+import { api, useAutoRefresh, useMe } from "@/lib/client";
 import { daysOf, dow, KIND_LABEL, md } from "@/lib/labels";
 import { PeriodNav, periodFor, todayJst, tintStyle } from "@/lib/period-nav";
 import type { Period } from "@/lib/periods";
@@ -11,7 +12,7 @@ export default function RequestsOverview() {
   const [periods, setPeriods] = useState<PeriodRow[]>([]);
   const [view, setView] = useState<Period>(() => periodFor(todayJst(), me.closingStartDay));
   const [names, setNames] = useState<{ id: string; name: string; storeId: string }[]>([]);
-  const [stores, setStores] = useState<{ id: string; name: string }[]>([]);
+  const [stores, setStores] = useState<{ id: string; name: string; status: string }[]>([]);
   const [reqs, setReqs] = useState<RequestRow[]>([]);
   useEffect(() => {
     Promise.all([api<PeriodRow[]>("/api/periods"), api<typeof names>("/api/names"), api<typeof stores>("/api/stores")]).then(([p, n, s]) => {
@@ -22,7 +23,9 @@ export default function RequestsOverview() {
     });
   }, []);
   const db = periods.find((p) => p.start === view.start);
-  useEffect(() => { if (db) api<RequestRow[]>(`/api/requests?periodId=${db.id}`).then(setReqs); else setReqs([]); }, [db]);
+  const loadReqs = useCallback(() => { if (db) api<RequestRow[]>(`/api/requests?periodId=${db.id}`).then(setReqs).catch(() => {}); else setReqs([]); }, [db]);
+  useEffect(() => { loadReqs(); }, [loadReqs]);
+  useAutoRefresh(loadReqs);
   const days = daysOf(view.start, view.end);
   const key = new Map(reqs.map((r) => [`${r.membershipId}|${r.day}`, r.kind]));
   return (
@@ -31,7 +34,7 @@ export default function RequestsOverview() {
       <PeriodNav period={view} startDay={me.closingStartDay} onChange={setView} />
       {!db && <p className="hint">この期間は、まだ作成されていません。</p>}
       <div className="tintbox" style={tintStyle(view.start)}>
-        {stores.map((s) => {
+        {stores.filter((s) => s.status === "active").map((s) => {
           const people = names.filter((n) => n.storeId === s.id);
           if (!people.length) return null;
           return (

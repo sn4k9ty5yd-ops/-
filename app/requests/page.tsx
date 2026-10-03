@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { api, MeProvider, useMe } from "@/lib/client";
+import { api, MeProvider, useAutoRefresh, useMe } from "@/lib/client";
 import { daysOf, dow, KIND_LABEL, md, WEEKDAYS } from "@/lib/labels";
 import { PeriodNav, periodFor, todayJst, tintStyle } from "@/lib/period-nav";
 import type { Period } from "@/lib/periods";
@@ -30,6 +30,7 @@ function Page() {
     setMine(new Map(rs.filter((r) => r.membershipId === me.id).map((r) => [r.day, r.kind])));
   }, [db, me.id]);
   useEffect(() => { load(); }, [load]);
+  useAutoRefresh(load);
 
   if (!view || !all) return null;
   const st = db?.stores.find((s) => s.storeId === me.storeId);

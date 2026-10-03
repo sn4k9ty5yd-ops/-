@@ -33,3 +33,14 @@ export function MeProvider({ children }: { children: React.ReactNode }) {
   if (!me) return null;
   return <MeCtx.Provider value={{ me, logout }}>{children}</MeCtx.Provider>;
 }
+
+/** 開いている間、30秒ごと・画面に戻ったときに最新のデータを読み込み直す（他の人の変更が自動で反映される） */
+export function useAutoRefresh(load: () => void, seconds = 30) {
+  useEffect(() => {
+    const tick = () => { if (document.visibilityState === "visible") load(); };
+    const t = setInterval(tick, seconds * 1000);
+    document.addEventListener("visibilitychange", tick);
+    window.addEventListener("focus", tick);
+    return () => { clearInterval(t); document.removeEventListener("visibilitychange", tick); window.removeEventListener("focus", tick); };
+  }, [load, seconds]);
+}

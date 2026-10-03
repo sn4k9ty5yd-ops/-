@@ -7,7 +7,7 @@ import type { Level } from "./permissions";
 // 画面(API)から呼ばれる業務処理。権限の判定はすべてDB側(RLS)で行い、ここでは再実装しない。
 
 export interface Me { id: string; name: string; level: Level; storeId: string; companyId: string; companyName: string; closingStartDay: number; }
-export interface StoreRow { id: string; name: string; }
+export interface StoreRow { id: string; name: string; status: "active" | "closed"; }
 export interface StaffRow {
   id: string; name: string; employeeCode: string; storeId: string; level: Level; status: "active" | "disabled"; manageable: boolean;
 }
@@ -26,14 +26,61 @@ export async function getMe(db: Database, userId: string): Promise<Me | null> {
 }
 
 export async function listStores(db: Database, userId: string): Promise<StoreRow[]> {
-  return (await asUser(db, userId, (q) => q.query<StoreRow>("select id, name from stores order by sort_order, name"))).rows;
+  return (await asUser(db, userId, (q) => q.query<StoreRow>("select id, name, status from stores order by status, sort_order, name"))).rows;
 }
+
+const cleanName = (name: string) => {
+  const n = name.trim();
+  if (!n) throw new Error("お店の名前を入力してください");
+  if (n.length > 50) throw new Error("お店の名前が長すぎます");
+  return n;
+};
 
 export async function addStore(db: Database, userId: string, name: string): Promise<void> {
   const me = await getMe(db, userId);
   if (!me) throw new ForbiddenError();
+  const n = cleanName(name);
   try {
-    await asUser(db, userId, (q) => q.query("insert into stores (company_id, name) values ($1, $2)", [me.companyId, name.trim()]));
+    await asUser(db, userId, (q) =>
+      q.query(
+        "insert into stores (company_id, name, sort_order) values ($1, $2, (select coalesce(max(sort_order), -1) + 1 from stores))", [me.companyId, n]));
+  } catch { throw new ForbiddenError(); }
+}
+
+export async function renameStore(db: Database, userId: string, storeId: string, name: string): Promise<void> {
+  const n = cleanName(name);
+  let rows = 0;
+  try { rows = (await asUser(db, userId, (q) => q.query("update stores set name = $2 where id = $1 returning id", [storeId, n]))).rows.length; }
+  catch { throw new ForbiddenError(); }
+  if (rows === 0) throw new ForbiddenError();
+}
+
+/** 閉店にする / 再開する。スタッフが在籍中のお店は閉店にできない（先に移動か退職にする） */
+export async function setStoreStatus(db: Database, userId: string, storeId: string, status: "active" | "closed"): Promise<void> {
+  if (status === "closed") {
+    const n = (await asUser(db, userId, (q) => q.query<{ n: number }>("select count(*)::int as n from memberships where store_id = $1 and status = 'active'", [storeId]))).rows[0].n;
+    if (n > 0) throw new Error(`このお店には在籍中のスタッフが${n}人います。先に他のお店へ移すか、退職にしてください。`);
+  }
+  let rows = 0;
+  try { rows = (await asUser(db, userId, (q) => q.query("update stores set status = $2 where id = $1 returning id", [storeId, status]))).rows.length; }
+  catch { throw new ForbiddenError(); }
+  if (rows === 0) throw new ForbiddenError();
+}
+
+/** 並び順をひとつ上/下に動かす（となりのお店と入れ替え） */
+export async function moveStore(db: Database, userId: string, storeId: string, dir: "up" | "down"): Promise<void> {
+  try {
+    await asUser(db, userId, async (q) => {
+      const list = (await q.query<{ id: string }>("select id from stores where status = 'active' order by sort_order, name")).rows.map((r) => r.id);
+      const i = list.indexOf(storeId);
+      const j = dir === "up" ? i - 1 : i + 1;
+      if (i < 0 || j < 0 || j >= list.length) return;
+      [list[i], list[j]] = [list[j], list[i]];
+      for (const [k, id] of list.entries()) {
+        const r = await q.query("update stores set sort_order = $2 where id = $1 returning id", [id, k]);
+        if (r.rows.length === 0) throw new ForbiddenError(); // 権限が無いと0件になる → 全体を取り消す
+      }
+    });
   } catch { throw new ForbiddenError(); }
 }
 

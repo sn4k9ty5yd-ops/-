@@ -57,3 +57,37 @@ describe("期間と希望休のサービス", () => {
     await expect(svc.toggleMyRequest(db, id.staff1, p.id, "2026-11-20")).rejects.toThrow("変更できません"); // 消すのも不可
   });
 });
+
+describe("お店の追加・名前変更・並べ替え・閉店", () => {
+  it("お店を追加すると、すでにある期間にも自動で進行状況ができる", async () => {
+    await svc.addStore(db, id.office, "新店舗");
+    const p = (await svc.listPeriods(db, id.office))[0];
+    const names = (await svc.listStores(db, id.office)).map((s) => s.name);
+    expect(names).toContain("新店舗");
+    expect(p.stores).toHaveLength(3);
+  });
+  it("名前変更・並べ替え・閉店はオフィスだけ", async () => {
+    const stores = await svc.listStores(db, id.office);
+    const nu = stores.find((s) => s.name === "新店舗")!;
+    await expect(svc.renameStore(db, id.mgr1, nu.id, "勝手に改名")).rejects.toThrow(svc.ForbiddenError);
+    await expect(svc.moveStore(db, id.mgr1, nu.id, "up")).rejects.toThrow(svc.ForbiddenError);
+    await expect(svc.setStoreStatus(db, id.mgr1, nu.id, "closed")).rejects.toThrow(svc.ForbiddenError);
+    await svc.renameStore(db, id.office, nu.id, "新店舗（改）");
+    await svc.moveStore(db, id.office, nu.id, "up");
+    const after = (await svc.listStores(db, id.office)).map((s) => s.name);
+    expect(after.indexOf("新店舗（改）")).toBeLessThan(after.indexOf("s2"));
+  });
+  it("在籍スタッフがいるお店は閉店にできない。空なら閉店・再開できる", async () => {
+    const stores = await svc.listStores(db, id.office);
+    const s2 = stores.find((s) => s.name === "s2")!;
+    await expect(svc.setStoreStatus(db, id.office, s2.id, "closed")).rejects.toThrow("在籍中のスタッフ");
+    const nu = stores.find((s) => s.name === "新店舗（改）")!;
+    await svc.setStoreStatus(db, id.office, nu.id, "closed");
+    expect((await svc.listStores(db, id.office)).find((s) => s.id === nu.id)?.status).toBe("closed");
+    await svc.setStoreStatus(db, id.office, nu.id, "active");
+    expect((await svc.listStores(db, id.office)).find((s) => s.id === nu.id)?.status).toBe("active");
+  });
+  it("空の名前は登録できない", async () => {
+    await expect(svc.addStore(db, id.office, "  ")).rejects.toThrow("名前を入力");
+  });
+});

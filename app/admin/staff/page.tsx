@@ -1,10 +1,10 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
-import { api, useMe } from "@/lib/client";
+import { api, useAutoRefresh, useMe } from "@/lib/client";
 import { LEVEL_NAMES, type Level } from "@/lib/permissions";
 import type { StaffRow } from "@/lib/service";
 
-type Store = { id: string; name: string };
+type Store = { id: string; name: string; status: "active" | "closed" };
 const LEVELS: Level[] = [1, 2, 3, 4];
 
 export default function StaffPage() {
@@ -20,13 +20,14 @@ export default function StaffPage() {
     setStaff(s); setStores(st);
   }, []);
   useEffect(() => { load(); }, [load]);
+  useAutoRefresh(load);
 
   const run = async (fn: () => Promise<void>) => {
     try { await fn(); setMsg(""); await load(); } catch (e) { setMsg((e as Error).message); }
   };
   const storeName = (id: string) => stores.find((s) => s.id === id)?.name ?? "";
   const canRegister = me.level >= 3;
-  const registrableStores = me.level === 4 ? stores : stores.filter((s) => s.id === me.storeId);
+  const registrableStores = (me.level === 4 ? stores : stores.filter((s) => s.id === me.storeId)).filter((s) => s.status === "active");
 
   return (
     <>

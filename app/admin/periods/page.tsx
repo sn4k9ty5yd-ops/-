@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
-import { api, useMe } from "@/lib/client";
+import { api, useAutoRefresh, useMe } from "@/lib/client";
 import { NEXT_ACTION } from "@/lib/labels";
 import { periodFor, todayJst, tintStyle } from "@/lib/period-nav";
 import { relationLabel } from "@/lib/periods";
@@ -9,13 +9,14 @@ import { STATUS_LABEL, STATUS_ORDER, type PeriodRow, type PeriodStatus } from "@
 export default function PeriodsPage() {
   const { me } = useMe();
   const [periods, setPeriods] = useState<PeriodRow[]>([]);
-  const [stores, setStores] = useState<{ id: string; name: string }[]>([]);
+  const [stores, setStores] = useState<{ id: string; name: string; status: string }[]>([]);
   const [msg, setMsg] = useState("");
   const load = useCallback(async () => {
-    const [p, s] = await Promise.all([api<PeriodRow[]>("/api/periods"), api<{ id: string; name: string }[]>("/api/stores")]);
+    const [p, s] = await Promise.all([api<PeriodRow[]>("/api/periods"), api<{ id: string; name: string; status: string }[]>("/api/stores")]);
     setPeriods(p); setStores(s);
   }, []);
   useEffect(() => { load(); }, [load]);
+  useAutoRefresh(load);
   const run = async (fn: () => Promise<unknown>) => { try { await fn(); setMsg(""); await load(); } catch (e) { setMsg((e as Error).message); } };
   const name = (id: string) => stores.find((s) => s.id === id)?.name ?? "";
   const canManage = (storeId: string) => me.level === 4 || (me.level === 3 && storeId === me.storeId);
@@ -30,7 +31,7 @@ export default function PeriodsPage() {
         return (
         <div key={p.id} className="card tint" style={{ marginTop: 16, ...tintStyle(p.start) }}>
           <span className={`badge2 ${rel.kind}`}>{rel.label}</span> <b style={{ fontSize: 18 }}>{p.label}</b> <span className="sub">{p.start} 〜 {p.end}</span>
-          {p.stores.map((s) => {
+          {p.stores.filter((s) => stores.find((x) => x.id === s.storeId)?.status !== "closed").map((s) => {
             const next = NEXT_ACTION[s.status];
             const needOffice = next?.to === "acknowledged";
             return (

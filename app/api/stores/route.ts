@@ -1,11 +1,22 @@
 import { getDb } from "@/lib/db";
 import { authed, json } from "@/lib/http";
-import { addStore, listStores } from "@/lib/service";
+import { addStore, listStores, moveStore, renameStore, setStoreStatus } from "@/lib/service";
 
 export const GET = authed(async (userId) => json(await listStores(await getDb(), userId)));
+
+// { action: "add"|"rename"|"close"|"reopen"|"up"|"down", storeId?, name? }
 export const POST = authed(async (userId, req) => {
-  const { name } = (await req.json()) as { name?: string };
-  if (!name?.trim()) throw new Error("お店の名前を入力してください");
-  await addStore(await getDb(), userId, name);
+  const b = (await req.json()) as { action?: string; storeId?: string; name?: string };
+  const db = await getDb();
+  const action = b.action ?? "add";
+  if (action === "add") await addStore(db, userId, b.name ?? "");
+  else {
+    if (!b.storeId) throw new Error("お店を指定してください");
+    if (action === "rename") await renameStore(db, userId, b.storeId, b.name ?? "");
+    else if (action === "close") await setStoreStatus(db, userId, b.storeId, "closed");
+    else if (action === "reopen") await setStoreStatus(db, userId, b.storeId, "active");
+    else if (action === "up" || action === "down") await moveStore(db, userId, b.storeId, action);
+    else throw new Error("操作が正しくありません");
+  }
   return json({ ok: true });
 }, { write: true });
