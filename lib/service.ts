@@ -1,4 +1,5 @@
 import { issuePasscode } from "./auth/login";
+import { DEFAULT_BREAK_RULE, validateBreakRule, type BreakRule } from "./hours";
 import { upcomingPeriods } from "./periods";
 import { asUser } from "./db/user-context";
 import type { Database } from "./db/types";
@@ -6,7 +7,7 @@ import type { Level } from "./permissions";
 
 // 画面(API)から呼ばれる業務処理。権限の判定はすべてDB側(RLS)で行い、ここでは再実装しない。
 
-export interface Me { id: string; name: string; level: Level; storeId: string; companyId: string; companyName: string; closingStartDay: number; }
+export interface Me { id: string; name: string; level: Level; storeId: string; companyId: string; companyName: string; closingStartDay: number; breakRule: BreakRule; }
 export interface StoreRow { id: string; name: string; status: "active" | "closed"; defaultOpen: string; defaultClose: string; }
 export interface StaffRow {
   id: string; name: string; employeeCode: string; storeId: string; level: Level; status: "active" | "disabled"; manageable: boolean; onShift: boolean;
@@ -18,11 +19,29 @@ export class ForbiddenError extends Error {
 
 export async function getMe(db: Database, userId: string): Promise<Me | null> {
   const { rows } = await asUser(db, userId, (q) =>
-    q.query<Me>(
-      `select m.id, m.name, m.level, m.store_id as "storeId", m.company_id as "companyId", c.name as "companyName", c.closing_start_day as "closingStartDay"
+    q.query<Omit<Me, "breakRule"> & { cap: number | null; tiers: { overMinutes: number; breakMinutes: number }[] }>(
+      `select m.id, m.name, m.level, m.store_id as "storeId", m.company_id as "companyId", c.name as "companyName", c.closing_start_day as "closingStartDay",
+              c.work_cap_minutes as cap, c.break_tiers as tiers
          from memberships m join companies c on c.id = m.company_id where m.id = $1`, [userId]),
   );
-  return rows[0] ?? null;
+  const r = rows[0];
+  if (!r) return null;
+  const { cap, tiers, ...me } = r;
+  return { ...me, breakRule: { capMinutes: cap, tiers: tiers ?? DEFAULT_BREAK_RULE.tiers } };
+}
+
+/** 休憩・実働のルールを変更する（オフィスのみ） */
+export async function setBreakRule(db: Database, userId: string, rule: BreakRule): Promise<void> {
+  const err = validateBreakRule(rule);
+  if (err) throw new Error(err);
+  const tiers = [...rule.tiers].sort((a, b) => a.overMinutes - b.overMinutes);
+  let n = 0;
+  try {
+    n = (await asUser(db, userId, (q) =>
+      q.query("update companies set work_cap_minutes = $1, break_tiers = $2::jsonb where id = (select company_id from memberships where id = $3) returning id",
+        [rule.capMinutes, JSON.stringify(tiers), userId]))).rows.length;
+  } catch { throw new ForbiddenError(); }
+  if (n === 0) throw new ForbiddenError();
 }
 
 export async function listStores(db: Database, userId: string): Promise<StoreRow[]> {

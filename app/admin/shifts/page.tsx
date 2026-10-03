@@ -159,7 +159,7 @@ export default function ShiftsPage() {
                   <>
                     <div className="times"><label>入店<input type="time" value={bar.start} onChange={(e) => setBar({ ...bar, start: e.target.value })} /></label>
                       <label>退店<input type="time" value={bar.end} onChange={(e) => setBar({ ...bar, end: e.target.value })} /></label></div>
-                    <div className="sub" style={{ margin: "6px 0" }}>{hoursText(bar.start, bar.end)}</div>
+                    <div className="sub" style={{ margin: "6px 0" }}>{hoursText(bar.start, bar.end, me.breakRule)}</div>
                   </>
                 )}
                 <div className="actions" style={{ marginTop: 8 }}>

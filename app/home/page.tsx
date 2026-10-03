@@ -12,6 +12,7 @@ function Cards() {
     { href: "/admin/requests", title: "みんなの希望休", sub: "スタッフの希望休を一覧で見ます", show: me.level >= 2 },
     { href: "/admin/periods", title: "シフト期間", sub: "受付・締切・確定・提出", show: me.level >= 3 },
     { href: "/admin/staff", title: "スタッフ", sub: "登録・退職・パスコード", show: me.level >= 3 },
+    { href: "/admin/settings", title: "設定", sub: "休憩・実働のルール", show: me.level >= 4 },
     { href: "/admin/stores", title: "お店", sub: "お店の一覧と追加", show: me.level >= 3 },
   ].filter((c) => c.show);
   return (

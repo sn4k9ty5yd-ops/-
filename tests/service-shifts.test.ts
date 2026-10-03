@@ -108,3 +108,23 @@ describe("シフト作成サービス", () => {
     await expect(svc.setStoreHours(db, id.office, st.s1, "20:00", "09:00")).rejects.toThrow("正しくありません");
   });
 });
+
+describe("休憩ルールの設定", () => {
+  it("初期値は「上限8時間・段階なし」", async () => {
+    expect((await svc.getMe(db, id.mgr1))?.breakRule).toEqual({ capMinutes: 480, tiers: [] });
+  });
+  it("変更できるのはオフィスだけ。保存したルールは全員に反映され、履歴が残る", async () => {
+    const rule = { capMinutes: 480, tiers: [{ overMinutes: 480, breakMinutes: 60 }, { overMinutes: 360, breakMinutes: 45 }] };
+    await expect(svc.setBreakRule(db, id.mgr1, rule)).rejects.toThrow(svc.ForbiddenError);
+    await expect(svc.setBreakRule(db, id.shift1, rule)).rejects.toThrow(svc.ForbiddenError);
+    await svc.setBreakRule(db, id.office, rule);
+    const m = await svc.getMe(db, id.a);
+    expect(m?.breakRule.tiers).toEqual([{ overMinutes: 360, breakMinutes: 45 }, { overMinutes: 480, breakMinutes: 60 }]); // 並べ替えて保存
+    expect((await db.query("select 1 from audit_logs where action = 'company.break_rule'")).rows).toHaveLength(1);
+  });
+  it("おかしな値は保存できない。元に戻せる（初期値）", async () => {
+    await expect(svc.setBreakRule(db, id.office, { capMinutes: 5, tiers: [] })).rejects.toThrow("上限");
+    await svc.setBreakRule(db, id.office, { capMinutes: 480, tiers: [] });
+    expect((await svc.getMe(db, id.office))?.breakRule).toEqual({ capMinutes: 480, tiers: [] });
+  });
+});

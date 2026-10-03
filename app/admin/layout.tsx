@@ -11,6 +11,7 @@ const TABS = [
   { href: "/admin/staff", label: "スタッフ" },
   { href: "/admin/stores", label: "お店" },
   { href: "/admin/periods", label: "シフト期間" },
+  { href: "/admin/settings", label: "設定" },
 ];
 
 function Shell({ children }: { children: React.ReactNode }) {

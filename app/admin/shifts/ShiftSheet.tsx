@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { useMe } from "@/lib/client";
 import { hoursText, KIND_BUTTONS } from "@/lib/shift-ui";
 import type { ShiftEntry, ShiftKind, ShiftRow } from "@/lib/service";
 
@@ -10,6 +11,7 @@ export function ShiftSheet({
   title: string; sub?: string; initial?: ShiftRow; defaults: { start: string; end: string };
   onSave(e: Pick<ShiftEntry, "kind" | "start" | "end">): Promise<void>; onClear?: () => Promise<void>; onClose(): void;
 }) {
+  const { me } = useMe();
   const [kind, setKind] = useState<ShiftKind>(initial?.kind ?? "work");
   const [start, setStart] = useState(initial?.start ?? defaults.start);
   const [end, setEnd] = useState(initial?.end ?? defaults.end);
@@ -30,7 +32,7 @@ export function ShiftSheet({
               <label>入店<input type="time" value={start} onChange={(e) => setStart(e.target.value)} /></label>
               <label>退店<input type="time" value={end} onChange={(e) => setEnd(e.target.value)} /></label>
             </div>
-            <div className="sub" style={{ margin: "6px 0" }}>{hoursText(start, end)}</div>
+            <div className="sub" style={{ margin: "6px 0" }}>{hoursText(start, end, me.breakRule)}</div>
           </>
         )}
         {err && <p className="err">{err}</p>}
