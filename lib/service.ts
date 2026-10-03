@@ -1594,6 +1594,9 @@ export async function purgeOldMaterialImages(db: Database, force = false, today?
        delete from material_order_images i using material_orders o, cutoff c
         where o.id = i.order_id and o.ordered_on < c.d returning i.id
      ) select count(*)::int as n from gone`, [today ?? null]);
+  // 売上のレジ画面の写真も、同じ（今月と先月だけ残す）
+  await db.query(
+    `delete from sales_images where month < (date_trunc('month', coalesce($1::date, (now() at time zone 'Asia/Tokyo')::date)) - interval '1 month')::date`, [today ?? null]);
   return rows[0]?.n ?? 0;
 }
 
@@ -1996,4 +1999,131 @@ export async function leaveOverview(db: Database, userId: string, windowId: stri
     const subs = new Set((await q.query<{ membership_id: string }>("select membership_id from leave_submissions where window_id = $1", [windowId])).rows.map((r) => r.membership_id));
     return stores.map((s) => ({ storeId: s.id, storeName: s.name, people: people.filter((p) => p.store_id === s.id).map((p) => ({ id: p.id, name: p.name, submitted: subs.has(p.id), days: plans.filter((x) => x.membership_id === p.id).map((x) => x.day) })) }));
   });
+}
+
+
+// ------------------------------------------------------------------ 指名売上（月ごと・個人ごと）
+export interface SalesValues { total: number; free: number; nominated: number; retail: number; customers: number; newCustomers: number; repeatCustomers: number }
+export interface SalesRow extends SalesValues { membershipId: string; name: string; source: string | null }
+export const EMPTY_SALES: SalesValues = { total: 0, free: 0, nominated: 0, retail: 0, customers: 0, newCustomers: 0, repeatCustomers: 0 };
+const monthStart = (m: string) => { if (!/^\d{4}-\d{2}(-01)?$/.test(m)) throw new Error("月が正しくありません"); return `${m.slice(0, 7)}-01`; };
+const prevYear = (m: string) => `${Number(m.slice(0, 4)) - 1}${m.slice(4)}`;
+const SALES_COLS = `x.total_sales as total, x.free_sales as free, x.nominated_sales as nominated, x.retail_sales as retail, x.customers, x.new_customers as "newCustomers", x.repeat_customers as "repeatCustomers"`;
+
+/** 店長・管理者の入力画面: そのお店の全員（0円の人も）の、その月の数字と、前年同月の数字・目標 */
+export async function listSalesMonth(db: Database, userId: string, storeId: string, month: string): Promise<{
+  month: string; rows: SalesRow[]; prev: Record<string, SalesValues>; storeTarget: number | null; targets: Record<string, number>; board: boolean; images: { id: string; at: string; by: string | null }[];
+}> {
+  const m = monthStart(month);
+  return asUser(db, userId, async (q) => {
+    const people = (await q.query<{ id: string; name: string }>("select id, name from memberships where store_id = $1 and status = 'active' and not display_only and level < 4 order by employee_code", [storeId])).rows;
+    const cur = (await q.query<SalesValues & { mid: string; source: string }>(`select x.membership_id as mid, x.source, ${SALES_COLS} from sales_stats x where x.store_id = $1 and x.month = $2`, [storeId, m])).rows;
+    const prev = (await q.query<SalesValues & { mid: string }>(`select x.membership_id as mid, ${SALES_COLS} from sales_stats x where x.store_id = $1 and x.month = $2`, [storeId, prevYear(m)])).rows;
+    const tg = (await q.query<{ membership_id: string | null; target: number }>("select membership_id, target from sales_targets where store_id = $1 and month = $2", [storeId, m])).rows;
+    const board = (await q.query<{ b: boolean }>("select sales_board_public as b from stores where id = $1", [storeId])).rows[0]?.b ?? true;
+    const images = (await q.query<{ id: string; at: string; by: string | null }>(
+      "select i.id, i.created_at as at, u.name as by from sales_images i left join memberships u on u.id = i.created_by where i.store_id = $1 and i.month = $2 order by i.created_at", [storeId, m])).rows;
+    const byId = new Map(cur.map((r) => [r.mid, r]));
+    return {
+      month: m, board, images,
+      rows: people.map((p) => { const r = byId.get(p.id); return { membershipId: p.id, name: p.name, source: r?.source ?? null, ...(r ? { total: r.total, free: r.free, nominated: r.nominated, retail: r.retail, customers: r.customers, newCustomers: r.newCustomers, repeatCustomers: r.repeatCustomers } : EMPTY_SALES) }; }),
+      prev: Object.fromEntries(prev.map((r) => [r.mid, { total: r.total, free: r.free, nominated: r.nominated, retail: r.retail, customers: r.customers, newCustomers: r.newCustomers, repeatCustomers: r.repeatCustomers }])),
+      storeTarget: tg.find((t) => t.membership_id === null)?.target ?? null,
+      targets: Object.fromEntries(tg.filter((t) => t.membership_id).map((t) => [t.membership_id as string, t.target])),
+    };
+  });
+}
+
+function checkSales(v: SalesValues) {
+  for (const [k, n] of Object.entries(v)) if (!Number.isInteger(n) || n < 0 || n > 1_000_000_000) throw new Error(`数字は、0以上の整数で入れてください（${k}）`);
+}
+
+/** 数字を保存（複数人まとめて。1人でも失敗したら全員取り消し）。店長=自店・管理者=全店 */
+export async function saveSales(db: Database, userId: string, storeId: string, month: string, rows: { membershipId: string; values: SalesValues }[], source: "manual" | "photo" | "import" = "manual"): Promise<number> {
+  const m = monthStart(month);
+  if (rows.length > 200) throw new Error("一度に保存できるのは200人までです");
+  rows.forEach((r) => checkSales(r.values));
+  const me = await getMe(db, userId);
+  if (!me) throw new ForbiddenError();
+  try {
+    await asUser(db, userId, async (q) => {
+      for (const r of rows) {
+        const v = r.values;
+        const ex = await q.query(
+          `update sales_stats set total_sales=$3, free_sales=$4, nominated_sales=$5, retail_sales=$6, customers=$7, new_customers=$8, repeat_customers=$9, source=$10, updated_by=$11, updated_at=now()
+            where membership_id = $1 and month = $2 and store_id = $12 returning id`,
+          [r.membershipId, m, v.total, v.free, v.nominated, v.retail, v.customers, v.newCustomers, v.repeatCustomers, source, userId, storeId]);
+        if (ex.rows.length === 0)
+          await q.query(
+            `insert into sales_stats (company_id, store_id, membership_id, month, total_sales, free_sales, nominated_sales, retail_sales, customers, new_customers, repeat_customers, source, updated_by)
+             values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+            [me.companyId, storeId, r.membershipId, m, v.total, v.free, v.nominated, v.retail, v.customers, v.newCustomers, v.repeatCustomers, source, userId]);
+      }
+    });
+  } catch (e) { if ((e as Error).message?.includes("整数")) throw e; throw new ForbiddenError("この売上を入れる権限がないか、対象の人が正しくありません"); }
+  return rows.length;
+}
+
+/** 目標（お店 or 個人）。null で消す */
+export async function setSalesTarget(db: Database, userId: string, storeId: string, month: string, membershipId: string | null, target: number | null): Promise<void> {
+  const m = monthStart(month);
+  if (target !== null && (!Number.isInteger(target) || target < 0 || target > 1_000_000_000)) throw new Error("目標は、0円以上の整数で入れてください");
+  const me = await getMe(db, userId);
+  if (!me) throw new ForbiddenError();
+  try {
+    await asUser(db, userId, async (q) => {
+      await q.query("delete from sales_targets where store_id = $1 and month = $2 and membership_id is not distinct from $3::uuid", [storeId, m, membershipId]);
+      if (target !== null) await q.query("insert into sales_targets (company_id, store_id, membership_id, month, target, updated_by) values ($1,$2,$3,$4,$5,$6)", [me.companyId, storeId, membershipId, m, target, userId]);
+    });
+  } catch { throw new ForbiddenError(); }
+}
+
+export interface MySales {
+  month: string; mine: (SalesValues & { source: string }) | null; prev: SalesValues | null;
+  store: { total: number; customers: number }; storePrev: { total: number; customers: number };
+  target: number | null; storeTarget: number | null;
+  board: { membershipId: string; name: string; total: number; customers: number; rank: number }[];
+  series: { month: string; total: number; customers: number }[];     // 直近24か月の、自分の売上
+}
+/** 自分の売上のページ（本人）。お店の合計・前年・目標・ランキング・24か月の推移 */
+export async function getMySales(db: Database, userId: string, month: string): Promise<MySales> {
+  const m = monthStart(month);
+  const me = await getMe(db, userId);
+  if (!me) throw new ForbiddenError();
+  return asUser(db, userId, async (q) => {
+    const one = async (mm: string) => (await q.query<SalesValues & { source: string }>(`select x.source, ${SALES_COLS} from sales_stats x where x.membership_id = $1 and x.month = $2`, [userId, mm])).rows[0] ?? null;
+    const tot = async (mm: string) => (await q.query<{ total: number; customers: number }>("select total_sales as total, customers from public.sales_store_total($1, $2::date)", [me.storeId, mm])).rows[0] ?? { total: 0, customers: 0 };
+    const tg = (await q.query<{ membership_id: string | null; target: number }>("select membership_id, target from sales_targets where store_id = $1 and month = $2 and (membership_id is null or membership_id = $3)", [me.storeId, m, userId])).rows;
+    const board = (await q.query<{ membership_id: string; name: string; total_sales: number; customers: number; rank: number }>("select * from public.sales_board($1, $2::date)", [me.storeId, m])).rows;
+    const series = (await q.query<{ month: string; total: number; customers: number }>(
+      "select to_char(month, 'YYYY-MM') as month, total_sales as total, customers from sales_stats where membership_id = $1 and month >= ($2::date - interval '23 months') and month <= $2::date order by month", [userId, m])).rows;
+    const prevRow = await one(prevYear(m));
+    return {
+      month: m, mine: await one(m), prev: prevRow, store: await tot(m), storePrev: await tot(prevYear(m)),
+      target: tg.find((t) => t.membership_id === userId)?.target ?? null, storeTarget: tg.find((t) => t.membership_id === null)?.target ?? null,
+      board: board.map((b) => ({ membershipId: b.membership_id, name: b.name, total: b.total_sales, customers: b.customers, rank: b.rank })), series,
+    };
+  });
+}
+
+export async function addSalesImage(db: Database, userId: string, storeId: string, month: string, mime: string, data: Buffer): Promise<string> {
+  const m = monthStart(month);
+  if (!["image/jpeg", "image/png", "image/webp"].includes(mime)) throw new Error("画像（JPEG・PNG・WebP）を選んでください");
+  if (data.length === 0 || data.length > 3 * 1024 * 1024) throw new Error("画像が大きすぎます（3MBまで）");
+  const me = await getMe(db, userId);
+  if (!me) throw new ForbiddenError();
+  try {
+    return (await asUser(db, userId, (q) => q.query<{ id: string }>(
+      "insert into sales_images (company_id, store_id, month, mime, size, data, created_by) values ($1,$2,$3,$4,$5,decode($6::text,'hex'),$7) returning id",
+      [me.companyId, storeId, m, mime, data.length, data.toString("hex"), userId]))).rows[0].id;
+  } catch { throw new ForbiddenError(); }
+}
+export async function getSalesImage(db: Database, userId: string, id: string): Promise<{ mime: string; data: Buffer } | null> {
+  const r = (await asUser(db, userId, (q) => q.query<{ mime: string; data: Uint8Array }>("select mime, data from sales_images where id = $1", [id]))).rows[0];
+  return r ? { mime: r.mime, data: Buffer.from(r.data) } : null;
+}
+/** 店内ランキングを、スタッフにも見せる／見せない（管理者） */
+export async function setSalesBoardPublic(db: Database, userId: string, storeId: string, on: boolean): Promise<void> {
+  const r = await asUser(db, userId, (q) => q.query("update stores set sales_board_public = $2 where id = $1 returning id", [storeId, on])).catch(() => ({ rows: [] }));
+  if (r.rows.length === 0) throw new ForbiddenError();
 }

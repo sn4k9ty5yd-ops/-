@@ -32,6 +32,8 @@ function Cards() {
     { href: "/admin/stocktake", title: "棚卸し", sub: "店販・業務の棚卸し（印刷・コピーもできます）", show: me.level >= 2 },
     { href: "/admin/products", title: "商品一覧", sub: "店販・業務の商品と仕入値", show: me.level >= 3 },
     { href: "/admin/shifts", title: "シフトを作る", sub: "日ごと・人ごと・一覧表で入力します", show: me.level >= 2 },
+    { big: true, href: "/my-sales", title: "自分の売上", sub: "売上・客単価・前年比・目標・店内ランキング", show: !me.displayOnly },
+    { href: "/sales", title: "売上（指名売上）", sub: "月末の売上を入れる・目標・お店ごとの集計", show: me.level >= 3 },
     { big: true, href: "/leave", title: leaveTodo ? `有給の申請（確認待ち${leaveTodo}件）` : "有給の申請", sub: leaveTodo ? "店長・事務員さんの確認が必要な申請があります" : "年2回の有給の提出と、変更の申請", show: true },
     { big: true, href: "/requests", title: "希望休を出す", sub: "休みたい日をえらびます", show: true },
     { href: "/admin/requests", title: "みんなの希望休", sub: "スタッフの希望休を一覧で見ます", show: me.level >= 2 },
@@ -42,7 +44,7 @@ function Cards() {
   ].filter((c) => c.show);
   const ICON: Record<string, [string, number, string]> = {
     "/inbox": ["🔔", 8, ""], "/manual": ["📖", 265, ""], "/shifts": ["📅", 212, ""], "/requests": ["🌴", 168, ""], "/material": ["🧴", 28, ""],
-    "/material/summary": ["📊", 28, "材料・在庫"], "/my-lessons": ["🎓", 262, ""], "/leave": ["🏝️", 172, ""], "/lessons": ["🎓", 262, "スタッフ・設定"], "/admin/stock": ["📦", 150, "材料・在庫"], "/admin/stocktake": ["📋", 190, "材料・在庫"], "/admin/products": ["🏷️", 320, "材料・在庫"],
+    "/material/summary": ["📊", 28, "材料・在庫"], "/my-lessons": ["🎓", 262, ""], "/leave": ["🏝️", 172, ""], "/my-sales": ["📈", 140, ""], "/sales": ["💴", 140, "シフト・勤怠"], "/lessons": ["🎓", 262, "スタッフ・設定"], "/admin/stock": ["📦", 150, "材料・在庫"], "/admin/stocktake": ["📋", 190, "材料・在庫"], "/admin/products": ["🏷️", 320, "材料・在庫"],
     "/admin/attendance": ["⏱️", 250, "シフト・勤怠"], "/admin/shifts": ["✏️", 212, "シフト・勤怠"], "/admin/requests": ["👥", 168, "シフト・勤怠"], "/admin/periods": ["🗓️", 235, "シフト・勤怠"],
     "/admin/staff": ["🧑‍🤝‍🧑", 340, "スタッフ・設定"], "/admin/settings": ["⚙️", 220, "スタッフ・設定"], "/admin/stores": ["🏬", 280, "スタッフ・設定"],
   };

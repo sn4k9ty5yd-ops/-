@@ -469,3 +469,12 @@ button:not(.ghost):not(.mvbtn):not(.linkcell):not(.logout):not(.monthrow):not(.d
 .leaveday .lv{font-size:10px;font-weight:700}
 .stickybar{position:sticky;bottom:12px;display:flex;gap:8px;align-items:center;padding:10px;margin-top:8px;border-radius:26px;background:var(--glass);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);border:1px solid var(--hair);box-shadow:0 10px 30px rgba(0,0,0,.12)}
 .stickybar button{margin:0}.stickybar button:first-child{flex:1}
+
+/* 売上 */
+.salestable td{padding:4px}.cellin{width:92px;padding:8px;font-size:14px;text-align:right;border-radius:10px}
+.salestable td:first-child{position:sticky;left:0;background:var(--card);font-weight:600;white-space:nowrap}
+.board{list-style:none;margin:8px 0 0;padding:0}.board li{display:flex;gap:10px;align-items:center;padding:8px 10px;border-radius:12px}
+.board li.me{background:color-mix(in srgb,var(--accent) 12%,transparent);font-weight:700}
+.board .rk{width:26px;height:26px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;background:color-mix(in srgb,var(--ink) 8%,transparent);font-size:13px;font-weight:700}
+.board li:nth-child(1) .rk{background:#ffd60a;color:#000}.board li:nth-child(2) .rk{background:#d1d1d6;color:#000}.board li:nth-child(3) .rk{background:#d9a066;color:#000}
+.stats3{grid-template-columns:repeat(3,1fr) !important}.stats3 .big{font-size:20px}.stats3 .card{padding:14px}
