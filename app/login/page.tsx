@@ -9,7 +9,7 @@ export default function LoginPage() {
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
   return (
-    <main>
+    <main className="login">
       <p className="sub" style={{ marginBottom: 4 }}>業務システム</p>
       <h1>株式会社ALBUM</h1>
       <form onSubmit={async (e) => {

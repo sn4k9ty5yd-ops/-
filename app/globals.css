@@ -208,3 +208,116 @@ main.xwide{max-width:1400px;margin:0 auto;padding:16px}
 .cal2 .d.hol>span{color:#d70015}.cal2 .d .holname{display:block}
 .daystrip .hol b,.hol>b{color:#d70015}
 .daystrip .hol small:first-child{color:#d70015;font-weight:700}
+
+/* =====================================================================
+   デザイン刷新（Appleのウェブサイト風）: 余白を広く・文字は大きく細かく整える・
+   角を丸く・影はうすく・ボタンはカプセル型・上のバーはすりガラス
+   ===================================================================== */
+:root{
+  --bg:#f5f5f7;--card:#fff;--ink:#1d1d1f;--sub:#6e6e73;--blue:#0071e3;--blue-d:#0077ed;--line:#d2d2d7;--hair:rgba(0,0,0,.08);
+  --shadow:0 1px 2px rgba(0,0,0,.04),0 4px 16px rgba(0,0,0,.04);--shadow-up:0 2px 6px rgba(0,0,0,.06),0 12px 32px rgba(0,0,0,.08);
+  --glass:rgba(251,251,253,.78);
+}
+@media (prefers-color-scheme: dark){:root{--bg:#000;--card:#1c1c1e;--ink:#f5f5f7;--sub:#a1a1a6;--blue:#2997ff;--blue-d:#40a4ff;--line:#424245;--hair:rgba(255,255,255,.12);--shadow:none;--shadow-up:none;--glass:rgba(29,29,31,.72)}}
+html{-webkit-text-size-adjust:100%}
+body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display","Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif;-webkit-font-smoothing:antialiased;letter-spacing:-.01em;line-height:1.47}
+h1{font-size:34px;font-weight:700;letter-spacing:-.025em;line-height:1.12;margin:0 0 20px}
+h2{font-size:22px;font-weight:700;letter-spacing:-.02em;margin:36px 0 4px}
+h3{letter-spacing:-.015em}
+a{color:var(--blue)}
+.sub{font-size:14px;color:var(--sub)}
+.hint{font-size:13px;line-height:1.55}
+
+/* 入力 */
+label{font-size:13px;font-weight:500;margin:18px 0 6px}
+input,select,textarea{font-family:inherit;border:1px solid var(--line);border-radius:12px;padding:13px 14px;font-size:17px;transition:border-color .15s,box-shadow .15s;outline:0}
+input:focus,select:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 0 4px color-mix(in srgb,var(--blue) 22%,transparent)}
+select{appearance:none;-webkit-appearance:none;padding-right:38px;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path d='M1 1.5l5 5 5-5' fill='none' stroke='%236e6e73' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/></svg>");background-repeat:no-repeat;background-position:right 14px center}
+input[type=checkbox],input[type=radio]{accent-color:var(--blue)}
+
+/* ボタン: カプセル型 */
+button{font-family:inherit;border-radius:980px;padding:14px 22px;font-size:17px;font-weight:500;letter-spacing:-.01em;cursor:pointer;transition:background .15s,transform .1s,opacity .15s}
+button:not(.ghost):not(.mvbtn):not(.linkcell):hover{background:var(--blue-d)}
+button:active{transform:scale(.98)}
+button.ghost{border:0;background:color-mix(in srgb,var(--ink) 6%,transparent);color:var(--blue);font-weight:500;padding:9px 16px;font-size:14px}
+button.ghost:hover{background:color-mix(in srgb,var(--ink) 10%,transparent)}
+button:disabled{opacity:.4;cursor:default}
+.seg{background:color-mix(in srgb,var(--ink) 7%,transparent);border-radius:12px;padding:3px;gap:2px;display:flex}
+.seg button{border:0;background:transparent;color:var(--ink);border-radius:10px;padding:9px 10px;font-size:14px;font-weight:500}
+.seg button.on{background:var(--card);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.14)}
+.seg button:hover{background:transparent}.seg button.on:hover{background:var(--card)}
+
+/* 上のバー: すりガラス */
+.shell .demo{position:sticky;top:0;z-index:30;background:var(--glass);-webkit-backdrop-filter:saturate(180%) blur(20px);backdrop-filter:saturate(180%) blur(20px);color:var(--ink);border-bottom:1px solid var(--hair);padding:12px 20px;font-size:13px;justify-content:space-between}
+.storelink{background:color-mix(in srgb,var(--ink) 7%,transparent);border:0;color:var(--ink);font-weight:500;font-size:13px;padding:7px 14px}
+.tabs{padding:16px 20px 4px;gap:6px}
+.tabs a{background:transparent;color:var(--sub);font-size:14px;font-weight:500;padding:8px 14px;transition:background .15s,color .15s}
+.tabs a:hover{background:color-mix(in srgb,var(--ink) 6%,transparent);color:var(--ink)}
+.tabs a.on{background:var(--ink);color:var(--bg)}
+
+/* カード・一覧 */
+.card,.list li,.notice,.scroll,.sheet{box-shadow:var(--shadow)}
+.card{border-radius:20px;padding:20px}
+.list li{border-radius:16px;padding:16px 18px}
+.chip{background:color-mix(in srgb,var(--ink) 7%,transparent);color:var(--ink);font-size:12px;font-weight:500;padding:4px 10px;margin-left:6px}
+.chip.warn{background:#fff3c4;color:#7a5200}
+.notice{background:color-mix(in srgb,var(--blue) 10%,var(--card));border-radius:18px}
+.err{color:#d70015;font-size:14px}
+.back{font-size:15px;margin-bottom:6px}
+.back:hover{text-decoration:underline}
+
+/* 画面の幅と余白 */
+main{max-width:460px;padding:56px 20px}
+main.wide{max-width:820px;padding:28px 20px 56px}
+main.xwide{max-width:1400px;padding:28px 20px 56px}
+
+/* ホーム: 大きなカードを並べる */
+main.home{max-width:980px;padding:56px 20px 64px}
+main.home>.sub:first-child{font-size:15px;font-weight:600;color:var(--sub);margin:0 0 6px}
+main.home h1{font-size:44px;letter-spacing:-.03em;margin-bottom:6px}
+.homegrid{display:grid;grid-template-columns:1fr;gap:14px;margin-top:28px}
+@media (min-width:640px){.homegrid{grid-template-columns:repeat(2,1fr)}}
+@media (min-width:960px){.homegrid{grid-template-columns:repeat(3,1fr)}}
+.card-link{position:relative;min-height:112px;justify-content:center;gap:6px;border-radius:22px;padding:22px 48px 22px 24px;margin:0;box-shadow:var(--shadow);transition:transform .2s ease,box-shadow .2s ease}
+.card-link b{font-size:19px;font-weight:600;letter-spacing:-.02em}
+.card-link .sub{line-height:1.4}
+.card-link::after{content:"›";position:absolute;right:20px;top:50%;transform:translateY(-50%);font-size:26px;color:var(--sub);font-weight:300}
+@media (hover:hover){.card-link:hover{transform:translateY(-2px);box-shadow:var(--shadow-up)}}
+main.home .card-link{margin-bottom:0}
+main.home>button.ghost{margin:36px auto 0;display:block}
+
+/* ログイン */
+main.login{max-width:400px;padding:15vh 24px 48px;text-align:center}
+main.login h1{font-size:40px;margin-bottom:28px}
+main.login form{text-align:left}
+main.login>.sub{font-size:15px;font-weight:600}
+main.login input{background:var(--card);padding:15px 16px}
+main.login button[type=submit]{margin-top:28px;width:100%;padding:15px;font-size:17px}
+
+/* カレンダー・表 */
+.mday,.cal2 .d{border-radius:12px;box-shadow:none}
+.mcal,.cal2{gap:5px}
+.mday{background:var(--card);border:1px solid var(--hair)}
+.mday.sun{background:color-mix(in srgb,#ff3b30 5%,var(--card))}.mday.sat{background:color-mix(in srgb,#0071e3 5%,var(--card))}
+.mday.today{outline:0;border-color:var(--blue);box-shadow:0 0 0 2px var(--blue) inset}
+.cal2 .d{border:1px solid var(--hair);transition:background .15s}
+.mcal .h,.cal2 .h{font-size:12px;font-weight:600;color:var(--sub)}
+.pnav button{box-shadow:var(--shadow);border:0;color:var(--blue)}
+.plabel{font-size:26px;letter-spacing:-.025em}
+.tintbox,.tint{border-radius:22px}
+.scroll{border-radius:16px}
+.scroll table{font-size:13px}
+.scroll td,.scroll th{border-color:var(--hair)}
+.sttable th{font-weight:600}
+.badge2{font-weight:600}
+.pill{background:color-mix(in srgb,var(--ink) 7%,transparent)}
+.mvbtn{border-radius:980px}
+.stepper button,.stepper input{border-radius:12px}
+
+/* ポップアップ（下から出るシート） */
+.sheet-bg{background:rgba(0,0,0,.32);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+.sheet{border-radius:28px 28px 0 0;padding:24px 22px 32px;box-shadow:var(--shadow-up)}
+@media (min-width:700px){.sheet{border-radius:28px}}
+.sheet-bg .sheet h3{font-size:19px;font-weight:700;margin:0 0 6px}
+
+@media print{.card,.list li,.scroll{box-shadow:none}.shell .demo{position:static}}

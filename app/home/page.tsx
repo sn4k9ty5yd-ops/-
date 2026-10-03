@@ -32,13 +32,15 @@ function Cards() {
     { href: "/admin/stores", title: "店舗の編集", sub: "新店舗の追加・名前の変更・閉店（管理者のみ）", show: me.level >= 4 },
   ].filter((c) => c.show);
   return (
-    <main>
+    <main className="home">
       <p className="sub">株式会社ALBUM</p>
       <h1>{me.name} さん</h1>
-      <p className="hint" style={{ marginTop: -16 }}>{LEVEL_NAMES[me.level]}</p>
-      {cards.map((c) => (
-        <Link key={c.href} href={c.href} className="card-link"><b>{c.title}</b><span className="sub">{c.sub}</span></Link>
-      ))}
+      <p className="hint" style={{ marginTop: 0 }}>{LEVEL_NAMES[me.level]}</p>
+      <div className="homegrid">
+        {cards.map((c) => (
+          <Link key={c.href} href={c.href} className="card-link"><b>{c.title}</b><span className="sub">{c.sub}</span></Link>
+        ))}
+      </div>
       <button className="ghost" style={{ color: "var(--ink)", width: "100%" }} onClick={logout}>ログアウト</button>
     </main>
   );
