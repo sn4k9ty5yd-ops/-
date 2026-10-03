@@ -11,7 +11,7 @@ const ID = { taro: "00000000-0000-0000-0000-000000000011", gone: "00000000-0000-
 
 beforeAll(async () => {
   db = new PGlite();
-  await db.exec(readFileSync("supabase/migrations/0001_tenant_core.sql", "utf8"));
+  await db.exec(readFileSync("db/migrations/0001_tenant_core.sql", "utf8"));
   await db.exec(`
     insert into companies (id, code, name) values ('${CO}', 'atena', 'A社'), ('b0000000-0000-0000-0000-000000000001', 'other', 'B社');
     insert into stores (id, company_id, name) values ('${ST}', '${CO}', '店');

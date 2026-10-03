@@ -1,4 +1,4 @@
-// 操作レベルの権限表。supabase/migrations/0001_tenant_core.sql の level_permissions と同一内容
+// 操作レベルの権限表。db/migrations/0001_tenant_core.sql の level_permissions と同一内容
 // （tests/permissions.test.ts で一致を検査している）。
 export type Level = 1 | 2 | 3 | 4;
 export type Scope = "own" | "all";

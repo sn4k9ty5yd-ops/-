@@ -4,6 +4,10 @@
 
 do $$ begin
   if not exists (select 1 from pg_roles where rolname = 'app_user') then create role app_user nologin; end if;
+  -- 接続用ロールが app_user に切り替えられるようにする（管理用接続は所有者として動く）
+  if not (select rolsuper from pg_roles where rolname = current_user) then
+    execute format('grant app_user to %I', current_user);
+  end if;
 end $$;
 
 create schema if not exists app;

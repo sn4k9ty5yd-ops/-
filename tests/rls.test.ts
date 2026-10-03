@@ -44,7 +44,7 @@ const fails = async (sql: string) => {
 
 beforeAll(async () => {
   db = new PGlite();
-  await db.exec(readFileSync("supabase/migrations/0001_tenant_core.sql", "utf8"));
+  await db.exec(readFileSync("db/migrations/0001_tenant_core.sql", "utf8"));
   await db.exec(`
     insert into companies (id, code, name) values ('${CO_A}', 'company-a', '会社A'), ('${CO_B}', 'company-b', '会社B');
     insert into stores (id, company_id, name) values

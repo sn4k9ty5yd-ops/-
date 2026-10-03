@@ -4,7 +4,7 @@ import { can, canManageStaff, LEVEL_PERMISSIONS } from "../lib/permissions";
 
 describe("画面側の権限表とDB側の権限表が同じ", () => {
   it("level_permissions の中身が一致する", () => {
-    const sql = readFileSync("supabase/migrations/0001_tenant_core.sql", "utf8");
+    const sql = readFileSync("db/migrations/0001_tenant_core.sql", "utf8");
     const seed = sql.slice(sql.indexOf("insert into public.level_permissions"), sql.indexOf("-- ------", sql.indexOf("insert into public.level_permissions")));
     const fromSql = [...seed.matchAll(/\((\d), '([a-z.]+)', '(own|all)'\)/g)].map((m) => `${m[1]}|${m[2]}|${m[3]}`).sort();
     const fromTs = LEVEL_PERMISSIONS.map(([l, p, s]) => `${l}|${p}|${s}`).sort();
