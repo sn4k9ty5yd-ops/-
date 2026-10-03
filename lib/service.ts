@@ -376,7 +376,7 @@ export async function toggleMyRequest(db: Database, userId: string, periodId: st
 export async function listNames(db: Database, userId: string): Promise<{ id: string; name: string; storeId: string }[]> {
   return (await asUser(db, userId, (q) =>
     q.query<{ id: string; name: string; storeId: string }>(
-      `select id, name, store_id as "storeId" from memberships where status = 'active' order by store_id, level desc, name`))).rows;
+      `select id, name, store_id as "storeId" from memberships where status = 'active' and on_shift order by store_id, level desc, name`))).rows;
 }
 
 
