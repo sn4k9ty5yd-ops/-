@@ -91,6 +91,8 @@ main.xwide{max-width:1400px;margin:0 auto;padding:16px}
 .mday{background:var(--card);border-radius:8px;min-height:92px;padding:4px;font-size:11px;overflow:hidden;color:var(--ink)}
 .mday.sun{background:color-mix(in srgb,#ff3b30 8%,var(--card))}.mday.sat{background:color-mix(in srgb,#0071e3 8%,var(--card))}
 .mday.k-paid{background:#fff3c4;color:#1d1d1f}
+.mday.myoff .num span{display:inline-block;min-width:22px;padding:1px 3px;border:2px solid #d70015;border-radius:999px;color:#d70015;font-weight:800;text-align:center}
+.mday .myoff-tag{color:#d70015;font-weight:700}
 .mday.today{outline:2px solid var(--blue)}
 .mday .num{font-size:11px;color:var(--sub);margin-bottom:2px}
 .mday .nm{line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}

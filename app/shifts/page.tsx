@@ -20,6 +20,7 @@ function Page() {
   const [view, setView] = useState<Period | null>(null);
   const [roster, setRoster] = useState<Person[]>([]);
   const [shifts, setShifts] = useState<ShiftRow[]>([]);
+  const [myReq, setMyReq] = useState<Set<string>>(new Set());
   const [show, setShow] = useState<"work" | "off">("work");
   const [ready, setReady] = useState(false);
 
@@ -39,9 +40,13 @@ function Page() {
   const load = useCallback(async () => {
     if (!view) return;
     setRoster(await api<Person[]>(`/api/roster?storeId=${storeId}`));
-    if (!db) { setShifts([]); return; }
+    if (!db) { setShifts([]); setMyReq(new Set()); return; }
+    if (!me.displayOnly) {
+      const rq = await api<{ membershipId: string; day: string }[]>(`/api/requests?periodId=${db.id}`).catch(() => []);
+      setMyReq(new Set(rq.filter((r) => r.membershipId === me.id).map((r) => r.day)));
+    }
     setShifts((await api<{ shifts: ShiftRow[] }>(`/api/shifts?periodId=${db.id}&storeId=${storeId}`)).shifts);
-  }, [db, storeId, view]);
+  }, [db, storeId, view, me.id, me.displayOnly]);
   useEffect(() => { load().catch(() => {}); }, [load]);
   useAutoRefresh(() => { load().catch(() => {}); });
 
@@ -52,6 +57,7 @@ function Page() {
   const todays = (byDay.get(today) ?? []).filter((s) => s.kind === "work").sort((a, b) => (a.start! < b.start! ? -1 : 1));
   const todayOff = (byDay.get(today) ?? []).filter((s) => s.kind !== "work");
   const published = !!db && isPub(db, storeId);
+  const myOff = new Set<string>(published ? shifts.filter((s) => s.membershipId === me.id && s.kind !== "work").map((s) => s.day) : myReq);
   const inView = view.start <= today && today <= view.end;
 
   return (
@@ -76,9 +82,9 @@ function Page() {
       )}
       <PeriodNav period={view} startDay={me.closingStartDay} onChange={setView} />
       <div className="seg"><button className={show === "work" ? "on" : ""} onClick={() => setShow("work")}>出勤する人</button><button className={show === "off" ? "on" : ""} onClick={() => setShow("off")}>みんなの休み</button></div>
-      {!published && me.level < 2 ? <p className="hint">この期間のシフトは、まだ公開されていません。</p> : (
+      {(
         <div className="tintbox" style={tintStyle(view.start)}>
-          {!published && <p className="sub" style={{ margin: "4px 4px 8px" }}>公開前（作成中）のシフトです。スタッフには見えません。</p>}
+          {!published && <p className="sub" style={{ margin: "4px 4px 8px" }}>{me.level < 2 ? "この期間のシフトは、まだ公開されていません。いまは、出した希望休だけ赤丸で表示されます。" : "公開前（作成中）のシフトです。スタッフには見えません。"}</p>}
           <div className="mcal">
             {WEEKDAYS.map((w, i) => <div key={w} className={`h ${i === 0 ? "su" : i === 6 ? "sa" : ""}`}>{w}</div>)}
             {Array.from({ length: dow(days[0]) }).map((_, i) => <div key={`b${i}`} />)}
@@ -86,8 +92,8 @@ function Page() {
               const list = (byDay.get(d) ?? []).filter((s) => (show === "work" ? s.kind === "work" : s.kind !== "work"));
               const anyPaid = show === "off" && list.some((s) => s.kind === "paid");
               return (
-                <div key={d} className={`mday ${d === today ? "today" : ""} ${anyPaid ? "k-paid" : ""} ${dow(d) === 0 ? "sun" : dow(d) === 6 ? "sat" : ""}`}>
-                  <div className="num">{md(d)}</div>
+                <div key={d} className={`mday ${d === today ? "today" : ""} ${anyPaid ? "k-paid" : ""} ${myOff.has(d) ? "myoff" : ""} ${dow(d) === 0 ? "sun" : dow(d) === 6 ? "sat" : ""}`}>
+                  <div className="num"><span>{md(d)}</span>{myOff.has(d) && <small className="myoff-tag"> 休み</small>}</div>
                   {list.length === 0 && show === "off" ? <small className="sub">なし</small> : list.map((s) => (
                     <div key={s.id} className={`nm ${s.membershipId === me.id ? "me" : ""}`}>{name.get(s.membershipId) ?? ""}{show === "off" ? `(${LABEL[s.kind]})` : ""}</div>
                   ))}
@@ -97,7 +103,7 @@ function Page() {
           </div>
         </div>
       )}
-      {published && !me.displayOnly && <p className="hint">自分の名前は太字で表示されます。</p>}
+      {!me.displayOnly && <p className="hint">自分の名前は太字、自分の休みの日は <b style={{ color: "#d70015" }}>赤い丸</b> で表示されます。</p>}
       {me.displayOnly && <button className="ghost" style={{ color: "var(--sub)", width: "auto", marginTop: 24 }} onClick={logout}>ログアウト</button>}
     </main>
   );
