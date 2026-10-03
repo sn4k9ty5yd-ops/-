@@ -1,5 +1,5 @@
 import { issuePasscode } from "./auth/login";
-import { DEFAULT_BREAK_RULE, validateBreakRule, type BreakRule } from "./hours";
+import { calcHours, DEFAULT_BREAK_RULE, validateBreakRule, type BreakRule } from "./hours";
 import { upcomingPeriods } from "./periods";
 import { asUser } from "./db/user-context";
 import type { Database } from "./db/types";
@@ -167,6 +167,8 @@ export async function reissuePasscode(db: Database, userId: string, targetId: st
 // ------------------------------------------------------------------ シフト期間・希望休
 
 export type PeriodStatus = "preparing" | "collecting" | "closed" | "drafting" | "confirmed" | "published" | "submitted" | "acknowledged";
+export type AttendanceStatus = "open" | "submitted" | "acknowledged";
+export const ATTENDANCE_LABEL: Record<AttendanceStatus, string> = { open: "入力中", submitted: "オフィスに提出済み", acknowledged: "確認済み" };
 export const STATUS_ORDER: PeriodStatus[] = ["preparing", "collecting", "closed", "drafting", "confirmed", "published", "submitted", "acknowledged"];
 export const STATUS_LABEL: Record<PeriodStatus, string> = {
   preparing: "準備中", collecting: "希望休受付中", closed: "受付終了", drafting: "シフト作成中",
@@ -175,15 +177,15 @@ export const STATUS_LABEL: Record<PeriodStatus, string> = {
 
 export interface PeriodRow {
   id: string; label: string; start: string; end: string;
-  stores: { storeId: string; status: PeriodStatus; openAt: string | null; closeAt: string | null }[];
+  stores: { storeId: string; status: PeriodStatus; openAt: string | null; closeAt: string | null; attendanceStatus: AttendanceStatus }[];
 }
 export interface RequestRow { id: string; membershipId: string; storeId: string; periodId: string; day: string; kind: string; }
 
 export async function listPeriods(db: Database, userId: string): Promise<PeriodRow[]> {
   const { rows } = await asUser(db, userId, (q) =>
-    q.query<{ id: string; label: string; start: string; end: string; storeId: string | null; status: PeriodStatus | null; openAt: string | null; closeAt: string | null }>(
+    q.query<{ id: string; label: string; start: string; end: string; storeId: string | null; status: PeriodStatus | null; openAt: string | null; closeAt: string | null; attendanceStatus: AttendanceStatus | null }>(
       `select p.id, p.label, p.start_date::text as start, p.end_date::text as "end",
-              sp.store_id as "storeId", sp.status, sp.request_open_at::text as "openAt", sp.request_close_at::text as "closeAt"
+              sp.store_id as "storeId", sp.status, sp.request_open_at::text as "openAt", sp.request_close_at::text as "closeAt", sp.attendance_status as "attendanceStatus"
          from shift_periods p
          left join store_period_status sp on sp.period_id = p.id
          left join stores st on st.id = sp.store_id
@@ -191,7 +193,7 @@ export async function listPeriods(db: Database, userId: string): Promise<PeriodR
   const map = new Map<string, PeriodRow>();
   for (const r of rows) {
     const p = map.get(r.id) ?? { id: r.id, label: r.label, start: r.start, end: r.end, stores: [] };
-    if (r.storeId && r.status) p.stores.push({ storeId: r.storeId, status: r.status, openAt: r.openAt, closeAt: r.closeAt });
+    if (r.storeId && r.status) p.stores.push({ storeId: r.storeId, status: r.status, openAt: r.openAt, closeAt: r.closeAt, attendanceStatus: r.attendanceStatus ?? "open" });
     map.set(r.id, p);
   }
   return [...map.values()];
@@ -392,4 +394,171 @@ export async function fillDefault(
     entries.push(req ? { membershipId: id, day, kind: req === "paid" ? "paid" : req === "holiday" ? "holiday" : "off" } : { membershipId: id, day, kind: "work", start: input.start, end: input.end });
   }
   return saveShifts(db, userId, input.periodId, input.storeId, entries);
+}
+
+
+// ------------------------------------------------------------------ 出勤簿
+export interface AttendanceRow {
+  id: string; membershipId: string; storeId: string; periodId: string; day: string; kind: ShiftKind;
+  clockIn: string | null; clockOut: string | null; breakMin: number; workMin: number; note: string | null; edited: boolean; source: string;
+}
+export interface AttendanceEntry { membershipId: string; day: string; kind: ShiftKind; clockIn?: string | null; clockOut?: string | null; breakMin?: number; note?: string | null; }
+
+const NOT_EDITABLE_ATT = "いまは出勤簿を変更できません（提出済み・確認済み、または権限がありません）";
+
+export async function listAttendanceRoster(db: Database, userId: string, periodId: string, storeId: string): Promise<{ id: string; name: string; status: string }[]> {
+  return (await asUser(db, userId, (q) =>
+    q.query<{ id: string; name: string; status: string }>(
+      `select id, name, status from memberships
+        where store_id = $2 and ((status = 'active' and on_shift) or id in (select membership_id from attendance_records where period_id = $1))
+        order by level desc, name`, [periodId, storeId]))).rows;
+}
+
+export async function listAttendance(db: Database, userId: string, periodId: string, storeId: string): Promise<{ rows: AttendanceRow[]; editable: boolean }> {
+  return asUser(db, userId, async (q) => ({
+    rows: (await q.query<AttendanceRow>(
+      `select id, membership_id as "membershipId", store_id as "storeId", period_id as "periodId", day::text as day, kind,
+              to_char(clock_in, 'HH24:MI') as "clockIn", to_char(clock_out, 'HH24:MI') as "clockOut",
+              break_minutes as "breakMin", work_minutes as "workMin", note, edited, source
+         from attendance_records where period_id = $1 and store_id = $2 order by day`, [periodId, storeId])).rows,
+    editable: (await q.query<{ ok: boolean }>("select app.has_perm('attendance.edit', $2) and app.attendance_editable($1, $2) as ok", [periodId, storeId])).rows[0].ok,
+  }));
+}
+
+function checkAttendanceEntry(e: AttendanceEntry, rule: BreakRule): { breakMin: number } {
+  if (!KINDS.includes(e.kind)) throw new Error("種類が正しくありません");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(e.day)) throw new Error("日付が正しくありません");
+  if (e.kind !== "work") return { breakMin: 0 };
+  if (!e.clockIn || !e.clockOut || !TIME.test(e.clockIn) || !TIME.test(e.clockOut)) throw new Error("入店と退店の時間を入れてください");
+  if (e.clockOut <= e.clockIn) throw new Error("退店は入店より後の時間にしてください");
+  const h = calcHours(e.clockIn, e.clockOut, rule);
+  const breakMin = e.breakMin ?? h.breakMin;                       // 指定が無ければ会社のルールで自動計算
+  if (!Number.isInteger(breakMin) || breakMin < 0) throw new Error("休憩の分数が正しくありません");
+  if (breakMin > h.stay) throw new Error("休憩が在店時間より長くなっています");
+  return { breakMin };
+}
+
+async function upsertAttendance(db: Database, userId: string, periodId: string, storeId: string, entries: AttendanceEntry[], opts: { edited: boolean; source: "manual" | "shift" | "bulk" }): Promise<number> {
+  const me = await getMe(db, userId);
+  if (!me) throw new ForbiddenError();
+  const prepared = entries.map((e) => ({ e, ...checkAttendanceEntry(e, me.breakRule) }));
+  if (prepared.length === 0) return 0;
+  if (!(await asUser(db, userId, (q) => q.query<{ ok: boolean }>("select app.has_perm('attendance.edit', $2) and app.attendance_editable($1, $2) as ok", [periodId, storeId]))).rows[0].ok)
+    throw new ForbiddenError(NOT_EDITABLE_ATT);
+  try {
+    await asUser(db, userId, async (q) => {
+      for (const { e, breakMin } of prepared)
+        await q.query(
+          `insert into attendance_records (company_id, store_id, period_id, membership_id, day, kind, clock_in, clock_out, break_minutes, note, edited, source)
+           values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+           on conflict (membership_id, day) do update set kind = excluded.kind, clock_in = excluded.clock_in, clock_out = excluded.clock_out,
+             break_minutes = excluded.break_minutes, note = excluded.note, edited = excluded.edited, source = excluded.source`,
+          [me.companyId, storeId, periodId, e.membershipId, e.day, e.kind, e.kind === "work" ? e.clockIn : null, e.kind === "work" ? e.clockOut : null,
+           breakMin, e.note?.trim() || null, opts.edited, opts.source]);
+    });
+  } catch (err) {
+    const msg = (err as Error).message ?? "";
+    if (msg.includes("outside the period")) throw new Error("この期間の外の日付が含まれています");
+    if (msg.includes("not belong")) throw new Error("このお店のスタッフを選んでください");
+    throw new ForbiddenError(NOT_EDITABLE_ATT);
+  }
+  return prepared.length;
+}
+
+/** 一人ずつの入力・修正。「個別に直した日」の目印がつき、あとの一括入力で上書きされない */
+export function saveAttendance(db: Database, userId: string, periodId: string, storeId: string, entries: AttendanceEntry[]) {
+  return upsertAttendance(db, userId, periodId, storeId, entries, { edited: true, source: "manual" });
+}
+
+export async function clearAttendance(db: Database, userId: string, periodId: string, storeId: string, items: { membershipId: string; day: string }[]): Promise<number> {
+  if (items.length === 0) return 0;
+  if (!(await asUser(db, userId, (q) => q.query<{ ok: boolean }>("select app.has_perm('attendance.edit', $2) and app.attendance_editable($1, $2) as ok", [periodId, storeId]))).rows[0].ok)
+    throw new ForbiddenError(NOT_EDITABLE_ATT);
+  return asUser(db, userId, async (q) => {
+    let n = 0;
+    for (const it of items) n += (await q.query("delete from attendance_records where period_id = $1 and store_id = $2 and membership_id = $3 and day = $4 returning id", [periodId, storeId, it.membershipId, it.day])).rows.length;
+    return n;
+  });
+}
+
+/** シフトから出勤簿の下書きを作る。一人ずつ直した日は変えない。overwrite=false なら、すでに入っている日も変えない */
+export async function draftAttendanceFromShifts(db: Database, userId: string, periodId: string, storeId: string, overwrite = false): Promise<number> {
+  const shifts = await listShifts(db, userId, periodId, storeId);
+  const existing = new Map((await listAttendance(db, userId, periodId, storeId)).rows.map((r) => [`${r.membershipId}|${r.day}`, r]));
+  const entries: AttendanceEntry[] = [];
+  for (const sh of shifts) {
+    const cur = existing.get(`${sh.membershipId}|${sh.day}`);
+    if (cur && (cur.edited || !overwrite)) continue;
+    entries.push(sh.kind === "work" ? { membershipId: sh.membershipId, day: sh.day, kind: "work", clockIn: sh.start, clockOut: sh.end } : { membershipId: sh.membershipId, day: sh.day, kind: sh.kind });
+  }
+  return upsertAttendance(db, userId, periodId, storeId, entries, { edited: false, source: "shift" });
+}
+
+/**
+ * 全員同じ時間の一括入力（複数日OK）。シフトで休み・有給などの人は除く。
+ * 一人ずつ直した日は、overwrite=true のときだけ上書きする。
+ */
+export async function fillAttendance(
+  db: Database, userId: string,
+  input: { periodId: string; storeId: string; days: string[]; membershipIds?: string[]; clockIn: string; clockOut: string; overwrite?: boolean },
+): Promise<{ saved: number; skippedEdited: number }> {
+  if (!TIME.test(input.clockIn) || !TIME.test(input.clockOut) || input.clockOut <= input.clockIn) throw new Error("入店と退店の時間が正しくありません");
+  const roster = (await listRoster(db, userId, input.storeId)).map((r) => r.id).filter((id) => !input.membershipIds || input.membershipIds.includes(id));
+  const off = new Set((await listShifts(db, userId, input.periodId, input.storeId)).filter((s) => s.kind !== "work").map((s) => `${s.membershipId}|${s.day}`));
+  const existing = new Map((await listAttendance(db, userId, input.periodId, input.storeId)).rows.map((r) => [`${r.membershipId}|${r.day}`, r]));
+  const entries: AttendanceEntry[] = []; let skippedEdited = 0;
+  for (const day of input.days) for (const id of roster) {
+    const k = `${id}|${day}`;
+    if (off.has(k)) continue;
+    const cur = existing.get(k);
+    if (cur?.edited && !input.overwrite) { skippedEdited++; continue; }
+    entries.push({ membershipId: id, day, kind: "work", clockIn: input.clockIn, clockOut: input.clockOut });
+  }
+  return { saved: await upsertAttendance(db, userId, input.periodId, input.storeId, entries, { edited: false, source: "bulk" }), skippedEdited };
+}
+
+export async function setAttendanceStatus(db: Database, userId: string, periodId: string, storeId: string, status: AttendanceStatus): Promise<void> {
+  let n = 0;
+  try {
+    n = (await asUser(db, userId, (q) =>
+      q.query("update store_period_status set attendance_status = $3 where period_id = $1 and store_id = $2 returning period_id", [periodId, storeId, status]))).rows.length;
+  } catch { throw new ForbiddenError(); }
+  if (n === 0) throw new ForbiddenError();
+}
+
+// ------------------------------------------------------------------ 有給の残り日数（手で入れる方式）
+export interface LeaveBalance { membershipId: string; granted: number; used: number; remaining: number; }
+
+export async function listLeave(db: Database, userId: string, storeId: string): Promise<LeaveBalance[]> {
+  const { rows } = await asUser(db, userId, (q) =>
+    q.query<{ membership_id: string; granted: string; used: string; remaining: string }>("select * from app.leave_balances($1)", [storeId]));
+  return rows.map((r) => ({ membershipId: r.membership_id, granted: Number(r.granted), used: Number(r.used), remaining: Number(r.remaining) }));
+}
+
+export async function getMyLeave(db: Database, userId: string): Promise<LeaveBalance | null> {
+  const me = await getMe(db, userId);
+  if (!me) return null;
+  return (await listLeave(db, userId, me.storeId)).find((b) => b.membershipId === userId) ?? null;
+}
+
+/** 有給日数を付与（プラス）・調整（マイナス）する。履歴は消さずに残る */
+export async function addLeaveGrant(db: Database, userId: string, input: { membershipId: string; days: number; grantedOn?: string; note?: string }): Promise<void> {
+  if (!Number.isFinite(input.days) || input.days === 0 || Math.abs(input.days) > 99 || Math.round(input.days * 2) !== input.days * 2) throw new Error("日数は 0.5 日きざみで、0 以外の数字を入れてください");
+  const me = await getMe(db, userId);
+  if (!me) throw new ForbiddenError();
+  try {
+    await asUser(db, userId, async (q) => {
+      const t = (await q.query<{ store_id: string }>("select store_id from memberships where id = $1", [input.membershipId])).rows[0];
+      if (!t) throw new ForbiddenError();
+      await q.query("insert into paid_leave_grants (company_id, store_id, membership_id, days, granted_on, note) values ($1,$2,$3,$4,coalesce($5::date, current_date),$6)",
+        [me.companyId, t.store_id, input.membershipId, input.days, input.grantedOn ?? null, input.note?.trim() || null]);
+    });
+  } catch { throw new ForbiddenError(); }
+}
+
+export async function listLeaveHistory(db: Database, userId: string, membershipId: string): Promise<{ days: number; grantedOn: string; note: string | null }[]> {
+  return (await asUser(db, userId, (q) =>
+    q.query<{ days: string; grantedOn: string; note: string | null }>(
+      `select days, granted_on::text as "grantedOn", note from paid_leave_grants where membership_id = $1 order by granted_on desc, created_at desc`, [membershipId])))
+    .rows.map((r) => ({ days: Number(r.days), grantedOn: r.grantedOn, note: r.note }));
 }
