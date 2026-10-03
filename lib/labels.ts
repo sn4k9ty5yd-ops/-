@@ -21,3 +21,10 @@ export function daysOf(start: string, end: string): string[] {
 }
 export const dow = (day: string) => new Date(day + "T00:00:00Z").getUTCDay();
 export const md = (day: string) => `${Number(day.slice(5, 7))}/${Number(day.slice(8, 10))}`;
+
+/** お店のその日の営業時間（土曜だけ違うお店は、土曜日に自動で切りかわる） */
+export function hoursOn(store: { defaultOpen: string; defaultClose: string; satOpen?: string | null; satClose?: string | null } | undefined, day: string): { start: string; end: string } {
+  const base = { start: store?.defaultOpen ?? "10:00", end: store?.defaultClose ?? "19:00" };
+  if (store?.satOpen && store.satClose && new Date(`${day}T00:00:00Z`).getUTCDay() === 6) return { start: store.satOpen, end: store.satClose };
+  return base;
+}

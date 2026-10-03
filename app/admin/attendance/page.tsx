@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, useAutoRefresh, useMe } from "@/lib/client";
 import { reiwaRange } from "@/lib/era";
 import { fmt } from "@/lib/hours";
-import { daysOf, dow, md, WEEKDAYS } from "@/lib/labels";
+import { daysOf, dow, hoursOn, md, WEEKDAYS } from "@/lib/labels";
 import { PeriodNav, periodFor, todayJst, tintStyle } from "@/lib/period-nav";
 import type { Period } from "@/lib/periods";
 import { attDetail, attKindText, totalsOf } from "@/lib/attendance-ui";
@@ -107,7 +107,16 @@ export default function AttendancePage() {
           <label style={{ display: "flex", gap: 8, alignItems: "center", margin: "10px 0" }}><input type="checkbox" style={{ width: 20, height: 20 }} checked={bulk.overwrite} onChange={(e) => setBulk({ ...bulk, overwrite: e.target.checked })} />一人ずつ直した日も上書きする</label>
           <button onClick={async () => {
             const sel = days.filter((d) => d >= bulk.from && d <= bulk.to);
-            const r = await post<{ saved: number; skippedEdited: number }>({ action: "fill", days: sel, clockIn: bulk.start, clockOut: bulk.end, overwrite: bulk.overwrite });
+            // 時間を直していなければ、お店の曜日ごとの営業時間（土曜など）で入れる
+            const auto = bulk.start === defaults.start && bulk.end === defaults.end;
+            const groups = new Map<string, string[]>();
+            for (const d of sel) { const h = auto ? hoursOn(store, d) : { start: bulk.start, end: bulk.end }; const k = `${h.start}|${h.end}`; groups.set(k, [...(groups.get(k) ?? []), d]); }
+            const r = { saved: 0, skippedEdited: 0 };
+            for (const [k, ds] of groups) {
+              const [a, b] = k.split("|");
+              const x = await post<{ saved: number; skippedEdited: number }>({ action: "fill", days: ds, clockIn: a, clockOut: b, overwrite: bulk.overwrite });
+              r.saved += x.saved; r.skippedEdited += x.skippedEdited;
+            }
             setNote(`${r.saved}件を入れました${r.skippedEdited ? `（個別に直した${r.skippedEdited}件は、そのままにしました）` : ""}`); setShowBulk(false);
           }}>入れる</button>
         </div>
@@ -184,7 +193,7 @@ export default function AttendancePage() {
       {target && (
         <AttendanceSheet
           title={`${target.person.name}　${md(target.day)}（${WEEKDAYS[dow(target.day)]}）`}
-          initial={byKey.get(`${target.person.id}|${target.day}`)} defaults={defaults}
+          initial={byKey.get(`${target.person.id}|${target.day}`)} defaults={hoursOn(store, target.day)}
           onSave={async (e) => { await post({ action: "save", entries: [{ membershipId: target.person.id, day: target.day, ...e }] }); }}
           onClear={async () => { await post({ action: "clear", items: [{ membershipId: target.person.id, day: target.day }] }); }}
           onClose={() => setTarget(null)}

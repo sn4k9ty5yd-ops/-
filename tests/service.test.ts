@@ -17,7 +17,7 @@ async function person(co: string, code: string, name: string, level: number, st:
 
 beforeAll(async () => {
   db = await newDb();
-  expect(await migrate(db)).toEqual(["0001_tenant_core.sql", "0002_periods_requests.sql", "0003_store_changes.sql", "0004_shifts.sql", "0005_break_rule.sql", "0006_attendance.sql", "0007_products_stocktake.sql", "0008_stock.sql", "0009_display_accounts.sql", "0010_presence.sql"]);
+  expect(await migrate(db)).toEqual(["0001_tenant_core.sql", "0002_periods_requests.sql", "0003_store_changes.sql", "0004_shifts.sql", "0005_break_rule.sql", "0006_attendance.sql", "0007_products_stocktake.sql", "0008_stock.sql", "0009_display_accounts.sql", "0010_presence.sql", "0011_saturday_hours.sql"]);
   expect(await migrate(db)).toEqual([]); // 2回目は何もしない
   const a = (await db.query<{ id: string }>("insert into companies (code, name) values ('co-a','A社') returning id")).rows[0].id;
   const b = (await db.query<{ id: string }>("insert into companies (code, name) values ('co-b','B社') returning id")).rows[0].id;
@@ -136,5 +136,19 @@ describe("名前・社員番号の変更（管理者のみ）", () => {
     await expect(svc.updateStaffProfile(db, id.office, id.staff, { employeeCode: "6" })).rejects.toThrow("すでに");
     await expect(svc.updateStaffProfile(db, id.mgr, id.staff, { name: "x" })).rejects.toThrow(svc.ForbiddenError);
     await expect(svc.updateStaffProfile(db, id.office, id.staff, { employeeCode: "あ" })).rejects.toThrow("英数字");
+  });
+});
+
+describe("土曜日だけ違う営業時間", () => {
+  it("お店ごとに土曜の営業時間を設定でき、曜日ごとの時間が切りかわる", async () => {
+    await svc.setStoreHours(db, id.office, store.a1, "10:00", "19:00", { open: "10:00", close: "20:00" });
+    const st = (await svc.listStores(db, id.office)).find((s) => s.id === store.a1)!;
+    expect(st).toMatchObject({ satOpen: "10:00", satClose: "20:00" });
+    const { hoursOn } = await import("../lib/labels");
+    expect(hoursOn(st, "2026-10-17")).toEqual({ start: "10:00", end: "20:00" }); // 土
+    expect(hoursOn(st, "2026-10-16")).toEqual({ start: "10:00", end: "19:00" }); // 金
+    await expect(svc.setStoreHours(db, id.mgr, store.a1, "10:00", "19:00", null)).rejects.toThrow(svc.ForbiddenError);
+    await svc.setStoreHours(db, id.office, store.a1, "10:00", "19:00", null);
+    expect((await svc.listStores(db, id.office)).find((s) => s.id === store.a1)!.satOpen).toBeNull();
   });
 });

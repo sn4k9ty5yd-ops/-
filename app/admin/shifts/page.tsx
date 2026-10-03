@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, useAutoRefresh, useMe } from "@/lib/client";
-import { daysOf, dow, md, WEEKDAYS } from "@/lib/labels";
+import { daysOf, dow, hoursOn, md, WEEKDAYS } from "@/lib/labels";
 import { PeriodNav, periodFor, todayJst, tintStyle } from "@/lib/period-nav";
 import type { Period } from "@/lib/periods";
 import { cellText, hoursText, KIND_BUTTONS, kindClass, longText } from "@/lib/shift-ui";
@@ -113,8 +113,8 @@ export default function ShiftsPage() {
             <div className="card" style={{ marginTop: 10 }}>
               <b style={{ fontSize: 18 }}>{md(day || days[0])}（{WEEKDAYS[dow(day || days[0])]}）</b>
               {editable && (
-                <button style={{ marginTop: 10, padding: 12, fontSize: 15 }} onClick={async () => { const n = await post({ action: "fill", days: [day], start: defaults.start, end: defaults.end }); setNote(`${n}人分を入れました`); }}>
-                  全員を {defaults.start}〜{defaults.end} で入れる
+                <button style={{ marginTop: 10, padding: 12, fontSize: 15 }} onClick={async () => { const n = await post({ action: "fill", days: [day], start: hoursOn(store, day).start, end: hoursOn(store, day).end }); setNote(`${n}人分を入れました`); }}>
+                  全員を {hoursOn(store, day).start}〜{hoursOn(store, day).end} で入れる
                 </button>
               )}
               <ul className="list" style={{ margin: "10px 0 0" }}>
@@ -159,12 +159,12 @@ export default function ShiftsPage() {
                   <>
                     <div className="times"><label>入店<input type="time" value={bar.start} onChange={(e) => setBar({ ...bar, start: e.target.value })} /></label>
                       <label>退店<input type="time" value={bar.end} onChange={(e) => setBar({ ...bar, end: e.target.value })} /></label></div>
-                    <div className="sub" style={{ margin: "6px 0" }}>{hoursText(bar.start, bar.end, me.breakRule)}</div>
+                    <div className="sub" style={{ margin: "6px 0" }}>{hoursText(bar.start, bar.end, me.breakRule)}{store?.satOpen && bar.start === defaults.start && bar.end === defaults.end ? `（土曜は自動で ${store.satOpen}〜${store.satClose} になります）` : ""}</div>
                   </>
                 )}
                 <div className="actions" style={{ marginTop: 8 }}>
                   <button style={{ width: "auto", margin: 0, flex: 1 }} disabled={picked.size === 0}
-                    onClick={async () => { await save([...picked].map((d) => ({ membershipId: personId, day: d, kind: bar.kind, start: bar.start, end: bar.end }))); setPicked(new Set()); }}>
+                    onClick={async () => { await save([...picked].map((d) => { const h = bar.kind === "work" && bar.start === defaults.start && bar.end === defaults.end ? hoursOn(store, d) : { start: bar.start, end: bar.end }; return { membershipId: personId, day: d, kind: bar.kind, start: h.start, end: h.end }; })); setPicked(new Set()); }}>
                     選んだ日（{picked.size}日）に入れる
                   </button>
                   <button className="ghost" disabled={picked.size === 0} onClick={async () => { await post({ action: "clear", items: [...picked].map((d) => ({ membershipId: personId, day: d })) }); setPicked(new Set()); }}>消す</button>
@@ -200,7 +200,7 @@ export default function ShiftsPage() {
         <ShiftSheet
           title={`${target.person.name}　${md(target.days[0])}（${WEEKDAYS[dow(target.days[0])]}）`}
           sub={reqKey.get(`${target.person.id}|${target.days[0]}`) ? "この日は希望休が出ています" : undefined}
-          initial={byKey.get(`${target.person.id}|${target.days[0]}`)} defaults={defaults}
+          initial={byKey.get(`${target.person.id}|${target.days[0]}`)} defaults={hoursOn(store, target.days[0])}
           onSave={(e) => save([{ membershipId: target.person.id, day: target.days[0], ...e }])}
           onClear={async () => { await post({ action: "clear", items: [{ membershipId: target.person.id, day: target.days[0] }] }); }}
           onClose={() => setTarget(null)}

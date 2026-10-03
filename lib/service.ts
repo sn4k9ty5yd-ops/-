@@ -9,7 +9,7 @@ import type { Level } from "./permissions";
 // 画面(API)から呼ばれる業務処理。権限の判定はすべてDB側(RLS)で行い、ここでは再実装しない。
 
 export interface Me { id: string; name: string; level: Level; storeId: string; companyId: string; companyName: string; closingStartDay: number; breakRule: BreakRule; displayOnly: boolean; }
-export interface StoreRow { id: string; name: string; status: "active" | "closed"; defaultOpen: string; defaultClose: string; }
+export interface StoreRow { id: string; name: string; status: "active" | "closed"; defaultOpen: string; defaultClose: string; satOpen: string | null; satClose: string | null; }
 /** 管理者だけが見られる、ログインの状況 */
 export type Presence = "online" | "idle" | "loggedout" | "never";
 export const ONLINE_SECONDS = 120; // これ以内に開いていれば「オンライン」
@@ -50,7 +50,7 @@ export async function setBreakRule(db: Database, userId: string, rule: BreakRule
 }
 
 export async function listStores(db: Database, userId: string): Promise<StoreRow[]> {
-  return (await asUser(db, userId, (q) => q.query<StoreRow>(`select id, name, status, to_char(default_open, 'HH24:MI') as "defaultOpen", to_char(default_close, 'HH24:MI') as "defaultClose" from stores order by status, sort_order, name`))).rows;
+  return (await asUser(db, userId, (q) => q.query<StoreRow>(`select id, name, status, to_char(default_open, 'HH24:MI') as "defaultOpen", to_char(default_close, 'HH24:MI') as "defaultClose", to_char(sat_open, 'HH24:MI') as "satOpen", to_char(sat_close, 'HH24:MI') as "satClose" from stores order by status, sort_order, name`))).rows;
 }
 
 const cleanName = (name: string) => {
@@ -350,10 +350,11 @@ export const SHIFT_KIND_LABEL: Record<ShiftKind, string> = { work: "出勤", off
 const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
 const KINDS: ShiftKind[] = ["work", "off", "paid", "holiday", "other"];
 
-export async function setStoreHours(db: Database, userId: string, storeId: string, open: string, close: string): Promise<void> {
+export async function setStoreHours(db: Database, userId: string, storeId: string, open: string, close: string, sat?: { open: string; close: string } | null): Promise<void> {
   if (!TIME.test(open) || !TIME.test(close) || close <= open) throw new Error("オープンとクローズの時間が正しくありません");
+  if (sat && (!TIME.test(sat.open) || !TIME.test(sat.close) || sat.close <= sat.open)) throw new Error("土曜日のオープンとクローズの時間が正しくありません");
   let n = 0;
-  try { n = (await asUser(db, userId, (q) => q.query("update stores set default_open = $2, default_close = $3 where id = $1 returning id", [storeId, open, close]))).rows.length; }
+  try { n = (await asUser(db, userId, (q) => q.query("update stores set default_open = $2, default_close = $3, sat_open = $4, sat_close = $5 where id = $1 returning id", [storeId, open, close, sat?.open ?? null, sat?.close ?? null]))).rows.length; }
   catch { throw new ForbiddenError(); }
   if (n === 0) throw new ForbiddenError();
 }
