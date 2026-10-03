@@ -92,3 +92,16 @@ describe("サービス層（DBの権限ルールを通して動く）", () => {
     expect(JSON.stringify(rows)).not.toMatch(/scrypt|passcode/);
   });
 });
+
+describe("退職者の社員番号を空ける", () => {
+  it("管理者だけが、退職した人の番号を空けて、新しい人が同じ番号を使える", async () => {
+    const old = await person((await db.query<{ company_id: string }>("select company_id from memberships where id=$1", [id.office])).rows[0].company_id, "2200", "退職予定", 1, store.a1);
+    await expect(svc.releaseRetiredCode(db, id.office, old)).rejects.toThrow("退職");
+    await svc.disableStaff(db, id.office, old);
+    await expect(svc.releaseRetiredCode(db, id.mgr, old)).rejects.toThrow(svc.ForbiddenError);
+    expect(await svc.releaseRetiredCode(db, id.office, old)).toBe("2200");
+    const r = await svc.addStaff(db, id.office, { name: "新しい人", employeeCode: "2200", storeId: store.a1, level: 1 });
+    expect(r.passcode).toMatch(/^\d{6}$/);
+    await expect(svc.releaseRetiredCode(db, id.office, old)).rejects.toThrow("すでに");
+  });
+});

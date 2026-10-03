@@ -62,6 +62,13 @@ export default function StaffPage() {
               <div className="sub">社員番号 {s.employeeCode}{s.status === "disabled" && " ／ 退職（無効）"}{s.status === "active" && !s.displayOnly && (s.onShift ? " ／ シフトに入る" : " ／ シフトに入らない")}</div>
             </div>
             <div className="actions">
+              {me.level === 4 && s.status === "disabled" && !s.employeeCode.includes("-退職") && (
+                <button className="ghost" style={{ color: "var(--blue)" }}
+                  onClick={() => confirm(`${s.name} さんの社員番号「${s.employeeCode}」を空けて、新しい人が使えるようにしますか？（${s.name} さんの番号は「${s.employeeCode}-退職」に変わります。過去の記録はそのまま残ります）`) &&
+                    run(() => api(`/api/staff/${s.id}/release`, {}))}>
+                  番号を空ける
+                </button>
+              )}
               {me.level === 4 && s.status === "active" && s.id !== me.id && !s.displayOnly ? (
                 <select value={s.level} onChange={(e) => run(() => api(`/api/staff/${s.id}/level`, { level: Number(e.target.value) }))}>
                   {LEVELS.map((l) => <option key={l} value={l}>{LEVEL_NAMES[l]}</option>)}

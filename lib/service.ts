@@ -159,6 +159,30 @@ export async function setStaffLevel(db: Database, userId: string, targetId: stri
   if (n === 0) throw new ForbiddenError();
 }
 
+/** 退職した人の社員番号を「◯◯-退職」に変えて、元の番号を空ける（管理者のみ・退職者のみ） */
+export async function releaseRetiredCode(db: Database, userId: string, targetId: string): Promise<string> {
+  const me = await getMe(db, userId);
+  if (!me || me.level < 4) throw new ForbiddenError();
+  const cur = (await asUser(db, userId, (q) =>
+    q.query<{ code: string; status: string }>("select employee_code as code, status from memberships where id = $1", [targetId]))).rows[0];
+  if (!cur) throw new ForbiddenError();
+  if (cur.status !== "disabled") throw new Error("退職（無効）の人だけ、番号を空けられます");
+  if (cur.code.includes("-退職")) throw new Error("この人の番号は、すでに空けてあります");
+  for (let n = 1; n < 50; n++) {
+    const next = `${cur.code}-退職${n === 1 ? "" : n}`;
+    try {
+      const r = await asUser(db, userId, (q) =>
+        q.query("update memberships set employee_code = $2 where id = $1 and status = 'disabled' returning id", [targetId, next]));
+      if (r.rows.length === 0) throw new ForbiddenError();
+      return cur.code;
+    } catch (e) {
+      if ((e as { code?: string }).code === "23505") continue;
+      throw e instanceof ForbiddenError ? e : new ForbiddenError();
+    }
+  }
+  throw new Error("番号を空けられませんでした");
+}
+
 /** パスコードの再発行（忘れたとき）。新しいパスコードを返す */
 export async function reissuePasscode(db: Database, userId: string, targetId: string): Promise<string> {
   await assertCanManage(db, userId, targetId);
