@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>画面イメージ（ドラフト）</title>
+<style>
+:root{--bg:#f5f5f7;--card:#fff;--ink:#1d1d1f;--sub:#6e6e73;--blue:#0071e3;--yellow:#fff3c4;--pink:#f9d9dc;--sat:#e8f1fb;--sun:#fdecec;--line:#e5e5ea}
+*{box-sizing:border-box}
+body{margin:0;font-family:-apple-system,"Hiragino Sans",sans-serif;background:var(--bg);color:var(--ink);padding:16px}
+h1{font-size:20px}h2{font-size:16px;margin:32px 0 8px}
+.note{color:var(--sub);font-size:13px;margin:0 0 12px}
+.row{display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start}
+.phone{width:320px;background:#000;border-radius:36px;padding:10px}
+.screen{background:var(--bg);border-radius:28px;height:620px;overflow:hidden;display:flex;flex-direction:column}
+.top{padding:18px 16px 8px;font-size:22px;font-weight:700}
+.body{flex:1;overflow:auto;padding:0 12px}
+.card{background:var(--card);border-radius:16px;padding:14px;margin-bottom:10px}
+.big{font-size:28px;font-weight:700}
+.sub{color:var(--sub);font-size:12px}
+.chip{display:inline-block;padding:6px 10px;border-radius:999px;background:var(--bg);margin:3px 3px 0 0;font-size:14px}
+.tabs{display:flex;background:#fff;border-top:1px solid var(--line);padding:8px 0 12px}
+.tabs div{flex:1;text-align:center;font-size:11px;color:var(--sub)}
+.tabs div b{display:block;font-size:20px}
+.tabs .on{color:var(--blue)}
+.btn{display:block;background:var(--blue);color:#fff;text-align:center;padding:16px;border-radius:14px;font-size:17px;font-weight:600;margin-top:8px}
+.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;font-size:11px}
+.cal div{background:#fff;min-height:44px;padding:2px;border-radius:4px}
+.cal .h{min-height:0;text-align:center;font-weight:600}
+.cal .yk{background:var(--yellow)}.cal .off{background:var(--pink)}.cal .sa{background:var(--sat)}.cal .su{background:var(--sun)}
+.desk{background:#fff;border-radius:12px;padding:16px;overflow:auto;max-width:900px}
+table{border-collapse:collapse;font-size:12px;width:100%}
+td,th{border:1px solid var(--line);padding:4px 6px;text-align:center;white-space:nowrap}
+th{background:var(--bg)}td.name{background:var(--yellow);font-weight:600}
+.badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;background:#e6f4ea;color:#1e7e34}
+.steps{display:flex;gap:6px;flex-wrap:wrap;font-size:12px}
+.steps span{padding:6px 10px;border-radius:999px;background:var(--bg)}
+.steps .now{background:var(--blue);color:#fff}
+</style>
+</head>
+<body>
+<h1>画面イメージ（ドラフト・動きません。見た目の確認用です）</h1>
+<p class="note">店名・名前・時間は写真を参考にしたサンプルです。</p>
+
+<h2>① スタッフ（スマホ）：「今日」の画面</h2>
+<p class="note">ひらいてすぐ「今日だれが出勤か」が分かります。自分のお店のスタッフだけ表示します。</p>
+<div class="row">
+<div class="phone"><div class="screen">
+  <div class="top">今日</div>
+  <div class="body">
+    <div class="card"><div class="sub">あなたのシフト・10月21日（水）</div><div class="big">10:00 – 19:00</div><div class="sub">ATENA</div></div>
+    <div class="card"><div class="sub">今日の出勤（ATENA）4人</div>
+      <span class="chip">大坪 10:00–19:00</span><span class="chip">金子 10:00–19:00</span><span class="chip">永尾 <small>有給</small></span><span class="chip">山田 12:00–20:00</span></div>
+    <div class="card"><div class="sub">希望休の受付</div><div style="font-size:16px;font-weight:600">11/16〜12/15 の希望休を提出</div><div class="sub">締切 10/24</div><div class="btn">希望休を出す</div></div>
+  </div>
+  <div class="tabs"><div class="on"><b>◉</b>今日</div><div><b>▦</b>シフト</div><div><b>☾</b>みんなの休み</div><div><b>✎</b>希望休</div></div>
+</div></div>
+
+<div class="phone"><div class="screen">
+  <div class="top">みんなの休み</div>
+  <div class="body">
+    <div class="card"><div class="sub">10/16〜11/15</div>
+      <div class="cal"><div class="h">日</div><div class="h">月</div><div class="h">火</div><div class="h">水</div><div class="h">木</div><div class="h">金</div><div class="h">土</div>
+      <div></div><div></div><div></div><div></div><div></div><div>16</div><div class="yk">17<br>中嶋(有)</div>
+      <div class="su">18</div><div class="off">19<br>店休日</div><div class="off">20<br>店休日</div><div>21</div><div>22</div><div>23</div><div class="sa">24</div></div>
+      <div class="sub" style="margin-top:8px">黄色=有給　ピンク=店休日　青=土　赤=日</div></div>
+    <div class="card"><div class="sub">人でさがす</div><div style="font-size:16px">🔍 名前を入れる…</div></div>
+  </div>
+  <div class="tabs"><div><b>◉</b>今日</div><div><b>▦</b>シフト</div><div class="on"><b>☾</b>みんなの休み</div><div><b>✎</b>希望休</div></div>
+</div></div>
+</div>
+
+<h2>② 店長（パソコン）：シフト作成と出勤簿</h2>
+<p class="note">写真の出勤簿と同じ「縦=名前、横=日付」の形です。時間を入れると休憩（8時間超えた分）と実働が自動で入ります。</p>
+<div class="desk">
+  <div class="steps" style="margin-bottom:10px"><span>希望休を集める</span><span>締切</span><span class="now">シフト作成中</span><span>確定</span><span>スタッフに公開</span><span>オフィスに提出</span></div>
+  <div style="margin-bottom:8px"><b>ATENA</b> ▾（店を切りかえ）　R8年10月16日〜11月15日</div>
+  <table>
+    <tr><th>名前</th><th></th><th>16(金)</th><th>17(土)</th><th>18(日)</th><th>19(月)</th><th>…</th><th>合計</th></tr>
+    <tr><td class="name" rowspan="4">永尾 和樹<br><small>有給 残り8日</small></td><td>入店</td><td>10:00</td><td>10:00</td><td>有給</td><td>店休日</td><td>…</td><td rowspan="4">176:00</td></tr>
+    <tr><td>退店</td><td>19:00</td><td>20:00</td><td></td><td></td><td>…</td></tr>
+    <tr><td>休憩</td><td>1:00</td><td>2:00</td><td></td><td></td><td>…</td></tr>
+    <tr><td>実働</td><td>8:00</td><td>8:00</td><td></td><td></td><td>…</td></tr>
+  </table>
+  <p style="margin:12px 0 0"><span class="badge">自動計算</span> <span class="sub">時間を入れると休憩と実働が自動で入ります。直したいときは数字を直接かきかえられます。</span></p>
+</div>
+
+<h2>③ オフィス担当者（パソコン）：確認画面</h2>
+<p class="note">むずかしい操作はなし。「確認した」ボタンを押すだけにします。</p>
+<div class="desk">
+  <table>
+    <tr><th>お店</th><th>シフト</th><th>出勤簿</th><th></th></tr>
+    <tr><td>ATENA</td><td><span class="badge">提出済み</span></td><td><span class="badge">提出済み</span></td><td><b style="color:var(--blue)">確認した</b></td></tr>
+    <tr><td>ATENA六本松</td><td><span class="badge">提出済み</span></td><td>作成中</td><td>—</td></tr>
+    <tr><td>ATENA福津</td><td>作成中</td><td>作成中</td><td>—</td></tr>
+    <tr><td>Organ</td><td><span class="badge">確認済み</span></td><td><span class="badge">確認済み</span></td><td>✓</td></tr>
+    <tr><td>ATENA AVEDA SAKURAMACHI</td><td><span class="badge">提出済み</span></td><td>作成中</td><td>—</td></tr>
+  </table>
+  <p class="sub" style="margin-top:10px">「Excelでダウンロード」ボタンで、写真と同じ形のExcelが取り出せます。</p>
+</div>
+</body>
+</html>
