@@ -37,3 +37,28 @@ export function upcomingPeriods(date: string, startDay: number, count: number): 
   }
   return out;
 }
+
+/** 期間の前後移動 */
+export const nextPeriod = (p: Period, startDay: number): Period => {
+  const d = new Date(p.end + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() + 1);
+  return periodFor(iso(d), startDay);
+};
+export const prevPeriod = (p: Period, startDay: number): Period => {
+  const d = new Date(p.start + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() - 1);
+  return periodFor(iso(d), startDay);
+};
+
+const monthIndex = (date: string) => Number(date.slice(0, 4)) * 12 + Number(date.slice(5, 7)) - 1;
+
+/** 今日の期間から見て、この期間が「今回/前回/次回」か（それ以外は「◯期間前/後」） */
+export function relationLabel(periodStart: string, currentStart: string): { label: string; kind: "now" | "prev" | "next" | "other" } {
+  const diff = Math.round((monthIndex(periodStart) - monthIndex(currentStart)));
+  if (diff === 0) return { label: "今回", kind: "now" };
+  if (diff === -1) return { label: "前回", kind: "prev" };
+  if (diff === 1) return { label: "次回", kind: "next" };
+  return { label: diff < 0 ? `${-diff}期間前` : `${diff}期間後`, kind: "other" };
+}
+
+/** 期間ごとの背景色（色相）。隣り合う期間は必ず違う色になる */
+const HUES = [205, 150, 40, 330, 265, 15];
+export const periodHue = (start: string): number => HUES[monthIndex(start) % HUES.length];

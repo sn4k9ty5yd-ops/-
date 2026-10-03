@@ -10,10 +10,11 @@ export default function LoginPage() {
   const [busy, setBusy] = useState(false);
   return (
     <main>
-      <h1>ログイン</h1>
+      <p className="sub" style={{ marginBottom: 4 }}>業務システム</p>
+      <h1>株式会社ALBUM</h1>
       <form onSubmit={async (e) => {
         e.preventDefault(); setBusy(true); setErr("");
-        try { await api("/api/login", f); router.replace("/admin/staff"); }
+        try { await api("/api/login", f); router.replace("/home"); }
         catch (x) { setErr((x as Error).message); setBusy(false); }
       }}>
         <label htmlFor="company">会社ID</label>

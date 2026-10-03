@@ -16,6 +16,11 @@ export const LEVEL_PERMISSIONS: ReadonlyArray<readonly [Level, string, Scope]> =
   [3, "staff.manage", "own"], [4, "staff.manage", "all"],
   [4, "store.manage", "all"],
   [4, "level.assign", "all"],
+  [4, "period.create", "all"],
+  [3, "period.manage", "own"], [4, "period.manage", "all"],
+  [4, "shift.acknowledge", "all"],
+  [2, "request.view", "own"], [3, "request.view", "all"], [4, "request.view", "all"],
+  [3, "request.manage", "own"], [4, "request.manage", "all"],
 ];
 
 export interface Actor {

@@ -27,3 +27,24 @@ describe("シフト期間", () => {
     }
   });
 });
+
+import { periodHue, relationLabel, nextPeriod, prevPeriod } from "../lib/periods";
+describe("期間の前後移動と色", () => {
+  it("矢印で前後に動ける（10/16〜11/15 の次は 11/16〜12/15、前は 9/16〜10/15）", () => {
+    const p = periodFor("2026-10-20", 16);
+    expect(nextPeriod(p, 16)).toMatchObject({ start: "2026-11-16", end: "2026-12-15" });
+    expect(prevPeriod(p, 16)).toMatchObject({ start: "2026-09-16", end: "2026-10-15" });
+    expect(nextPeriod(nextPeriod(p, 16), 16).start).toBe("2026-12-16");
+  });
+  it("今回・前回・次回の印", () => {
+    expect(relationLabel("2026-10-16", "2026-10-16")).toEqual({ label: "今回", kind: "now" });
+    expect(relationLabel("2026-09-16", "2026-10-16").label).toBe("前回");
+    expect(relationLabel("2026-11-16", "2026-10-16").label).toBe("次回");
+    expect(relationLabel("2026-12-16", "2026-10-16").label).toBe("2期間後");
+    expect(relationLabel("2026-01-16", "2026-10-16").label).toBe("9期間前");
+  });
+  it("隣り合う期間は必ず違う色", () => {
+    let p = periodFor("2026-01-20", 16);
+    for (let i = 0; i < 30; i++) { const n = nextPeriod(p, 16); expect(periodHue(n.start)).not.toBe(periodHue(p.start)); p = n; }
+  });
+});

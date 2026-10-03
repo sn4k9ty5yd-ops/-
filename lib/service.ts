@@ -1,11 +1,12 @@
 import { issuePasscode } from "./auth/login";
+import { upcomingPeriods } from "./periods";
 import { asUser } from "./db/user-context";
 import type { Database } from "./db/types";
 import type { Level } from "./permissions";
 
 // 画面(API)から呼ばれる業務処理。権限の判定はすべてDB側(RLS)で行い、ここでは再実装しない。
 
-export interface Me { id: string; name: string; level: Level; storeId: string; companyId: string; companyName: string; }
+export interface Me { id: string; name: string; level: Level; storeId: string; companyId: string; companyName: string; closingStartDay: number; }
 export interface StoreRow { id: string; name: string; }
 export interface StaffRow {
   id: string; name: string; employeeCode: string; storeId: string; level: Level; status: "active" | "disabled"; manageable: boolean;
@@ -18,7 +19,7 @@ export class ForbiddenError extends Error {
 export async function getMe(db: Database, userId: string): Promise<Me | null> {
   const { rows } = await asUser(db, userId, (q) =>
     q.query<Me>(
-      `select m.id, m.name, m.level, m.store_id as "storeId", m.company_id as "companyId", c.name as "companyName"
+      `select m.id, m.name, m.level, m.store_id as "storeId", m.company_id as "companyId", c.name as "companyName", c.closing_start_day as "closingStartDay"
          from memberships m join companies c on c.id = m.company_id where m.id = $1`, [userId]),
   );
   return rows[0] ?? null;
@@ -95,4 +96,105 @@ export async function setStaffLevel(db: Database, userId: string, targetId: stri
 export async function reissuePasscode(db: Database, userId: string, targetId: string): Promise<string> {
   await assertCanManage(db, userId, targetId);
   return issuePasscode(db, targetId);
+}
+
+// ------------------------------------------------------------------ シフト期間・希望休
+
+export type PeriodStatus = "preparing" | "collecting" | "closed" | "drafting" | "confirmed" | "published" | "submitted" | "acknowledged";
+export const STATUS_ORDER: PeriodStatus[] = ["preparing", "collecting", "closed", "drafting", "confirmed", "published", "submitted", "acknowledged"];
+export const STATUS_LABEL: Record<PeriodStatus, string> = {
+  preparing: "準備中", collecting: "希望休受付中", closed: "受付終了", drafting: "シフト作成中",
+  confirmed: "確定", published: "公開済み", submitted: "オフィスに提出済み", acknowledged: "確認済み",
+};
+
+export interface PeriodRow {
+  id: string; label: string; start: string; end: string;
+  stores: { storeId: string; status: PeriodStatus; openAt: string | null; closeAt: string | null }[];
+}
+export interface RequestRow { id: string; membershipId: string; storeId: string; periodId: string; day: string; kind: string; }
+
+export async function listPeriods(db: Database, userId: string): Promise<PeriodRow[]> {
+  const { rows } = await asUser(db, userId, (q) =>
+    q.query<{ id: string; label: string; start: string; end: string; storeId: string | null; status: PeriodStatus | null; openAt: string | null; closeAt: string | null }>(
+      `select p.id, p.label, p.start_date::text as start, p.end_date::text as "end",
+              sp.store_id as "storeId", sp.status, sp.request_open_at::text as "openAt", sp.request_close_at::text as "closeAt"
+         from shift_periods p
+         left join store_period_status sp on sp.period_id = p.id
+         left join stores st on st.id = sp.store_id
+        order by p.start_date desc, st.sort_order, st.name`));
+  const map = new Map<string, PeriodRow>();
+  for (const r of rows) {
+    const p = map.get(r.id) ?? { id: r.id, label: r.label, start: r.start, end: r.end, stores: [] };
+    if (r.storeId && r.status) p.stores.push({ storeId: r.storeId, status: r.status, openAt: r.openAt, closeAt: r.closeAt });
+    map.set(r.id, p);
+  }
+  return [...map.values()];
+}
+
+/** 次の期間（まだ無い最初の期間）を作り、全店舗の進行状況を「準備中」で用意する（オフィスのみ） */
+export async function createNextPeriod(db: Database, userId: string, today: string): Promise<void> {
+  const me = await getMe(db, userId);
+  if (!me) throw new ForbiddenError();
+  try {
+    await asUser(db, userId, async (q) => {
+      const startDay = (await q.query<{ d: number }>("select closing_start_day as d from companies where id = $1", [me.companyId])).rows[0].d;
+      const last = (await q.query<{ e: string | null }>("select max(end_date)::text as e from shift_periods")).rows[0].e;
+      let from = today;
+      if (last) { const d = new Date(last + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() + 1); from = d.toISOString().slice(0, 10); }
+      const p = upcomingPeriods(from, startDay, 1)[0];
+      const id = (await q.query<{ id: string }>(
+        "insert into shift_periods (company_id, start_date, end_date, label) values ($1,$2,$3,$4) returning id", [me.companyId, p.start, p.end, p.label])).rows[0].id;
+      await q.query(
+        "insert into store_period_status (period_id, store_id, company_id) select $1, id, company_id from stores where status = 'active' and company_id = $2", [id, me.companyId]);
+    });
+  } catch { throw new ForbiddenError(); }
+}
+
+export async function setPeriodStatus(
+  db: Database, userId: string,
+  input: { periodId: string; storeId: string; status?: PeriodStatus; openAt?: string | null; closeAt?: string | null },
+): Promise<void> {
+  if (input.status && !STATUS_ORDER.includes(input.status)) throw new Error("状態が正しくありません");
+  let n = 0;
+  try {
+    n = (await asUser(db, userId, (q) =>
+      q.query(
+        `update store_period_status set
+            status = coalesce($3, status),
+            request_open_at  = case when $4::boolean then $5::timestamptz else request_open_at end,
+            request_close_at = case when $6::boolean then $7::timestamptz else request_close_at end
+          where period_id = $1 and store_id = $2 returning period_id`,
+        [input.periodId, input.storeId, input.status ?? null,
+         input.openAt !== undefined, input.openAt ?? null, input.closeAt !== undefined, input.closeAt ?? null]))).rows.length;
+  } catch { throw new ForbiddenError(); }
+  if (n === 0) throw new ForbiddenError();
+}
+
+export async function listRequests(db: Database, userId: string, periodId: string): Promise<RequestRow[]> {
+  return (await asUser(db, userId, (q) =>
+    q.query<RequestRow>(
+      `select id, membership_id as "membershipId", store_id as "storeId", period_id as "periodId", day::text as day, kind
+         from time_off_requests where period_id = $1 order by day`, [periodId]))).rows;
+}
+
+/** 自分の希望休をオン/オフする（受付中のみ。ルールはDBが判定） */
+export async function toggleMyRequest(db: Database, userId: string, periodId: string, day: string, kind = "hope"): Promise<"added" | "removed"> {
+  const me = await getMe(db, userId);
+  if (!me) throw new ForbiddenError();
+  try {
+    return await asUser(db, userId, async (q) => {
+      const del = await q.query("delete from time_off_requests where membership_id = $1 and period_id = $2 and day = $3 returning id", [userId, periodId, day]);
+      if (del.rows.length > 0) return "removed" as const;
+      await q.query(
+        "insert into time_off_requests (company_id, membership_id, store_id, period_id, day, kind) values ($1,$2,$3,$4,$5,$6)",
+        [me.companyId, userId, me.storeId, periodId, day, kind]);
+      return "added" as const;
+    });
+  } catch { throw new Error("いまは希望休を変更できません（受付期間外、または期間外の日付です）"); }
+}
+
+export async function listNames(db: Database, userId: string): Promise<{ id: string; name: string; storeId: string }[]> {
+  return (await asUser(db, userId, (q) =>
+    q.query<{ id: string; name: string; storeId: string }>(
+      `select id, name, store_id as "storeId" from memberships where status = 'active' order by store_id, level desc, name`))).rows;
 }
