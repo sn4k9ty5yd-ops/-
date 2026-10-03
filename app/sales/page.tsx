@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, MeProvider, useAutoRefresh, useMe } from "@/lib/client";
 import { achievement, newRate, pct1, signed, unitPrice, yen, yoy } from "@/lib/sales-calc";
 import { todayJst } from "@/lib/period-nav";
-import type { SalesRow, SalesValues, StoreRow } from "@/lib/service";
+import { SALES_STATUS_LABEL, type SalesRow, type SalesStatus, type SalesValues, type StoreRow } from "@/lib/service";
 
 const addMonth = (ym: string, n: number) => { const [y, m] = ym.split("-").map(Number); const t = new Date(Date.UTC(y, m - 1 + n, 1)); return `${t.getUTCFullYear()}-${String(t.getUTCMonth() + 1).padStart(2, "0")}`; };
 const toInt = (raw: string) => Number(raw.replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0)).replace(/[^\d]/g, "") || "0");
@@ -37,6 +37,12 @@ function Page() {
   const prevSum = useMemo(() => Object.values(data?.prev ?? {}).reduce((a, v) => ({ total: a.total + v.total, customers: a.customers + v.customers }), { total: 0, customers: 0 }), [data]);
   const setField = (r: SalesRow, k: keyof SalesValues, raw: string) => setEdit((e) => ({ ...e, [r.membershipId]: { ...cur(r), [k]: toInt(raw) } }));
   const dirty = Object.keys(edit).length;
+  const review = async (members: string[], action: "manager_ok" | "office_ok" | "return", comment = "") => {
+    if (members.length === 0) return;
+    try { await api("/api/sales", { action: "review", storeId, month: ym, members, review: action, comment }); setOk(action === "return" ? "差し戻しました" : action === "manager_ok" ? "確認しました（事務員さんへ）" : "確定しました"); await load(); } catch (e) { setMsg((e as Error).message); }
+  };
+  const countBy = (st: SalesStatus | null) => (data?.rows ?? []).filter((r) => (r.status ?? null) === st).length;
+  const idsBy = (st: SalesStatus) => (data?.rows ?? []).filter((r) => r.status === st && r.membershipId !== me.id).map((r) => r.membershipId);
 
   const save = async () => {
     try {
@@ -82,15 +88,29 @@ function Page() {
         <div className="card"><div className="sub">新規 ／ 再来</div><div className="big">{newRate(sum.n, sum.rp) === null ? "－" : `${newRate(sum.n, sum.rp)}%`}</div><div className="sub">新規 {sum.n}人 ・ 再来 {sum.rp}人</div></div>
       </div>
 
+      <div className="card">
+        <b>提出の状況（流れ：本人が記入して提出 → 店長が確認 → 事務員さんが確定）</b>
+        <p className="sub" style={{ margin: "6px 0" }}>未入力・下書き {countBy(null) + countBy("draft") + countBy("returned")}人　／　店長の確認待ち {countBy("submitted")}人　／　事務員さんの確認待ち {countBy("manager_ok")}人　／　確定 {countBy("office_ok")}人</p>
+        <div className="toolbar">
+          {canEdit && idsBy("submitted").length > 0 && <button onClick={() => review(idsBy("submitted"), "manager_ok")}>提出済みの {idsBy("submitted").length}人を、まとめて確認する</button>}
+          {me.level === 4 && idsBy("manager_ok").length > 0 && <button onClick={() => review(idsBy("manager_ok"), "office_ok")}>店長確認済みの {idsBy("manager_ok").length}人を、まとめて確定する</button>}
+        </div>
+      </div>
       <div className="scroll card">
         <table className="sttable salestable">
-          <thead><tr><th>名前</th>{FIELDS.map(([, l]) => <th key={l} className="r">{l}</th>)}<th className="r">客単価</th><th className="r">新規%</th><th className="r">前年比</th><th className="r">店内%</th><th className="r">個人目標</th><th className="r">達成</th></tr></thead>
+          <thead><tr><th>名前</th><th>状態</th>{FIELDS.map(([, l]) => <th key={l} className="r">{l}</th>)}<th className="r">客単価</th><th className="r">新規%</th><th className="r">前年比</th><th className="r">店内%</th><th className="r">個人目標</th><th className="r">達成</th></tr></thead>
           <tbody>{(data?.rows ?? []).map((r) => {
             const v = cur(r); const pv = data?.prev[r.membershipId]; const ptg = data?.targets[r.membershipId] ?? null; const y = yoy(v.total, pv?.total);
             return (
               <tr key={r.membershipId} className={edit[r.membershipId] ? "empty" : ""}>
                 <td>{r.name}</td>
-                {FIELDS.map(([k]) => <td key={k} className="r"><input className="cellin" inputMode="numeric" disabled={!canEdit} value={v[k] === 0 ? "" : String(v[k])} placeholder="0" onChange={(e) => setField(r, k, e.target.value)} /></td>)}
+                <td style={{ whiteSpace: "nowrap" }}>
+                  <span className="chip" style={{ color: r.status === "office_ok" ? "var(--ok)" : r.status === "returned" ? "var(--bad)" : undefined }}>{!r.status ? "未入力" : r.status === "draft" ? "下書き" : r.status === "submitted" ? "店長確認待ち" : r.status === "manager_ok" ? "事務員確認待ち" : r.status === "office_ok" ? "確定" : "差し戻し中"}</span>
+                  {canEdit && r.membershipId !== me.id && r.status === "submitted" && <button className="ghost" onClick={() => review([r.membershipId], "manager_ok")}>確認</button>}
+                  {me.level === 4 && r.status === "manager_ok" && <button className="ghost" onClick={() => review([r.membershipId], "office_ok")}>確定</button>}
+                  {canEdit && r.membershipId !== me.id && (r.status === "submitted" || r.status === "manager_ok" || (r.status === "office_ok" && me.level === 4)) && <button className="ghost" style={{ color: "var(--bad)" }} onClick={() => { const c = prompt("差し戻しのコメント（なくてもOK）", "") ; if (c !== null) review([r.membershipId], "return", c); }}>差し戻す</button>}
+                </td>
+                {FIELDS.map(([k]) => <td key={k} className="r"><input className="cellin" inputMode="numeric" disabled={!canEdit || r.status === "office_ok"} value={v[k] === 0 ? "" : String(v[k])} placeholder="0" onChange={(e) => setField(r, k, e.target.value)} /></td>)}
                 <td className="r">{unitPrice(v.total, v.customers) ?? "－"}</td>
                 <td className="r">{newRate(v.newCustomers, v.repeatCustomers) ?? "－"}</td>
                 <td className="r" style={{ color: y === null ? undefined : y >= 0 ? "var(--ok)" : "var(--bad)" }}>{y === null ? "－" : signed(y)}</td>

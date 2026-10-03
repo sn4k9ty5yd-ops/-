@@ -92,4 +92,50 @@ describe("指名売上", () => {
     expect(await svc.getSalesImage(db, id.mgr, iid)).toBeNull();           // 10月: 消える
     expect((await svc.getMySales(db, id.a, "2026-10")).mine?.total).toBe(500000);
   });
+
+  it("売上の流れ: 本人が記入して提出 → 店長が確認 → 事務員さんが確定。順番は飛ばせない。提出前の数字はランキングに入らない", async () => {
+    const M = "2026-12";
+    await svc.saveMySales(db, id.a, M, V(480000, 75, { free: 100000, nominated: 330000, retail: 50000, newCustomers: 15, repeatCustomers: 60 }));
+    let mine = await svc.getMySales(db, id.a, M);
+    expect(mine.status).toBe("draft");
+    expect((await svc.getMySales(db, id.a2, M)).board).toHaveLength(0);                                   // 下書きは数えない
+    await expect(svc.reviewSales(db, id.mgr, id.a, M, "manager_ok")).rejects.toThrow("できません");           // 提出前は確認できない
+    expect(await svc.submitMySales(db, id.a, M)).toBe("submitted");
+    expect((await svc.listNotifications(db, id.mgr)).items.some((n) => n.title.includes("売上が提出されました"))).toBe(true);
+    await expect(svc.saveMySales(db, id.a, M, V(1, 1))).rejects.toThrow("直せません");                       // 提出後は本人は直せない
+    await expect(svc.submitMySales(db, id.a, M)).rejects.toThrow("すでに");
+    expect((await svc.getMySales(db, id.a2, M)).board.map((b) => b.name)).toEqual(["山田"]);                 // 提出したら数える
+    // 順番: 事務員さんは、店長確認のあと。店長は事務員の分はできない・他店・自分の分はできない
+    await expect(svc.reviewSales(db, id.office, id.a, M, "office_ok")).rejects.toThrow("店長の確認");
+    await expect(svc.reviewSales(db, id.mgrB, id.a, M, "manager_ok")).rejects.toThrow(svc.ForbiddenError);
+    await expect(svc.reviewSales(db, id.a2, id.a, M, "manager_ok")).rejects.toThrow(svc.ForbiddenError);
+    expect(await svc.reviewSales(db, id.mgr, id.a, M, "manager_ok")).toBe("manager_ok");
+    expect((await svc.listNotifications(db, id.office)).items.some((n) => n.title.includes("店長が確認"))).toBe(true);
+    await expect(svc.reviewSales(db, id.mgr, id.a, M, "office_ok")).rejects.toThrow(svc.ForbiddenError);       // 確定は事務員さんだけ
+    expect(await svc.reviewSales(db, id.office, id.a, M, "office_ok")).toBe("office_ok");
+    expect((await svc.getMySales(db, id.a, M)).status).toBe("office_ok");
+    expect((await svc.listNotifications(db, id.a)).items.some((n) => n.title.includes("確定しました"))).toBe(true);
+    // 確定後: 店長は直接直せない／差し戻せない。事務員さんは差し戻せる
+    await expect(svc.saveSales(db, id.mgr, st["A店"], M, [{ membershipId: id.a, values: V(1, 1) }])).rejects.toThrow("差し戻し");
+    await expect(svc.reviewSales(db, id.mgr, id.a, M, "return", "x")).rejects.toThrow(svc.ForbiddenError);
+    expect(await svc.reviewSales(db, id.office, id.a, M, "return", "客数がちがいます")).toBe("returned");
+    mine = await svc.getMySales(db, id.a, M);
+    expect(mine).toMatchObject({ status: "returned", returnComment: "客数がちがいます" });
+    expect((await svc.listNotifications(db, id.a)).items.some((n) => n.title.includes("差し戻されました"))).toBe(true);
+    await svc.saveMySales(db, id.a, M, V(480000, 78, { newCustomers: 15, repeatCustomers: 63 }));           // 直して
+    expect(await svc.submitMySales(db, id.a, M)).toBe("submitted");                                          // もう一度提出
+  });
+
+  it("店長の売上は、店長の確認をとばして事務員さんの確認へ。店長が代わりに入れた数字は「提出済み」になる。管理者の前年の取り込みは確定", async () => {
+    const M = "2026-12";
+    await svc.saveMySales(db, id.mgr, M, V(900000, 120));
+    expect(await svc.submitMySales(db, id.mgr, M)).toBe("manager_ok");
+    expect(await svc.reviewSales(db, id.office, id.mgr, M, "office_ok")).toBe("office_ok");
+    await expect(svc.reviewSales(db, id.mgr, id.mgr, M, "return")).rejects.toThrow("自分");
+    await svc.saveSales(db, id.mgr, st["A店"], M, [{ membershipId: id.a2, values: V(280000, 45) }]);        // 店長が写真を見て入れた
+    expect((await svc.listSalesMonth(db, id.mgr, st["A店"], M)).rows.find((r) => r.membershipId === id.a2)?.status).toBe("submitted");
+    await svc.saveSales(db, id.office, st["A店"], "2025-12", [{ membershipId: id.a2, values: V(250000, 40) }], "import");
+    expect((await svc.listSalesMonth(db, id.office, st["A店"], "2025-12")).rows.find((r) => r.membershipId === id.a2)?.status).toBe("office_ok");
+    await expect(svc.saveMySales(db, id.office, M, V(1, 1))).rejects.toThrow(svc.ForbiddenError);              // 管理者は個人の売上は持たない
+  });
 });

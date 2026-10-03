@@ -17,7 +17,7 @@ async function person(co: string, code: string, name: string, level: number, st:
 
 beforeAll(async () => {
   db = await newDb();
-  expect(await migrate(db)).toEqual(["0001_tenant_core.sql", "0002_periods_requests.sql", "0003_store_changes.sql", "0004_shifts.sql", "0005_break_rule.sql", "0006_attendance.sql", "0007_products_stocktake.sql", "0008_stock.sql", "0009_display_accounts.sql", "0010_presence.sql", "0011_saturday_hours.sql", "0012_scheduled_retirement.sql", "0013_manual.sql", "0014_ranks.sql", "0015_short_name.sql", "0016_day_limits.sql", "0017_material_orders.sql", "0018_material_tax.sql", "0019_material_manager.sql", "0020_push.sql", "0021_lessons.sql", "0022_lesson_subcategories.sql", "0023_paid_leave.sql", "0024_sales.sql"]);
+  expect(await migrate(db)).toEqual(["0001_tenant_core.sql", "0002_periods_requests.sql", "0003_store_changes.sql", "0004_shifts.sql", "0005_break_rule.sql", "0006_attendance.sql", "0007_products_stocktake.sql", "0008_stock.sql", "0009_display_accounts.sql", "0010_presence.sql", "0011_saturday_hours.sql", "0012_scheduled_retirement.sql", "0013_manual.sql", "0014_ranks.sql", "0015_short_name.sql", "0016_day_limits.sql", "0017_material_orders.sql", "0018_material_tax.sql", "0019_material_manager.sql", "0020_push.sql", "0021_lessons.sql", "0022_lesson_subcategories.sql", "0023_paid_leave.sql", "0024_sales.sql", "0025_sales_flow.sql"]);
   expect(await migrate(db)).toEqual([]); // 2回目は何もしない
   const a = (await db.query<{ id: string }>("insert into companies (code, name) values ('co-a','A社') returning id")).rows[0].id;
   const b = (await db.query<{ id: string }>("insert into companies (code, name) values ('co-b','B社') returning id")).rows[0].id;

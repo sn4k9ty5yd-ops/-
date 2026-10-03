@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api, MeProvider, useAutoRefresh, useMe } from "@/lib/client";
 import { achievement, newRate, pct1, repeatRate, signed, unitPrice, yen, yoy } from "@/lib/sales-calc";
 import { todayJst } from "@/lib/period-nav";
-import type { MySales } from "@/lib/service";
+import { SALES_STATUS_LABEL, type MySales, type SalesValues } from "@/lib/service";
 
 const addMonth = (ym: string, n: number) => { const [y, m] = ym.split("-").map(Number); const t = new Date(Date.UTC(y, m - 1 + n, 1)); return `${t.getUTCFullYear()}-${String(t.getUTCMonth() + 1).padStart(2, "0")}`; };
 
@@ -38,6 +38,19 @@ function Page() {
   useEffect(() => { load(); }, [load]);
   useAutoRefresh(load);
 
+  const [form, setForm] = useState<SalesValues | null>(null);
+  const [ok, setOk] = useState("");
+  const EMPTY: SalesValues = { total: 0, free: 0, nominated: 0, retail: 0, customers: 0, newCustomers: 0, repeatCustomers: 0 };
+  const editable = !!d && (d.status === null || d.status === "draft" || d.status === "returned");
+  const cur: SalesValues = form ?? (d?.mine ? { total: d.mine.total, free: d.mine.free, nominated: d.mine.nominated, retail: d.mine.retail, customers: d.mine.customers, newCustomers: d.mine.newCustomers, repeatCustomers: d.mine.repeatCustomers } : EMPTY);
+  const num = (raw: string) => Number(raw.replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0)).replace(/[^\d]/g, "") || "0");
+  const saveForm = async (andSubmit: boolean) => {
+    try {
+      await api("/api/sales", { action: "save-own", month: ym, values: cur, storeId: me.storeId });
+      if (andSubmit) await api("/api/sales", { action: "submit", month: ym, storeId: me.storeId });
+      setForm(null); setOk(andSubmit ? "提出しました。店長が確認します" : "保存しました（まだ提出していません）"); setMsg(""); await load();
+    } catch (e) { setMsg((e as Error).message); }
+  };
   const total = d?.mine?.total ?? 0;
   const y = yoy(total, d?.prev?.total);
   const ach = achievement(total, d?.target ?? null);
@@ -52,8 +65,25 @@ function Page() {
         <button className="ghost" onClick={() => setYm(addMonth(ym, -1))} aria-label="前の月">‹</button><b style={{ fontSize: 22 }}>{ym.slice(0, 4)}年{Number(ym.slice(5))}月</b><button className="ghost" onClick={() => setYm(addMonth(ym, 1))} aria-label="次の月">›</button>
       </div>
       {msg && <p className="err">{msg}</p>}
-      {d && !d.mine && <p className="hint">この月の売上は、まだ入っていません。月末に、店長が入れます。</p>}
-      {d?.mine && (
+      {ok && <p className="sub" style={{ color: "var(--ok)" }}>✅ {ok}</p>}
+      {d && (
+        <div className="card">
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "baseline" }}><b style={{ fontSize: 18 }}>{Number(ym.slice(5))}月の売上を提出する</b>
+            <span className="chip" style={{ color: d.status === "office_ok" ? "var(--ok)" : d.status === "returned" ? "var(--bad)" : undefined }}>{d.status ? SALES_STATUS_LABEL[d.status] : "まだ入れていません"}</span></div>
+          <p className="sub" style={{ margin: "6px 0 10px" }}>流れ：<b>自分で記入して提出 → 店長が確認 → 事務員さんが確定</b></p>
+          {d.status === "returned" && <p className="err">差し戻されました{d.returnComment ? `：「${d.returnComment}」` : ""}。直して、もう一度提出してください。</p>}
+          <div className="salesform">
+            {([["total", "総合売上（円）"], ["free", "フリー売上（円）"], ["nominated", "指名技術売上（円）"], ["retail", "店販売上（円）"], ["customers", "客数（人）"], ["newCustomers", "新規（人）"], ["repeatCustomers", "再来（人）"]] as [keyof SalesValues, string][]).map(([k, l]) => (
+              <label key={k}>{l}<input inputMode="numeric" disabled={!editable} value={cur[k] === 0 ? "" : String(cur[k])} placeholder="0" onChange={(e) => setForm({ ...cur, [k]: num(e.target.value) })} /></label>
+            ))}
+          </div>
+          <p className="sub">客単価 <b>{unitPrice(cur.total, cur.customers) === null ? "－" : yen(unitPrice(cur.total, cur.customers) as number)}</b>　新規の割合 <b>{newRate(cur.newCustomers, cur.repeatCustomers) ?? "－"}{newRate(cur.newCustomers, cur.repeatCustomers) === null ? "" : "%"}</b>（自動で計算されます）</p>
+          {editable && <div className="toolbar"><button onClick={() => saveForm(true)} disabled={cur.total === 0}>提出する</button><button className="ghost" onClick={() => saveForm(false)}>保存だけ</button>{form && <button className="ghost" onClick={() => setForm(null)}>やめる</button>}</div>}
+          {!editable && <p className="hint">提出したあとは、直せません。直したいときは、店長に「差し戻し」をお願いしてください。</p>}
+        </div>
+      )}
+      {d && !d.mine && <p className="hint">この月の売上は、まだ入っていません。</p>}
+      {d?.mine && d.status && d.status !== "draft" && d.status !== "returned" && (
         <>
           <div className="card" style={{ textAlign: "center" }}>
             <div className="sub">総合売上</div><div className="big" style={{ fontSize: 40 }}>{yen(total)}</div>

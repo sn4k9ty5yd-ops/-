@@ -2004,7 +2004,11 @@ export async function leaveOverview(db: Database, userId: string, windowId: stri
 
 // ------------------------------------------------------------------ 指名売上（月ごと・個人ごと）
 export interface SalesValues { total: number; free: number; nominated: number; retail: number; customers: number; newCustomers: number; repeatCustomers: number }
-export interface SalesRow extends SalesValues { membershipId: string; name: string; source: string | null }
+export type SalesStatus = "draft" | "submitted" | "manager_ok" | "office_ok" | "returned";
+export const SALES_STATUS_LABEL: Record<SalesStatus, string> = {
+  draft: "下書き（まだ提出していません）", submitted: "提出済み（店長の確認待ち）", manager_ok: "店長確認済み（事務員さんの確認待ち）", office_ok: "確定", returned: "差し戻し（直して、もう一度提出）",
+};
+export interface SalesRow extends SalesValues { membershipId: string; name: string; source: string | null; status: SalesStatus | null; returnComment: string | null }
 export const EMPTY_SALES: SalesValues = { total: 0, free: 0, nominated: 0, retail: 0, customers: 0, newCustomers: 0, repeatCustomers: 0 };
 const monthStart = (m: string) => { if (!/^\d{4}-\d{2}(-01)?$/.test(m)) throw new Error("月が正しくありません"); return `${m.slice(0, 7)}-01`; };
 const prevYear = (m: string) => `${Number(m.slice(0, 4)) - 1}${m.slice(4)}`;
@@ -2017,7 +2021,7 @@ export async function listSalesMonth(db: Database, userId: string, storeId: stri
   const m = monthStart(month);
   return asUser(db, userId, async (q) => {
     const people = (await q.query<{ id: string; name: string }>("select id, name from memberships where store_id = $1 and status = 'active' and not display_only and level < 4 order by employee_code", [storeId])).rows;
-    const cur = (await q.query<SalesValues & { mid: string; source: string }>(`select x.membership_id as mid, x.source, ${SALES_COLS} from sales_stats x where x.store_id = $1 and x.month = $2`, [storeId, m])).rows;
+    const cur = (await q.query<SalesValues & { mid: string; source: string; status: SalesStatus; rc: string | null }>(`select x.membership_id as mid, x.source, x.status, x.return_comment as rc, ${SALES_COLS} from sales_stats x where x.store_id = $1 and x.month = $2`, [storeId, m])).rows;
     const prev = (await q.query<SalesValues & { mid: string }>(`select x.membership_id as mid, ${SALES_COLS} from sales_stats x where x.store_id = $1 and x.month = $2`, [storeId, prevYear(m)])).rows;
     const tg = (await q.query<{ membership_id: string | null; target: number }>("select membership_id, target from sales_targets where store_id = $1 and month = $2", [storeId, m])).rows;
     const board = (await q.query<{ b: boolean }>("select sales_board_public as b from stores where id = $1", [storeId])).rows[0]?.b ?? true;
@@ -2026,7 +2030,7 @@ export async function listSalesMonth(db: Database, userId: string, storeId: stri
     const byId = new Map(cur.map((r) => [r.mid, r]));
     return {
       month: m, board, images,
-      rows: people.map((p) => { const r = byId.get(p.id); return { membershipId: p.id, name: p.name, source: r?.source ?? null, ...(r ? { total: r.total, free: r.free, nominated: r.nominated, retail: r.retail, customers: r.customers, newCustomers: r.newCustomers, repeatCustomers: r.repeatCustomers } : EMPTY_SALES) }; }),
+      rows: people.map((p) => { const r = byId.get(p.id); return { membershipId: p.id, name: p.name, source: r?.source ?? null, status: r?.status ?? null, returnComment: r?.rc ?? null, ...(r ? { total: r.total, free: r.free, nominated: r.nominated, retail: r.retail, customers: r.customers, newCustomers: r.newCustomers, repeatCustomers: r.repeatCustomers } : EMPTY_SALES) }; }),
       prev: Object.fromEntries(prev.map((r) => [r.mid, { total: r.total, free: r.free, nominated: r.nominated, retail: r.retail, customers: r.customers, newCustomers: r.newCustomers, repeatCustomers: r.repeatCustomers }])),
       storeTarget: tg.find((t) => t.membership_id === null)?.target ?? null,
       targets: Object.fromEntries(tg.filter((t) => t.membership_id).map((t) => [t.membership_id as string, t.target])),
@@ -2045,23 +2049,80 @@ export async function saveSales(db: Database, userId: string, storeId: string, m
   rows.forEach((r) => checkSales(r.values));
   const me = await getMe(db, userId);
   if (!me) throw new ForbiddenError();
+  // 前年などの取り込みは、管理者なら、そのまま確定にする（毎回の確認は要らない）
+  const importFinal = source === "import" && me.level === 4;
   try {
     await asUser(db, userId, async (q) => {
       for (const r of rows) {
         const v = r.values;
+        const st = (await q.query<{ status: SalesStatus }>("select status from sales_stats where membership_id = $1 and month = $2 and store_id = $3", [r.membershipId, m, storeId])).rows[0]?.status;
+        if (st === "office_ok" && !importFinal) throw new Error("locked");
         const ex = await q.query(
-          `update sales_stats set total_sales=$3, free_sales=$4, nominated_sales=$5, retail_sales=$6, customers=$7, new_customers=$8, repeat_customers=$9, source=$10, updated_by=$11, updated_at=now()
+          `update sales_stats set total_sales=$3, free_sales=$4, nominated_sales=$5, retail_sales=$6, customers=$7, new_customers=$8, repeat_customers=$9, source=$10, updated_by=$11, updated_at=now(),
+                  status = case when $13::boolean then 'office_ok' when status in ('draft','returned') then 'submitted' else status end,
+                  submitted_at = case when status in ('draft','returned') then now() else submitted_at end
             where membership_id = $1 and month = $2 and store_id = $12 returning id`,
-          [r.membershipId, m, v.total, v.free, v.nominated, v.retail, v.customers, v.newCustomers, v.repeatCustomers, source, userId, storeId]);
+          [r.membershipId, m, v.total, v.free, v.nominated, v.retail, v.customers, v.newCustomers, v.repeatCustomers, source, userId, storeId, importFinal]);
         if (ex.rows.length === 0)
           await q.query(
-            `insert into sales_stats (company_id, store_id, membership_id, month, total_sales, free_sales, nominated_sales, retail_sales, customers, new_customers, repeat_customers, source, updated_by)
-             values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
-            [me.companyId, storeId, r.membershipId, m, v.total, v.free, v.nominated, v.retail, v.customers, v.newCustomers, v.repeatCustomers, source, userId]);
+            `insert into sales_stats (company_id, store_id, membership_id, month, total_sales, free_sales, nominated_sales, retail_sales, customers, new_customers, repeat_customers, source, updated_by, status, submitted_at)
+             values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,now())`,
+            [me.companyId, storeId, r.membershipId, m, v.total, v.free, v.nominated, v.retail, v.customers, v.newCustomers, v.repeatCustomers, source, userId, importFinal ? "office_ok" : "submitted"]);
       }
     });
-  } catch (e) { if ((e as Error).message?.includes("整数")) throw e; throw new ForbiddenError("この売上を入れる権限がないか、対象の人が正しくありません"); }
+  } catch (e) {
+    if ((e as Error).message?.includes("整数")) throw e;
+    if ((e as Error).message === "locked") throw new Error("確定した売上は、直接は直せません。先に「差し戻し」をしてください");
+    throw new ForbiddenError("この売上を入れる権限がないか、対象の人が正しくありません");
+  }
   return rows.length;
+}
+
+/** 本人の記入（下書き・差し戻しのときだけ）。まだ提出ではない */
+export async function saveMySales(db: Database, userId: string, month: string, v: SalesValues): Promise<void> {
+  const m = monthStart(month); checkSales(v);
+  try { await asUser(db, userId, (q) => q.query("select public.sales_save_own($1::date,$2,$3,$4,$5,$6,$7,$8)", [m, v.total, v.free, v.nominated, v.retail, v.customers, v.newCustomers, v.repeatCustomers])); }
+  catch (e) { if (/locked/.test((e as Error).message)) throw new Error("提出したあとは直せません（直したいときは、店長に差し戻してもらってください）"); throw new ForbiddenError(); }
+}
+
+const jpMonth = (m: string) => `${Number(m.slice(0, 4))}年${Number(m.slice(5, 7))}月`;
+/** 提出 → 店長（いなければ事務員さん）に通知 */
+export async function submitMySales(db: Database, userId: string, month: string): Promise<SalesStatus> {
+  const m = monthStart(month);
+  const me = await getMe(db, userId);
+  if (!me) throw new ForbiddenError();
+  let st: SalesStatus;
+  try { st = (await asUser(db, userId, (q) => q.query<{ s: SalesStatus }>("select public.sales_submit($1::date) as s", [m]))).rows[0].s; }
+  catch (e) {
+    if (/no data/.test((e as Error).message)) throw new Error("先に、数字を入れて保存してください");
+    if (/locked/.test((e as Error).message)) throw new Error("すでに提出しています");
+    throw new ForbiddenError();
+  }
+  const to = st === "manager_ok" ? await officeIds(db, me.companyId) : await managersOf(db, me.storeId, me.companyId);
+  await leaveNotify(db, me.companyId, to.filter((x) => x !== userId), `${jpMonth(m)}の売上が提出されました（${me.name} さん）`, st === "manager_ok" ? "事務員さんの確認をお願いします。" : "店長の確認をお願いします。", "/sales");
+  return st;
+}
+
+/** 確認／確定／差し戻し。action: manager_ok | office_ok | return */
+export async function reviewSales(db: Database, userId: string, memberId: string, month: string, action: "manager_ok" | "office_ok" | "return", comment = ""): Promise<SalesStatus> {
+  const m = monthStart(month);
+  const me = await getMe(db, userId);
+  if (!me) throw new ForbiddenError();
+  let st: SalesStatus;
+  try { st = (await asUser(db, userId, (q) => q.query<{ s: SalesStatus }>("select public.sales_review($1, $2::date, $3, $4) as s", [memberId, m, action, comment.slice(0, 300)]))).rows[0].s; }
+  catch (e) {
+    const msg = (e as Error).message ?? "";
+    if (/wrong status/.test(msg)) throw new Error(action === "office_ok" ? "先に、店長の確認が必要です" : "この売上は、いまの状態では、この操作ができません");
+    if (/own/.test(msg)) throw new Error("自分の売上は、自分では確認できません");
+    throw new ForbiddenError();
+  }
+  const who = (await db.query<{ name: string; company_id: string }>("select name, company_id from memberships where id = $1", [memberId])).rows[0];
+  if (who) {
+    if (st === "manager_ok") await leaveNotify(db, who.company_id, await officeIds(db, who.company_id), `${jpMonth(m)}の売上：店長が確認しました（${who.name} さん）`, "事務員さんの確定をお願いします。", "/sales");
+    else if (st === "office_ok") await leaveNotify(db, who.company_id, [memberId], `${jpMonth(m)}の売上が確定しました`, "ありがとうございました。", "/my-sales");
+    else if (st === "returned") await leaveNotify(db, who.company_id, [memberId], `${jpMonth(m)}の売上が差し戻されました`, comment ? `コメント：${comment.slice(0, 80)}` : "直して、もう一度提出してください。", "/my-sales");
+  }
+  return st;
 }
 
 /** 目標（お店 or 個人）。null で消す */
@@ -2079,7 +2140,7 @@ export async function setSalesTarget(db: Database, userId: string, storeId: stri
 }
 
 export interface MySales {
-  month: string; mine: (SalesValues & { source: string }) | null; prev: SalesValues | null;
+  month: string; status: SalesStatus | null; returnComment: string | null; mine: (SalesValues & { source: string }) | null; prev: SalesValues | null;
   store: { total: number; customers: number }; storePrev: { total: number; customers: number };
   target: number | null; storeTarget: number | null;
   board: { membershipId: string; name: string; total: number; customers: number; rank: number }[];
@@ -2091,15 +2152,16 @@ export async function getMySales(db: Database, userId: string, month: string): P
   const me = await getMe(db, userId);
   if (!me) throw new ForbiddenError();
   return asUser(db, userId, async (q) => {
-    const one = async (mm: string) => (await q.query<SalesValues & { source: string }>(`select x.source, ${SALES_COLS} from sales_stats x where x.membership_id = $1 and x.month = $2`, [userId, mm])).rows[0] ?? null;
+    const one = async (mm: string) => (await q.query<SalesValues & { source: string; status: SalesStatus; rc: string | null }>(`select x.source, x.status, x.return_comment as rc, ${SALES_COLS} from sales_stats x where x.membership_id = $1 and x.month = $2`, [userId, mm])).rows[0] ?? null;
     const tot = async (mm: string) => (await q.query<{ total: number; customers: number }>("select total_sales as total, customers from public.sales_store_total($1, $2::date)", [me.storeId, mm])).rows[0] ?? { total: 0, customers: 0 };
     const tg = (await q.query<{ membership_id: string | null; target: number }>("select membership_id, target from sales_targets where store_id = $1 and month = $2 and (membership_id is null or membership_id = $3)", [me.storeId, m, userId])).rows;
     const board = (await q.query<{ membership_id: string; name: string; total_sales: number; customers: number; rank: number }>("select * from public.sales_board($1, $2::date)", [me.storeId, m])).rows;
     const series = (await q.query<{ month: string; total: number; customers: number }>(
       "select to_char(month, 'YYYY-MM') as month, total_sales as total, customers from sales_stats where membership_id = $1 and month >= ($2::date - interval '23 months') and month <= $2::date order by month", [userId, m])).rows;
     const prevRow = await one(prevYear(m));
+    const mineRow = await one(m);
     return {
-      month: m, mine: await one(m), prev: prevRow, store: await tot(m), storePrev: await tot(prevYear(m)),
+      month: m, status: mineRow?.status ?? null, returnComment: mineRow?.rc ?? null, mine: mineRow, prev: prevRow, store: await tot(m), storePrev: await tot(prevYear(m)),
       target: tg.find((t) => t.membership_id === userId)?.target ?? null, storeTarget: tg.find((t) => t.membership_id === null)?.target ?? null,
       board: board.map((b) => ({ membershipId: b.membership_id, name: b.name, total: b.total_sales, customers: b.customers, rank: b.rank })), series,
     };

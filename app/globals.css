@@ -478,3 +478,5 @@ button:not(.ghost):not(.mvbtn):not(.linkcell):not(.logout):not(.monthrow):not(.d
 .board .rk{width:26px;height:26px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;background:color-mix(in srgb,var(--ink) 8%,transparent);font-size:13px;font-weight:700}
 .board li:nth-child(1) .rk{background:#ffd60a;color:#000}.board li:nth-child(2) .rk{background:#d1d1d6;color:#000}.board li:nth-child(3) .rk{background:#d9a066;color:#000}
 .stats3{grid-template-columns:repeat(3,1fr) !important}.stats3 .big{font-size:20px}.stats3 .card{padding:14px}
+.salesform{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:4px 12px;margin:8px 0}
+.salesform label{margin:8px 0 2px;font-size:12px}.salesform input{padding:12px;font-size:16px}
