@@ -99,3 +99,9 @@ main.xwide{max-width:1400px;margin:0 auto;padding:16px}
 .tierrow{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0}
 .tierrow input{width:80px;padding:10px;font-size:16px}
 .ex{width:100%;border-collapse:collapse;margin-top:8px}.ex th,.ex td{border-bottom:1px solid var(--line);padding:8px;text-align:center}
+.atttable td{padding:3px 4px;font-size:12px;height:22px}
+.atttable td.lbl{background:var(--bg);color:var(--sub);font-size:11px;min-width:34px}
+.atttable tr.pstart td{border-top:2px solid var(--sub)}
+.atttable td.wk{font-weight:700}
+.atttable td.tot{min-width:70px;background:#fff3c4;color:#1d1d1f}
+.atttable td.name{vertical-align:middle}
