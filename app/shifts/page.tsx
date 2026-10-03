@@ -12,7 +12,7 @@ type Person = { id: string; name: string };
 const LABEL: Record<string, string> = { off: "休", paid: "有給", holiday: "公休", other: "他" };
 
 function Page() {
-  const { me } = useMe();
+  const { me, logout } = useMe();
   const today = todayJst();
   const [stores, setStores] = useState<StoreRow[]>([]);
   const [storeId, setStoreId] = useState(me.storeId);
@@ -56,8 +56,8 @@ function Page() {
 
   return (
     <main style={{ maxWidth: 900 }}>
-      <Link href="/home" className="back">← ホーム</Link>
-      <h1>シフト</h1>
+      {!me.displayOnly && <Link href="/home" className="back">← ホーム</Link>}
+      <h1>{me.displayOnly ? `${stores.find((x) => x.id === me.storeId)?.name ?? ""} のシフト` : "シフト"}</h1>
       {(me.level >= 3) && (
         <select aria-label="お店" value={storeId} onChange={(e) => setStoreId(e.target.value)} style={{ marginBottom: 12 }}>
           {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
@@ -97,7 +97,8 @@ function Page() {
           </div>
         </div>
       )}
-      {published && <p className="hint">自分の名前は太字で表示されます。</p>}
+      {published && !me.displayOnly && <p className="hint">自分の名前は太字で表示されます。</p>}
+      {me.displayOnly && <button className="ghost" style={{ color: "var(--sub)", width: "auto", marginTop: 24 }} onClick={logout}>ログアウト</button>}
     </main>
   );
 }

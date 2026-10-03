@@ -29,7 +29,7 @@ describe("スタッフの貼り付け", () => {
   it("おかしな行は、行ごとにやさしい理由をつける（ほかの行は読む）", () => {
     const r = parseStaffPaste("A\t1\tATENA\nB\t\tATENA\n\t3\tATENA\nC\t4\tなぞの店\nD\t5\tATENA\t社長\nE\t1\tATENA\nF\t6-あ\tATENA\n", stores, admin);
     expect(r.rows.map((x) => x.error)).toEqual([
-      null, "社員番号がありません", "名前がありません", "お店「なぞの店」が見つかりません", "レベル「社長」が読めません（スタッフ・シフト担当・店長・オフィス）",
+      null, "社員番号がありません", "名前がありません", "お店「なぞの店」が見つかりません", "レベル「社長」が読めません（スタッフ・シフト担当・店長・管理者・表示専用）",
       "同じ社員番号が、この表の中に2つあります", "社員番号は、英数字（20文字まで）にしてください",
     ]);
   });
@@ -49,5 +49,11 @@ describe("スタッフの貼り付け", () => {
   it("見出しに「レベル」「メール」がある表：レベルは読み、メールは読まない", () => {
     const r = parseStaffPaste("氏名,社員番号,メール,レベル,所属\n店長太郎,1001,t@example.com,店長,ATENA", stores, admin);
     expect(r.rows[0]).toMatchObject({ name: "店長太郎", employeeCode: "1001", level: 3, storeId: "s1", error: null });
+  });
+  it("「表示専用」は、お店のiPadの、見るだけのアカウント（レベル1）。作れるのは管理者だけ", () => {
+    const r = parseStaffPaste("ATENA iPad\t57\tATENA\t表示専用\n六本松 iPad,58,ATENA六本松,iPad", stores, admin);
+    expect(r.rows.map((x) => [x.level, x.displayOnly, x.error])).toEqual([[1, true, null], [1, true, null]]);
+    expect(parseStaffPaste("端末\t59\tATENA\t表示専用", stores, mgr).rows[0].error).toBe("表示専用のアカウントを作れるのは、管理者だけです");
+    expect(parseStaffPaste("端末\t60\t表示専用", stores, { canAssignLevel: true, defaultStoreId: "s2" }).rows[0]).toMatchObject({ storeId: "s2", displayOnly: true, error: null });
   });
 });

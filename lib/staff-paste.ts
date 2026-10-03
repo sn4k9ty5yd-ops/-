@@ -1,7 +1,7 @@
 import type { Level } from "./permissions";
 
 export interface StoreRef { id: string; name: string; }
-export interface ParsedStaff { line: number; name: string; employeeCode: string; storeId: string | null; storeName: string; level: Level; error: string | null; }
+export interface ParsedStaff { line: number; name: string; employeeCode: string; storeId: string | null; storeName: string; level: Level; displayOnly: boolean; error: string | null; }
 export interface StaffPasteResult { rows: ParsedStaff[]; skippedHeader: boolean; }
 
 const nfkc = (s: string) => s.normalize("NFKC").trim();
@@ -12,11 +12,14 @@ const LEVEL_WORDS: [RegExp, Level][] = [
 ];
 export const parseLevel = (raw: string): Level | null => { const t = norm(raw); for (const [re, lv] of LEVEL_WORDS) if (re.test(t)) return lv; return null; };
 
+export const isDisplayWord = (raw: string) => /^(表示専用|表示|端末|店舗端末|店の端末|ipad|アイパッド|店のipad)$/i.test(norm(raw));
+
 export const CODE_RE = /^[A-Za-z0-9]{1,20}$/;
 
 /**
  * Excel などからコピーした表（タブ区切り。カンマ区切りも可）を、スタッフの登録内容に変換する。
  * 列の順番は「名前・社員番号・お店・レベル」。お店を省くと、画面で選んだお店になる。レベルを省くとスタッフ(1)。
+ * レベルの欄に「表示専用」と書くと、お店のiPadなどの、見るだけのアカウントになる（管理者だけが作れる）。
  * 3列目が「店長」などのレベルの言葉で、お店の名前ではないときは、レベルとして読む。
  * 最初の行が見出し（「名前」「社員番号」など）なら、見出しの言葉で列を決める（メールアドレスなど知らない列は読み飛ばす）。
  * 見出しがないときも、メールアドレス（@を含む列）は無視する。
@@ -47,9 +50,10 @@ export function parseStaffPaste(text: string, stores: StoreRef[], opts: { defaul
       [name = "", codeRaw = "", storeCol = "", levelCol = ""] = cols;
     }
     const employeeCode = nfkc(codeRaw);
-    if (storeCol && !byName.has(norm(storeCol)) && parseLevel(storeCol) !== null && !levelCol) { levelCol = storeCol; storeCol = ""; }   // 3列目がレベルの言葉
+    if (storeCol && !byName.has(norm(storeCol)) && (parseLevel(storeCol) !== null || isDisplayWord(storeCol)) && !levelCol) { levelCol = storeCol; storeCol = ""; }   // 3列目がレベルの言葉
     const store = storeCol ? byName.get(norm(storeCol)) : stores.find((s) => s.id === opts.defaultStoreId);
-    const level = levelCol ? parseLevel(levelCol) : 1;
+    const displayOnly = !!levelCol && isDisplayWord(levelCol);
+    const level = displayOnly ? 1 : levelCol ? parseLevel(levelCol) : 1;
     let error: string | null = null;
     if (!name) error = "名前がありません";
     else if (name.length > 50) error = "名前が長すぎます";
@@ -57,10 +61,11 @@ export function parseStaffPaste(text: string, stores: StoreRef[], opts: { defaul
     else if (!CODE_RE.test(employeeCode)) error = "社員番号は、英数字（20文字まで）にしてください";
     else if (seen.has(employeeCode)) error = "同じ社員番号が、この表の中に2つあります";
     else if (!store) error = storeCol ? `お店「${storeCol}」が見つかりません` : "お店を選んでください";
-    else if (level === null) error = `レベル「${levelCol}」が読めません（スタッフ・シフト担当・店長・オフィス）`;
+    else if (level === null) error = `レベル「${levelCol}」が読めません（スタッフ・シフト担当・店長・管理者・表示専用）`;
+    else if (displayOnly && !opts.canAssignLevel) error = "表示専用のアカウントを作れるのは、管理者だけです";
     else if (level > 1 && !opts.canAssignLevel) error = "スタッフより上のレベルを決められるのは、管理者だけです";
     if (employeeCode) seen.add(employeeCode);
-    rows.push({ line: i + 1, name, employeeCode, storeId: store?.id ?? null, storeName: store?.name ?? storeCol, level: (level ?? 1) as Level, error });
+    rows.push({ line: i + 1, name, employeeCode, storeId: store?.id ?? null, storeName: store?.name ?? storeCol, level: (level ?? 1) as Level, displayOnly, error });
   });
   return { rows, skippedHeader };
 }

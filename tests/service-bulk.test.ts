@@ -69,4 +69,31 @@ describe("スタッフのまとめて登録", () => {
     const o3 = (await db.query<{ id: string }>("insert into memberships (company_id, store_id, employee_code, name, level) values ($1,$2,'9000','Zオフィス',4) returning id", [co3, s3])).rows[0].id;
     await svc.addStaffBulk(db, o3, [{ name: "Z1", employeeCode: "2001", storeId: s3, level: 1 }]);   // x-co にも 2001 がある
   });
+  it("表示専用アカウント（お店のiPad）: 管理者が登録でき、レベル1・シフトに入らず、ログインできる", async () => {
+    const r = await svc.addStaffBulk(db, id.office, [{ name: "s1 iPad", employeeCode: "9101", storeId: st.s1, level: 1, displayOnly: true }, row("普通の人", "9102")]);
+    expect(r.created.map((c) => [c.displayOnly, c.level])).toEqual([[true, 1], [false, 1]]);
+    const l = await login(db, { companyCode: "x-co", employeeCode: "9101", passcode: r.created[0].passcode });
+    expect(l.ok).toBe(true);
+    if (!l.ok) return;
+    expect(await svc.getMe(db, l.membershipId)).toMatchObject({ displayOnly: true, level: 1, name: "s1 iPad" });
+    expect((await svc.listStaff(db, id.office)).find((s) => s.employeeCode === "9101")).toMatchObject({ displayOnly: true, onShift: false });
+    expect((await svc.listRoster(db, id.mgr1, st.s1)).some((x) => x.name === "s1 iPad")).toBe(false);          // シフト表に載らない
+    expect((await svc.listRoster(db, id.mgr1, st.s1)).some((x) => x.name === "普通の人")).toBe(true);
+    await expect(svc.setOnShift(db, id.office, l.membershipId, true)).rejects.toThrow(svc.ForbiddenError);    // シフトに入れられない
+  });
+  it("表示専用は、見るだけ: 希望休を出せない・登録・変更の権限がない", async () => {
+    const l = (await db.query<{ id: string }>("select id from memberships where employee_code = '9101'")).rows[0].id;
+    await svc.createNextPeriod(db, id.office, "2026-11-20");
+    const p = (await svc.listPeriods(db, id.office))[0];
+    await svc.setPeriodStatus(db, id.office, { periodId: p.id, storeId: st.s1, status: "collecting" });
+    await expect(svc.toggleMyRequest(db, l, p.id, "2026-11-20")).rejects.toThrow("見るだけ");
+    await expect(svc.addStaffBulk(db, l, [row("x", "9103")])).rejects.toThrow(svc.ForbiddenError);
+    await expect(svc.addStore(db, l, "勝手な店")).rejects.toThrow(svc.ForbiddenError);
+    expect(await svc.listStaff(db, l)).toBeTruthy();                                                              // お店の人の名前は見える（スタッフと同じ）
+  });
+  it("表示専用アカウントを作れるのは管理者だけ（店長は、まとめて登録でも作れない・全員取り消し）", async () => {
+    const before = await count();
+    await expect(svc.addStaffBulk(db, id.mgr1, [row("普通", "9201"), { name: "端末", employeeCode: "9202", storeId: st.s1, level: 1, displayOnly: true }])).rejects.toThrow(svc.ForbiddenError);
+    expect(await count()).toBe(before);
+  });
 });

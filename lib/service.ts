@@ -8,10 +8,10 @@ import type { Level } from "./permissions";
 
 // 画面(API)から呼ばれる業務処理。権限の判定はすべてDB側(RLS)で行い、ここでは再実装しない。
 
-export interface Me { id: string; name: string; level: Level; storeId: string; companyId: string; companyName: string; closingStartDay: number; breakRule: BreakRule; }
+export interface Me { id: string; name: string; level: Level; storeId: string; companyId: string; companyName: string; closingStartDay: number; breakRule: BreakRule; displayOnly: boolean; }
 export interface StoreRow { id: string; name: string; status: "active" | "closed"; defaultOpen: string; defaultClose: string; }
 export interface StaffRow {
-  id: string; name: string; employeeCode: string; storeId: string; level: Level; status: "active" | "disabled"; manageable: boolean; onShift: boolean;
+  id: string; name: string; employeeCode: string; storeId: string; level: Level; status: "active" | "disabled"; manageable: boolean; onShift: boolean; displayOnly: boolean;
 }
 
 export class ForbiddenError extends Error {
@@ -22,7 +22,7 @@ export async function getMe(db: Database, userId: string): Promise<Me | null> {
   const { rows } = await asUser(db, userId, (q) =>
     q.query<Omit<Me, "breakRule"> & { cap: number | null; tiers: { overMinutes: number; breakMinutes: number }[] }>(
       `select m.id, m.name, m.level, m.store_id as "storeId", m.company_id as "companyId", c.name as "companyName", c.closing_start_day as "closingStartDay",
-              c.work_cap_minutes as cap, c.break_tiers as tiers
+              c.work_cap_minutes as cap, c.break_tiers as tiers, m.display_only as "displayOnly"
          from memberships m join companies c on c.id = m.company_id where m.id = $1`, [userId]),
   );
   const r = rows[0];
@@ -109,7 +109,7 @@ export async function listStaff(db: Database, userId: string): Promise<StaffRow[
   if (!me) return [];
   const { rows } = await asUser(db, userId, (q) =>
     q.query<StaffRow>(
-      `select id, name, employee_code as "employeeCode", store_id as "storeId", level, status, on_shift as "onShift" from memberships order by store_id, level desc, name`));
+      `select id, name, employee_code as "employeeCode", store_id as "storeId", level, status, on_shift as "onShift", display_only as "displayOnly" from memberships order by store_id, level desc, name`));
   // 「操作できる人」かは、画面のボタン表示のための目安（本当の判定はDBが行う）
   return rows.map((r) => ({
     ...r,
@@ -120,7 +120,7 @@ export async function listStaff(db: Database, userId: string): Promise<StaffRow[
 /** スタッフ登録。パスコードを発行して返す（このときだけ見られる） */
 export async function addStaff(
   db: Database, userId: string,
-  input: { name: string; employeeCode: string; storeId: string; level: Level },
+  input: { name: string; employeeCode: string; storeId: string; level: Level; displayOnly?: boolean },
 ): Promise<{ id: string; passcode: string }> {
   const me = await getMe(db, userId);
   if (!me) throw new ForbiddenError();
@@ -128,8 +128,8 @@ export async function addStaff(
   try {
     id = (await asUser(db, userId, (q) =>
       q.query<{ id: string }>(
-        `insert into memberships (company_id, store_id, employee_code, name, level) values ($1,$2,$3,$4,$5) returning id`,
-        [me.companyId, input.storeId, input.employeeCode.trim(), input.name.trim(), input.level]))).rows[0].id;
+        `insert into memberships (company_id, store_id, employee_code, name, level, on_shift, display_only) values ($1,$2,$3,$4,$5,$6,$7) returning id`,
+        [me.companyId, input.storeId, input.employeeCode.trim(), input.name.trim(), input.displayOnly ? 1 : input.level, !input.displayOnly, !!input.displayOnly]))).rows[0].id;
   } catch (e) {
     if ((e as { code?: string }).code === "23505") throw new Error("その社員番号はすでに使われています");
     throw new ForbiddenError();
@@ -250,6 +250,7 @@ export async function listRequests(db: Database, userId: string, periodId: strin
 export async function toggleMyRequest(db: Database, userId: string, periodId: string, day: string, kind = "hope"): Promise<"added" | "removed"> {
   const me = await getMe(db, userId);
   if (!me) throw new ForbiddenError();
+  if (me.displayOnly) throw new Error("このアカウントは、見るだけです（希望休は出せません）");
   try {
     return await asUser(db, userId, async (q) => {
       const del = await q.query("delete from time_off_requests where membership_id = $1 and period_id = $2 and day = $3 returning id", [userId, periodId, day]);
@@ -913,8 +914,8 @@ export async function applyStocktakeToStock(db: Database, userId: string, stockt
 }
 
 // ------------------------------------------------------------------ スタッフのまとめて登録
-export interface BulkStaffInput { name: string; employeeCode: string; storeId: string; level: Level; }
-export interface BulkStaffResult { name: string; employeeCode: string; storeId: string; level: Level; passcode: string; }
+export interface BulkStaffInput { name: string; employeeCode: string; storeId: string; level: Level; displayOnly?: boolean; }
+export interface BulkStaffResult { name: string; employeeCode: string; storeId: string; level: Level; displayOnly: boolean; passcode: string; }
 const CODE_PATTERN = /^[A-Za-z0-9]{1,20}$/;
 
 /**
@@ -944,8 +945,8 @@ export async function addStaffBulk(db: Database, userId: string, rows: BulkStaff
     const ids: string[] = [];
     for (const r of rows)
       ids.push((await q.query<{ id: string }>(
-        "insert into memberships (company_id, store_id, employee_code, name, level) values ($1,$2,$3,$4,$5) returning id",
-        [me.companyId, r.storeId, r.employeeCode, r.name.trim(), r.level])).rows[0].id);
+        "insert into memberships (company_id, store_id, employee_code, name, level, on_shift, display_only) values ($1,$2,$3,$4,$5,$6,$7) returning id",
+        [me.companyId, r.storeId, r.employeeCode, r.name.trim(), r.displayOnly ? 1 : r.level, !r.displayOnly, !!r.displayOnly])).rows[0].id);
     return ids;
   };
   class Rollback extends Error {}
@@ -969,7 +970,7 @@ export async function addStaffBulk(db: Database, userId: string, rows: BulkStaff
     const passcodes = rows.map(() => generatePasscode());
     const hashes = await Promise.all(passcodes.map((p) => hashPasscode(p)));
     await db.tx(async (q) => { for (const [i, id] of ids.entries()) await q.query("update memberships set passcode_hash = $2 where id = $1", [id, hashes[i]]); });
-    rows.forEach((r, i) => out.push({ name: r.name.trim(), employeeCode: r.employeeCode, storeId: r.storeId, level: r.level, passcode: passcodes[i] }));
+    rows.forEach((r, i) => out.push({ name: r.name.trim(), employeeCode: r.employeeCode, storeId: r.storeId, level: r.displayOnly ? 1 : r.level, displayOnly: !!r.displayOnly, passcode: passcodes[i] }));
     return { count: rows.length, created: out };
   } catch {
     await db.query("delete from audit_logs where target_id = any($1::uuid[])", [ids]).catch(() => {});

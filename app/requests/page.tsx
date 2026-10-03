@@ -32,6 +32,7 @@ function Page() {
   useEffect(() => { load(); }, [load]);
   useAutoRefresh(load);
 
+  if (me.displayOnly) return <main><Link href="/shifts" className="back">← シフト</Link><h1>希望休</h1><p className="hint">このアカウントは、見るだけです。希望休は出せません。</p></main>;
   if (!view || !all) return null;
   const st = db?.stores.find((s) => s.storeId === me.storeId);
   const open = !!db && st?.status === "collecting" && (!st.closeAt || new Date(st.closeAt) > new Date());

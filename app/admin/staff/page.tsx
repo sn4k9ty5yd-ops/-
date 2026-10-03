@@ -16,7 +16,7 @@ export default function StaffPage() {
   const { me } = useMe();
   const [staff, setStaff] = useState<StaffRow[]>([]);
   const [stores, setStores] = useState<Store[]>([]);
-  const [form, setForm] = useState({ name: "", employeeCode: "", storeId: me.storeId, level: 1 as Level });
+  const [form, setForm] = useState({ name: "", employeeCode: "", storeId: me.storeId, level: 1 as Level, displayOnly: false });
   const [msg, setMsg] = useState("");
   const [bulk, setBulk] = useState<{ text: string; storeId: string } | null>(null);
   const [bulkDone, setBulkDone] = useState<BulkStaffResult[] | null>(null);
@@ -58,11 +58,11 @@ export default function StaffPage() {
         {staff.map((s) => (
           <li key={s.id} className={s.status === "disabled" ? "off" : ""}>
             <div>
-              <b>{s.name}</b> <span className="sub">{storeName(s.storeId)}</span>
-              <div className="sub">社員番号 {s.employeeCode}{s.status === "disabled" && " ／ 退職（無効）"}{s.status === "active" && (s.onShift ? " ／ シフトに入る" : " ／ シフトに入らない")}</div>
+              <b>{s.name}</b> <span className="sub">{storeName(s.storeId)}</span>{s.displayOnly && <span className="chip warn">表示専用（お店の端末）</span>}
+              <div className="sub">社員番号 {s.employeeCode}{s.status === "disabled" && " ／ 退職（無効）"}{s.status === "active" && !s.displayOnly && (s.onShift ? " ／ シフトに入る" : " ／ シフトに入らない")}</div>
             </div>
             <div className="actions">
-              {me.level === 4 && s.status === "active" && s.id !== me.id ? (
+              {me.level === 4 && s.status === "active" && s.id !== me.id && !s.displayOnly ? (
                 <select value={s.level} onChange={(e) => run(() => api(`/api/staff/${s.id}/level`, { level: Number(e.target.value) }))}>
                   {LEVELS.map((l) => <option key={l} value={l}>{LEVEL_NAMES[l]}</option>)}
                 </select>
@@ -74,9 +74,9 @@ export default function StaffPage() {
                       run(async () => setIssued({ name: s.name, passcode: (await api<{ passcode: string }>(`/api/staff/${s.id}/passcode`, {})).passcode }))}>
                     パスコード再発行
                   </button>
-                  <button className="ghost" style={{ color: "var(--ink)" }} onClick={() => run(() => api(`/api/staff/${s.id}/onshift`, { onShift: !s.onShift }))}>
+                  {!s.displayOnly && <button className="ghost" style={{ color: "var(--ink)" }} onClick={() => run(() => api(`/api/staff/${s.id}/onshift`, { onShift: !s.onShift }))}>
                     {s.onShift ? "シフトから外す" : "シフトに入れる"}
-                  </button>
+                  </button>}
                   <button className="ghost" onClick={() => confirm(`${s.name} さんを退職（無効）にしますか？`) && run(() => api(`/api/staff/${s.id}/disable`, {}))}>
                     退職にする
                   </button>
@@ -95,7 +95,7 @@ export default function StaffPage() {
           run(async () => {
             const r = await api<{ passcode: string }>("/api/staff", form);
             setIssued({ name: form.name, passcode: r.passcode });
-            setForm({ ...form, name: "", employeeCode: "", level: 1 });
+            setForm({ ...form, name: "", employeeCode: "", level: 1, displayOnly: false });
           });
         }}>
           <label htmlFor="nm">名前</label>
@@ -107,6 +107,12 @@ export default function StaffPage() {
             {registrableStores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
           {me.level === 4 && (
+            <label style={{ display: "flex", gap: 8, alignItems: "center", color: "var(--ink)", margin: "14px 0 0" }}>
+              <input type="checkbox" style={{ width: 20, height: 20 }} checked={form.displayOnly} onChange={(e) => setForm({ ...form, displayOnly: e.target.checked, level: 1 })} />
+              お店の端末（iPadなど）。見るだけのアカウントにする
+            </label>
+          )}
+          {me.level === 4 && !form.displayOnly && (
             <>
               <label htmlFor="lv">レベル</label>
               <select id="lv" value={form.level} onChange={(e) => setForm({ ...form, level: Number(e.target.value) as Level })}>
@@ -122,7 +128,7 @@ export default function StaffPage() {
         <div className="sheet-bg" onClick={() => !bulkBusy && setBulk(null)}>
           <div className="sheet" style={{ maxWidth: 640 }} onClick={(e) => e.stopPropagation()} role="dialog" aria-label="まとめて登録">
             <b style={{ fontSize: 18 }}>Excelからまとめて登録</b>
-            <p className="sub">Excelの表をコピーして、下にはりつけてください。列は「名前・社員番号・お店・レベル」の順です（お店・レベルは省けます）。見出しの行があれば、見出しの言葉で読みます。<b>メールアドレスの列は、無視します。</b></p>
+            <p className="sub">Excelの表をコピーして、下にはりつけてください。列は「名前・社員番号・お店・レベル」の順です（お店・レベルは省けます）。レベルの欄に「表示専用」と書くと、お店のiPadなどの、見るだけのアカウントになります（管理者だけ）。見出しの行があれば、見出しの言葉で読みます。<b>メールアドレスの列は、無視します。</b></p>
             <textarea aria-label="貼り付け" rows={7} style={{ width: "100%", fontSize: 14, padding: 10, borderRadius: 12, border: "1px solid var(--line)", background: "var(--card)", color: "var(--ink)" }}
               value={bulk.text} onChange={(e) => setBulk({ ...bulk, text: e.target.value })} placeholder={"名前\t社員番号\t（お店）\t（レベル）\n大坪\t1003\n永尾\t1004"} />
             <label>お店が書かれていない行は、このお店にします
@@ -131,7 +137,7 @@ export default function StaffPage() {
               <div className="scroll" style={{ marginTop: 10, maxHeight: 260, overflow: "auto" }}>
                 <table className="sttable"><thead><tr><th>名前</th><th>社員番号</th><th>お店</th><th>レベル</th><th>確認</th></tr></thead>
                   <tbody>{parsed.rows.map((r) => (
-                    <tr key={r.line} className={r.error ? "empty" : ""}><td>{r.name}</td><td>{r.employeeCode}</td><td>{nameOfStore(r.storeId) || r.storeName}</td><td>{LEVEL_NAMES[r.level].replace(/^レベル\d /, "")}</td>
+                    <tr key={r.line} className={r.error ? "empty" : ""}><td>{r.name}</td><td>{r.employeeCode}</td><td>{nameOfStore(r.storeId) || r.storeName}</td><td>{r.displayOnly ? "表示専用" : LEVEL_NAMES[r.level].replace(/^レベル\d /, "")}</td>
                       <td style={{ color: r.error ? "#d70015" : "#1e7e34" }}>{r.error ?? "OK"}</td></tr>))}</tbody></table>
               </div>
             )}
@@ -141,7 +147,7 @@ export default function StaffPage() {
               if (!confirm(`${okRows.length}人を登録します。登録すると、全員のパスコードが1度だけ表示されます。よろしいですか？`)) return;
               setBulkBusy(true); setBulkMsg("");
               try {
-                const r = await api<{ count: number; created: BulkStaffResult[] }>("/api/staff/bulk", { rows: okRows.map((x) => ({ name: x.name, employeeCode: x.employeeCode, storeId: x.storeId, level: x.level })) });
+                const r = await api<{ count: number; created: BulkStaffResult[] }>("/api/staff/bulk", { rows: okRows.map((x) => ({ name: x.name, employeeCode: x.employeeCode, storeId: x.storeId, level: x.level, displayOnly: x.displayOnly })) });
                 setBulk(null); setBulkDone(r.created); setBulkNote(""); await load();
               } catch (e) { setBulkMsg((e as Error).message); }
               setBulkBusy(false);
@@ -159,7 +165,7 @@ export default function StaffPage() {
             <h1 className="printonly" style={{ fontSize: 16 }}>スタッフのパスコード（会社ID: album）　※本人にだけ渡してください</h1>
             <div className="scroll" style={{ maxHeight: 340, overflow: "auto" }}>
               <table className="sttable"><thead><tr><th>名前</th><th>社員番号</th><th>お店</th><th>パスコード</th></tr></thead>
-                <tbody>{bulkDone.map((r) => <tr key={r.employeeCode}><td>{r.name}</td><td>{r.employeeCode}</td><td>{nameOfStore(r.storeId)}</td><td><b style={{ letterSpacing: 2, fontSize: 16 }}>{r.passcode}</b></td></tr>)}</tbody></table>
+                <tbody>{bulkDone.map((r) => <tr key={r.employeeCode}><td>{r.name}{r.displayOnly ? "（表示専用）" : ""}</td><td>{r.employeeCode}</td><td>{nameOfStore(r.storeId)}</td><td><b style={{ letterSpacing: 2, fontSize: 16 }}>{r.passcode}</b></td></tr>)}</tbody></table>
             </div>
             <div className="actions noprint" style={{ margin: "10px 0" }}>
               <button className="ghost" style={{ color: "var(--ink)" }} onClick={() => { document.body.classList.add("printing-result"); window.print(); document.body.classList.remove("printing-result"); }}>印刷</button>

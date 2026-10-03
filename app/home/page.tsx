@@ -1,15 +1,19 @@
 "use client";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { api, MeProvider, useMe } from "@/lib/client";
 import { LEVEL_NAMES } from "@/lib/permissions";
 
 function Cards() {
   const { me, logout } = useMe();
+  const router = useRouter();
+  useEffect(() => { if (me.displayOnly) router.replace("/shifts"); }, [me.displayOnly, router]);   // お店のiPadは、すぐシフトの画面へ
   const [low, setLow] = useState(0);
   const [leave, setLeave] = useState<{ remaining: number } | null>(null);
   useEffect(() => { api<{ remaining: number } | null>("/api/leave?me=1").then(setLeave).catch(() => {}); }, []);
   useEffect(() => { if (me.level >= 2) api<{ count: number }>(`/api/stock?storeId=${me.storeId}&low=1`).then((r) => setLow(r.count)).catch(() => {}); }, [me.level, me.storeId]);
+  if (me.displayOnly) return null;
   const cards = [
     { href: "/shifts", title: "シフトを見る", sub: "今日の出勤・月のシフト・みんなの休み", show: true },
     { href: "/admin/attendance", title: "出勤簿", sub: "出勤・退勤・休憩・実働、有給の残り", show: me.level >= 3 },

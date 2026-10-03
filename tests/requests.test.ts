@@ -14,6 +14,7 @@ async function as<T>(user: string, fn: () => Promise<T>) {
   await db.exec(`select set_config('app.user_id','${user}',false); set role app_user;`);
   try { return await fn(); } finally { await db.exec("reset role"); }
 }
+const admin0 = () => db.exec("select set_config('app.user_id','',false)");
 const fails = async (sql: string) => { try { return ((await db.query(sql)).affectedRows ?? 0) === 0; } catch { return true; } };
 const rows = async (sql: string) => (await db.query<Record<string, unknown>>(sql)).rows;
 const hope = (who: string, store: string, day: string, kind = "hope") =>
@@ -140,5 +141,27 @@ describe("希望休を見られる範囲・代理入力", () => {
     });
     await as(U.shift1, async () => expect(await fails(hope(U.staff1b, S1, "2026-12-01", "holiday"))).toBe(true));
     await as(U.office, async () => expect(await fails(hope(U.staff2, S2, "2026-11-29", "holiday"))).toBe(false));
+  });
+});
+
+describe("表示専用アカウント（お店のiPad）", () => {
+  const dispId = id(50);
+  it("表示専用は、希望休を出せない。ほかの人（同じレベル1）は出せる", async () => {
+    await admin0();
+    await db.exec(`update store_period_status set status='collecting', request_close_at = null where period_id='${P}' and store_id='${S1}'`);
+    await db.exec(`insert into memberships (id, company_id, store_id, employee_code, name, level, on_shift, display_only) values ('${dispId}','${CO_A}','${S1}','D1','店のiPad',1,false,true)`);
+    await as(dispId, async () => expect(await fails(hope(dispId, S1, "2026-12-05"))).toBe(true));
+    await as(U.staff1b, async () => expect(await fails(hope(U.staff1b, S1, "2026-12-05"))).toBe(false));
+  });
+  it("表示専用は、シフト・出勤簿に載せられない（レベル1・シフトに入らない）", async () => {
+    await admin0();
+    await expect(db.exec(`update memberships set on_shift = true where id='${dispId}'`)).rejects.toThrow();
+    await expect(db.exec(`update memberships set level = 2 where id='${dispId}'`)).rejects.toThrow();
+  });
+  it("表示専用アカウントを作れるのは管理者だけ（店長・シフト担当は不可）", async () => {
+    const ins = (code: string) => `insert into memberships (company_id, store_id, employee_code, name, level, on_shift, display_only) values ('${CO_A}','${S1}','${code}','端末',1,false,true)`;
+    await as(U.mgr1, async () => expect(await fails(ins("D2"))).toBe(true));
+    await as(U.shift1, async () => expect(await fails(ins("D3"))).toBe(true));
+    await as(U.office, async () => expect(await fails(ins("D4"))).toBe(false));
   });
 });
