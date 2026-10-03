@@ -562,3 +562,182 @@ export async function listLeaveHistory(db: Database, userId: string, membershipI
       `select days, granted_on::text as "grantedOn", note from paid_leave_grants where membership_id = $1 order by granted_on desc, created_at desc`, [membershipId])))
     .rows.map((r) => ({ days: Number(r.days), grantedOn: r.grantedOn, note: r.note }));
 }
+
+// ------------------------------------------------------------------ 商品マスター
+export type ProductKind = "retail" | "supply";
+export const PRODUCT_KIND_LABEL: Record<ProductKind, string> = { retail: "店販", supply: "業務" };
+export interface ProductRow { id: string; kind: ProductKind; maker: string; name: string; spec: string; costPrice: number; status: "active" | "discontinued"; storeIds: string[]; }
+export interface ProductInput { maker?: string; name: string; spec?: string; costPrice: number; }
+
+const checkProduct = (p: ProductInput) => {
+  if (!p.name?.trim()) throw new Error("品名を入力してください");
+  if (!Number.isInteger(p.costPrice) || p.costPrice < 0 || p.costPrice > 100000000) throw new Error(`「${p.name}」の仕入値は、0以上の整数（円）で入れてください`);
+};
+const isUnique = (e: unknown) => (e as { code?: string }).code === "23505" || /unique|duplicate/i.test((e as Error).message ?? "");
+
+export async function listProducts(db: Database, userId: string, kind: ProductKind): Promise<ProductRow[]> {
+  return (await asUser(db, userId, (q) =>
+    q.query<ProductRow>(
+      `select p.id, p.kind, p.maker, p.name, p.spec, p.cost_price as "costPrice", p.status,
+              coalesce((select array_agg(ps.store_id) from product_stores ps where ps.product_id = p.id), '{}') as "storeIds"
+         from products p where p.kind = $1 order by p.status, p.maker, p.name, p.spec`, [kind]))).rows;
+}
+
+/** 商品をまとめて登録（Excelからの貼り付けにも使う）。同じ商品がすでにあれば飛ばす */
+export async function createProducts(db: Database, userId: string, kind: ProductKind, items: ProductInput[], storeIds: string[]): Promise<{ created: number; skipped: number }> {
+  if (!["retail", "supply"].includes(kind)) throw new Error("種類が正しくありません");
+  items.forEach(checkProduct);
+  const me = await getMe(db, userId);
+  if (!me) throw new ForbiddenError();
+  try {
+    return await asUser(db, userId, async (q) => {
+      let created = 0;
+      for (const it of items) {
+        const r = await q.query<{ id: string }>(
+          `insert into products (company_id, kind, maker, name, spec, cost_price) values ($1,$2,$3,$4,$5,$6)
+           on conflict (company_id, kind, maker, name, spec) do nothing returning id`,
+          [me.companyId, kind, (it.maker ?? "").trim(), it.name.trim(), (it.spec ?? "").trim(), it.costPrice]);
+        if (r.rows[0]) {
+          created++;
+          for (const sid of storeIds) await q.query("insert into product_stores (product_id, store_id, company_id) values ($1,$2,$3)", [r.rows[0].id, sid, me.companyId]);
+        }
+      }
+      return { created, skipped: items.length - created };
+    });
+  } catch { throw new ForbiddenError(); }
+}
+
+export async function updateProduct(db: Database, userId: string, id: string, p: ProductInput & { status?: "active" | "discontinued" }): Promise<void> {
+  checkProduct(p);
+  let n = 0;
+  try {
+    n = (await asUser(db, userId, (q) =>
+      q.query("update products set maker = $2, name = $3, spec = $4, cost_price = $5, status = coalesce($6, status) where id = $1 returning id",
+        [id, (p.maker ?? "").trim(), p.name.trim(), (p.spec ?? "").trim(), p.costPrice, p.status ?? null]))).rows.length;
+  } catch (e) { if (isUnique(e)) throw new Error("同じ商品（メーカー・品名・規格）がすでにあります"); throw new ForbiddenError(); }
+  if (n === 0) throw new ForbiddenError();
+}
+
+/** この商品を使うお店を、指定の店舗だけにする（共通＝全店、専用＝1店舗） */
+export async function setProductStores(db: Database, userId: string, productId: string, storeIds: string[]): Promise<void> {
+  const me = await getMe(db, userId);
+  if (!me) throw new ForbiddenError();
+  try {
+    await asUser(db, userId, async (q) => {
+      const exists = await q.query("select 1 from products where id = $1", [productId]);
+      if (exists.rows.length === 0) throw new ForbiddenError();
+      await q.query("delete from product_stores where product_id = $1 and not (store_id = any($2::uuid[]))", [productId, storeIds]);
+      for (const sid of storeIds) await q.query("insert into product_stores (product_id, store_id, company_id) values ($1,$2,$3) on conflict do nothing", [productId, sid, me.companyId]);
+    });
+  } catch { throw new ForbiddenError(); }
+}
+
+// ------------------------------------------------------------------ 棚卸し
+export type StocktakeStatus = "open" | "submitted" | "acknowledged";
+export const STOCKTAKE_LABEL: Record<StocktakeStatus, string> = { open: "入力中", submitted: "オフィスに提出済み", acknowledged: "確認済み" };
+export interface StocktakeRow { id: string; storeId: string; kind: ProductKind; takenOn: string; status: StocktakeStatus; lines: number; counted: number; total: number; }
+export interface StocktakeLine { id: string; productId: string | null; maker: string; name: string; spec: string; costPrice: number; quantity: number | null; amount: number; }
+export interface StocktakeDetail extends StocktakeRow { lines: number; items: StocktakeLine[]; editable: boolean; canManage: boolean; }
+
+export async function listStocktakes(db: Database, userId: string, storeId: string, kind: ProductKind): Promise<StocktakeRow[]> {
+  return (await asUser(db, userId, (q) =>
+    q.query<{ id: string; storeId: string; kind: ProductKind; takenOn: string; status: StocktakeStatus; lines: number; counted: number; total: string | null }>(
+      `select s.id, s.store_id as "storeId", s.kind, s.taken_on::text as "takenOn", s.status,
+              count(l.id)::int as lines, count(l.quantity)::int as counted, sum(l.amount)::text as total
+         from stocktakes s left join stocktake_lines l on l.stocktake_id = s.id
+        where s.store_id = $1 and s.kind = $2 group by s.id order by s.taken_on desc`, [storeId, kind])))
+    .rows.map((r) => ({ ...r, total: Number(r.total ?? 0) }));
+}
+
+export async function startStocktake(db: Database, userId: string, storeId: string, kind: ProductKind, takenOn: string): Promise<string> {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(takenOn)) throw new Error("棚卸日を入れてください");
+  const me = await getMe(db, userId);
+  if (!me) throw new ForbiddenError();
+  try {
+    return await asUser(db, userId, async (q) => {
+      const st = (await q.query<{ id: string }>("insert into stocktakes (company_id, store_id, kind, taken_on) values ($1,$2,$3,$4) returning id", [me.companyId, storeId, kind, takenOn])).rows[0].id;
+      await q.query(
+        `insert into stocktake_lines (stocktake_id, company_id, store_id, product_id, maker, name, spec, cost_price, sort_order)
+         select $1, $2, $3, p.id, p.maker, p.name, p.spec, p.cost_price, row_number() over (order by p.maker, p.name, p.spec)
+           from products p join product_stores ps on ps.product_id = p.id
+          where ps.store_id = $3 and p.kind = $4 and p.status = 'active'`, [st, me.companyId, storeId, kind]);
+      return st;
+    });
+  } catch (e) {
+    if (isUnique(e)) throw new Error("その日の棚卸しは、すでに作られています");
+    throw new ForbiddenError();
+  }
+}
+
+export async function getStocktake(db: Database, userId: string, id: string): Promise<StocktakeDetail | null> {
+  return asUser(db, userId, async (q) => {
+    const h = (await q.query<{ id: string; storeId: string; kind: ProductKind; takenOn: string; status: StocktakeStatus }>(
+      `select id, store_id as "storeId", kind, taken_on::text as "takenOn", status from stocktakes where id = $1`, [id])).rows[0];
+    if (!h) return null;
+    const items = (await q.query<{ id: string; productId: string | null; maker: string; name: string; spec: string; costPrice: number; quantity: number | null; amount: string }>(
+      `select id, product_id as "productId", maker, name, spec, cost_price as "costPrice", quantity, amount::text as amount
+         from stocktake_lines where stocktake_id = $1 order by sort_order, maker, name, spec`, [id])).rows.map((r) => ({ ...r, amount: Number(r.amount) }));
+    const flags = (await q.query<{ editable: boolean; manage: boolean }>(
+      "select app.stocktake_editable($1, $2) as editable, app.has_perm('stocktake.manage', $2) as manage", [id, h.storeId])).rows[0];
+    return {
+      ...h, lines: items.length, counted: items.filter((i) => i.quantity !== null).length, total: items.reduce((a, i) => a + i.amount, 0),
+      items, editable: flags.editable, canManage: flags.manage,
+    };
+  });
+}
+
+/** 数量を保存（整数のみ。空にすると「未入力」に戻る） */
+export async function saveQuantities(db: Database, userId: string, stocktakeId: string, entries: { lineId: string; quantity: number | null }[]): Promise<void> {
+  for (const e of entries)
+    if (e.quantity !== null && (!Number.isInteger(e.quantity) || e.quantity < 0 || e.quantity > 1000000)) throw new Error("数量は、0以上の整数で入れてください");
+  let ok = true;
+  try {
+    await asUser(db, userId, async (q) => {
+      for (const e of entries) {
+        const r = await q.query("update stocktake_lines set quantity = $3 where id = $1 and stocktake_id = $2 returning id", [e.lineId, stocktakeId, e.quantity]);
+        if (r.rows.length === 0) { ok = false; throw new ForbiddenError(); }
+      }
+    });
+  } catch { ok = false; }
+  if (!ok) throw new ForbiddenError("いまは数量を変更できません（提出済み・確認済み、または権限がありません）");
+}
+
+/** 棚卸しを始めたあとに増えた商品を、一覧に足す */
+export async function syncStocktakeProducts(db: Database, userId: string, stocktakeId: string): Promise<number> {
+  const me = await getMe(db, userId);
+  if (!me) throw new ForbiddenError();
+  try {
+    return await asUser(db, userId, async (q) => {
+      const h = (await q.query<{ storeId: string; kind: ProductKind }>("select store_id as \"storeId\", kind from stocktakes where id = $1", [stocktakeId])).rows[0];
+      if (!h) throw new ForbiddenError();
+      const base = (await q.query<{ m: number }>("select coalesce(max(sort_order), 0) as m from stocktake_lines where stocktake_id = $1", [stocktakeId])).rows[0].m;
+      const r = await q.query(
+        `insert into stocktake_lines (stocktake_id, company_id, store_id, product_id, maker, name, spec, cost_price, sort_order)
+         select $1, $2, $3, p.id, p.maker, p.name, p.spec, p.cost_price, $5 + row_number() over (order by p.maker, p.name, p.spec)
+           from products p join product_stores ps on ps.product_id = p.id
+          where ps.store_id = $3 and p.kind = $4 and p.status = 'active'
+            and not exists (select 1 from stocktake_lines l where l.stocktake_id = $1 and l.product_id = p.id) returning id`,
+        [stocktakeId, me.companyId, h.storeId, h.kind, base]);
+      return r.rows.length;
+    });
+  } catch { throw new ForbiddenError("いまは商品を追加できません"); }
+}
+
+export async function setStocktakeStatus(db: Database, userId: string, stocktakeId: string, status: StocktakeStatus): Promise<void> {
+  let n = 0;
+  try {
+    n = (await asUser(db, userId, (q) => q.query("update stocktakes set status = $2 where id = $1 returning id", [stocktakeId, status]))).rows.length;
+  } catch (e) {
+    const m = (e as Error).message?.match(/there are (\d+) items without a quantity/);
+    if (m) throw new Error(`数量が未入力の商品が ${m[1]} 件あります。すべて入れてから提出してください（ない場合は 0 を入れます）`);
+    throw new ForbiddenError();
+  }
+  if (n === 0) throw new ForbiddenError();
+}
+
+export async function deleteStocktake(db: Database, userId: string, stocktakeId: string): Promise<void> {
+  let n = 0;
+  try { n = (await asUser(db, userId, (q) => q.query("delete from stocktakes where id = $1 returning id", [stocktakeId]))).rows.length; }
+  catch { throw new ForbiddenError(); }
+  if (n === 0) throw new ForbiddenError("入力中の棚卸しだけ削除できます");
+}
