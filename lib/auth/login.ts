@@ -52,7 +52,7 @@ export async function login(
     return { ok: false, reason: "invalid" };
   }
 
-  await db.query(`update memberships set failed_attempts = 0, locked_until = null where id = $1`, [m.id]);
+  await db.query(`update memberships set failed_attempts = 0, locked_until = null, last_login_at = now(), last_seen_at = now() where id = $1`, [m.id]);
   const token = randomBytes(32).toString("base64url");
   await db.query(
     `insert into sessions (token_hash, membership_id, expires_at) values ($1, $2, now() + make_interval(days => $3))`,

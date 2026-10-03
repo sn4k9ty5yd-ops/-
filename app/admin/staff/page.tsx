@@ -11,6 +11,17 @@ async function copyText(text: string) {
   try { await navigator.clipboard.writeText(text); return true; } catch { const t = document.createElement("textarea"); t.value = text; document.body.appendChild(t); t.select(); const ok = document.execCommand("copy"); t.remove(); return ok; }
 }
 const LEVELS: Level[] = [1, 2, 3, 4];
+const ago = (sec: number | null | undefined) => sec == null ? "" : sec < 90 ? "いま" : sec < 3600 ? `${Math.round(sec / 60)}分前` : sec < 86400 ? `${Math.round(sec / 3600)}時間前` : `${Math.round(sec / 86400)}日前`;
+function PresenceBadge({ s }: { s: StaffRow }) {
+  if (!s.presence) return null;
+  const m = {
+    online: { dot: "#1e9e4a", text: "オンライン（いま開いています）" },
+    idle: { dot: "#e0a100", text: `ログイン済み（開いていません${s.seenAgoSec != null ? `・最後 ${ago(s.seenAgoSec)}` : ""}）` },
+    loggedout: { dot: "#8e8e93", text: `ログアウト済み（オフライン${s.seenAgoSec != null ? `・最後 ${ago(s.seenAgoSec)}` : ""}）` },
+    never: { dot: "#d70015", text: "まだログインしていません" },
+  }[s.presence];
+  return <div className="sub" style={{ marginTop: 2 }}><span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 99, background: m.dot, marginRight: 6 }} />{m.text}</div>;
+}
 
 export default function StaffPage() {
   const { me } = useMe();
@@ -28,7 +39,7 @@ export default function StaffPage() {
     setStaff(s); setStores(st);
   }, []);
   useEffect(() => { load(); }, [load]);
-  useAutoRefresh(load);
+  useAutoRefresh(load, 15);
 
   const run = async (fn: () => Promise<void>) => {
     try { await fn(); setMsg(""); await load(); } catch (e) { setMsg((e as Error).message); }
@@ -54,12 +65,18 @@ export default function StaffPage() {
         </div>
       )}
 
+      {me.level === 4 && (() => {
+        const act = staff.filter((x) => x.status === "active");
+        const n = (k: string) => act.filter((x) => x.presence === k).length;
+        return <p className="hint">オンライン <b>{n("online")}</b> 人 ／ ログイン済み（開いていない） <b>{n("idle")}</b> 人 ／ ログアウト済み <b>{n("loggedout")}</b> 人 ／ まだログインしていない <b>{n("never")}</b> 人（社員番号の小さい順）</p>;
+      })()}
       <ul className="list">
         {staff.map((s) => (
           <li key={s.id} className={s.status === "disabled" ? "off" : ""}>
             <div>
               <b>{s.name}</b> <span className="sub">{storeName(s.storeId)}</span>{s.displayOnly && <span className="chip warn">表示専用（お店の端末）</span>}
               <div className="sub">社員番号 {s.employeeCode}{s.status === "disabled" && " ／ 退職（無効）"}{s.status === "active" && !s.displayOnly && (s.onShift ? " ／ シフトに入る" : " ／ シフトに入らない")}</div>
+              {s.status === "active" && <PresenceBadge s={s} />}
             </div>
             <div className="actions">
               {me.level === 4 && s.status === "disabled" && !s.employeeCode.includes("-退職") && (

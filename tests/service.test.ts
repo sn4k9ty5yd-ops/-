@@ -17,7 +17,7 @@ async function person(co: string, code: string, name: string, level: number, st:
 
 beforeAll(async () => {
   db = await newDb();
-  expect(await migrate(db)).toEqual(["0001_tenant_core.sql", "0002_periods_requests.sql", "0003_store_changes.sql", "0004_shifts.sql", "0005_break_rule.sql", "0006_attendance.sql", "0007_products_stocktake.sql", "0008_stock.sql", "0009_display_accounts.sql"]);
+  expect(await migrate(db)).toEqual(["0001_tenant_core.sql", "0002_periods_requests.sql", "0003_store_changes.sql", "0004_shifts.sql", "0005_break_rule.sql", "0006_attendance.sql", "0007_products_stocktake.sql", "0008_stock.sql", "0009_display_accounts.sql", "0010_presence.sql"]);
   expect(await migrate(db)).toEqual([]); // 2回目は何もしない
   const a = (await db.query<{ id: string }>("insert into companies (code, name) values ('co-a','A社') returning id")).rows[0].id;
   const b = (await db.query<{ id: string }>("insert into companies (code, name) values ('co-b','B社') returning id")).rows[0].id;
@@ -103,5 +103,27 @@ describe("退職者の社員番号を空ける", () => {
     const r = await svc.addStaff(db, id.office, { name: "新しい人", employeeCode: "2200", storeId: store.a1, level: 1 });
     expect(r.passcode).toMatch(/^\d{6}$/);
     await expect(svc.releaseRetiredCode(db, id.office, old)).rejects.toThrow("すでに");
+  });
+});
+
+describe("ログイン状況と並び順（管理者のみ）", () => {
+  it("社員番号の小さい順に並び、管理者だけがログイン状況を見られる", async () => {
+    const co = (await db.query<{ company_id: string }>("select company_id from memberships where id=$1", [id.office])).rows[0].company_id;
+    const p = await svc.addStaff(db, id.office, { name: "状況テスト", employeeCode: "5500", storeId: store.a1, level: 1 });
+    const codes = (await svc.listStaff(db, id.office)).map((s) => s.employeeCode);
+    const nums = codes.filter((c) => /^\d+$/.test(c)).map(Number);
+    expect(nums).toEqual([...nums].sort((a, b) => a - b));
+    let row = (await svc.listStaff(db, id.office)).find((s) => s.id === p.id)!;
+    expect(row.presence).toBe("never");
+    const l = await login(db, { companyCode: "co-a", employeeCode: "5500", passcode: p.passcode });
+    expect(l.ok).toBe(true);
+    row = (await svc.listStaff(db, id.office)).find((s) => s.id === p.id)!;
+    expect(row.presence).toBe("online");
+    await db.query("update memberships set last_seen_at = now() - interval '10 minutes' where id=$1", [p.id]);
+    expect((await svc.listStaff(db, id.office)).find((s) => s.id === p.id)!.presence).toBe("idle");
+    await db.query("delete from sessions where membership_id=$1", [p.id]);
+    expect((await svc.listStaff(db, id.office)).find((s) => s.id === p.id)!.presence).toBe("loggedout");
+    expect((await svc.listStaff(db, id.mgr)).every((s) => s.presence === undefined)).toBe(true);
+    void co;
   });
 });

@@ -13,6 +13,14 @@ export async function currentUserId(): Promise<string | null> {
   return validateSession(await getDb(), token);
 }
 
+/** 「いま開いている」印。30秒に1回だけ書く（画面は30秒ごとに自動更新するので、開いている間は続く） */
+async function touchPresence(userId: string) {
+  try {
+    await (await getDb()).query(
+      "update memberships set last_seen_at = now() where id = $1 and (last_seen_at is null or last_seen_at < now() - interval '30 seconds')", [userId]);
+  } catch { /* 印がつけられなくても、本来の処理は続ける */ }
+}
+
 export const json = (data: unknown, status = 200) => NextResponse.json(data, { status });
 
 /** 他サイトからのなりすまし送信(CSRF)対策: 書き込みは JSON 形式のみ受け付ける（SameSite Cookieと併用） */
@@ -30,6 +38,7 @@ export function authed<P = Record<string, never>>(
     if (opts.write && !isJson(req)) return json({ error: "不正なリクエストです" }, 400);
     const userId = await currentUserId();
     if (!userId) return json({ error: "ログインが必要です" }, 401);
+    await touchPresence(userId);
     try {
       return await fn(userId, req, await ctx.params);
     } catch (e) {

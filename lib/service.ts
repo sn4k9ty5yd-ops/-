@@ -10,7 +10,11 @@ import type { Level } from "./permissions";
 
 export interface Me { id: string; name: string; level: Level; storeId: string; companyId: string; companyName: string; closingStartDay: number; breakRule: BreakRule; displayOnly: boolean; }
 export interface StoreRow { id: string; name: string; status: "active" | "closed"; defaultOpen: string; defaultClose: string; }
+/** 管理者だけが見られる、ログインの状況 */
+export type Presence = "online" | "idle" | "loggedout" | "never";
+export const ONLINE_SECONDS = 120; // これ以内に開いていれば「オンライン」
 export interface StaffRow {
+  presence?: Presence; seenAgoSec?: number | null;
   id: string; name: string; employeeCode: string; storeId: string; level: Level; status: "active" | "disabled"; manageable: boolean; onShift: boolean; displayOnly: boolean;
 }
 
@@ -110,11 +114,36 @@ export async function listStaff(db: Database, userId: string): Promise<StaffRow[
   const { rows } = await asUser(db, userId, (q) =>
     q.query<StaffRow>(
       `select id, name, employee_code as "employeeCode", store_id as "storeId", level, status, on_shift as "onShift", display_only as "displayOnly" from memberships order by store_id, level desc, name`));
-  // 「操作できる人」かは、画面のボタン表示のための目安（本当の判定はDBが行う）
+  // ログインの状況は管理者(Lv4)だけに見せる（管理用接続で読む）
+  const pres = new Map<string, { presence: Presence; seenAgoSec: number | null }>();
+  if (me.level === 4 && rows.length > 0) {
+    const p = await db.query<{ id: string; ever: boolean; has_session: boolean; ago: number | null }>(
+      `select m.id, (m.last_login_at is not null) as ever,
+              exists (select 1 from sessions s where s.membership_id = m.id and s.expires_at > now()) as has_session,
+              extract(epoch from (now() - m.last_seen_at))::float8 as ago
+         from memberships m where m.id = any($1::uuid[])`, [rows.map((r) => r.id)]);
+    for (const r of p.rows) {
+      const ago = r.ago === null ? null : Number(r.ago);
+      const presence: Presence = !r.ever && !r.has_session ? "never"
+        : r.has_session && ago !== null && ago <= ONLINE_SECONDS ? "online"
+        : r.has_session ? "idle" : "loggedout";
+      pres.set(r.id, { presence, seenAgoSec: ago });
+    }
+  }
+  // 「操作できる人」かは、画面のボタン表示のための目安（本当の判定はDBが行う）。社員番号の小さい順に並べる
   return rows.map((r) => ({
     ...r,
+    ...(pres.get(r.id) ?? {}),
     manageable: me.level === 4 || (me.level === 3 && r.storeId === me.storeId && r.level < me.level),
-  }));
+  })).sort(compareEmployeeCode);
+}
+
+/** 社員番号の小さい順（数字は数として比べる。数字でないものは最後） */
+export function compareEmployeeCode(a: { employeeCode: string }, b: { employeeCode: string }): number {
+  const na = /^\d+/.exec(a.employeeCode), nb = /^\d+/.exec(b.employeeCode);
+  if (na && nb) { const d = Number(na[0]) - Number(nb[0]); if (d !== 0) return d; }
+  else if (na) return -1; else if (nb) return 1;
+  return a.employeeCode.localeCompare(b.employeeCode, "ja");
 }
 
 /** スタッフ登録。パスコードを発行して返す（このときだけ見られる） */
