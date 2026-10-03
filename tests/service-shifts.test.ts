@@ -33,6 +33,16 @@ describe("シフト作成サービス", () => {
     await expect(svc.setOnShift(db, id.a, id.b, false)).rejects.toThrow(svc.ForbiddenError);                 // スタッフは不可
   });
 
+  it("希望休を、公休／有給を選んで出し、出し直しで種類が変わり、取り消せる", async () => {
+    await svc.setMyRequest(db, id.b, periodId, "2026-11-22", "hope");
+    await svc.setMyRequest(db, id.b, periodId, "2026-11-22", "paid");
+    let r = (await svc.listRequests(db, id.b, periodId)).filter((x) => x.membershipId === id.b && x.day === "2026-11-22");
+    expect(r.map((x) => x.kind)).toEqual(["paid"]);
+    await svc.setMyRequest(db, id.b, periodId, "2026-11-22", null);
+    r = (await svc.listRequests(db, id.b, periodId)).filter((x) => x.membershipId === id.b && x.day === "2026-11-22");
+    expect(r).toHaveLength(0);
+  });
+
   it("希望休を提出 → シフトに一括反映（休み/有給）。すでにあるシフトは上書きしない", async () => {
     await svc.toggleMyRequest(db, id.a, periodId, "2026-11-18");
     await svc.toggleMyRequest(db, id.a, periodId, "2026-11-19", "paid");
@@ -40,7 +50,7 @@ describe("シフト作成サービス", () => {
     expect(await svc.applyRequests(db, id.shift1, periodId, st.s1)).toBe(2);
     expect(await svc.applyRequests(db, id.shift1, periodId, st.s1)).toBe(0);  // 2回目は何も増えない
     const rows = await svc.listShifts(db, id.shift1, periodId, st.s1);
-    expect(rows.map((r) => `${r.day}:${r.kind}`).sort()).toEqual(["2026-11-18:off", "2026-11-19:paid"]);
+    expect(rows.map((r) => `${r.day}:${r.kind}`).sort()).toEqual(["2026-11-18:holiday", "2026-11-19:paid"]);
   });
 
   it("全員を基本時間で一括入力。希望休の人は休み、すでにある日は変えない", async () => {
@@ -49,7 +59,7 @@ describe("シフト作成サービス", () => {
     expect(n).toBe(7);
     const rows = await svc.listShifts(db, id.shift1, periodId, st.s1);
     const a18 = rows.find((r) => r.membershipId === id.a && r.day === "2026-11-18")!;
-    expect(a18.kind).toBe("off");
+    expect(a18.kind).toBe("holiday");
     const b21 = rows.find((r) => r.membershipId === id.b && r.day === "2026-11-21")!;
     expect([b21.kind, b21.start, b21.end]).toEqual(["work", "10:00", "19:00"]);
   });

@@ -3,7 +3,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useCallback } from "react";
 import { api, useAutoRefresh, useMe } from "@/lib/client";
-import { daysOf, dow, KIND_LABEL, md, WEEKDAYS } from "@/lib/labels";
+import { daysOf, dow, KIND_LABEL, md, shortNames, WEEKDAYS } from "@/lib/labels";
 import { PeriodNav, periodFor, todayJst, tintStyle } from "@/lib/period-nav";
 import type { Period } from "@/lib/periods";
 import type { PeriodRow, RequestRow } from "@/lib/service";
@@ -12,7 +12,7 @@ export default function RequestsOverview() {
   const { me } = useMe();
   const [periods, setPeriods] = useState<PeriodRow[]>([]);
   const [view, setView] = useState<Period>(() => periodFor(todayJst(), me.closingStartDay));
-  const [names, setNames] = useState<{ id: string; name: string; storeId: string }[]>([]);
+  const [names, setNames] = useState<{ id: string; name: string; storeId: string; shortName?: string | null }[]>([]);
   const [stores, setStores] = useState<{ id: string; name: string; status: string }[]>([]);
   const [reqs, setReqs] = useState<RequestRow[]>([]);
   const [storeId, setStoreId] = useState(me.storeId);
@@ -34,6 +34,7 @@ export default function RequestsOverview() {
   const activeStores = stores.filter((x) => x.status === "active" && names.some((n) => n.storeId === x.id));
   const sid = activeStores.some((x) => x.id === storeId) ? storeId : (activeStores.find((x) => x.id === me.storeId) ?? activeStores[0])?.id ?? "";
   const people = names.filter((n) => n.storeId === sid);
+  const short = shortNames(people);
   const today = todayJst();
   return (
     <>
@@ -57,7 +58,7 @@ export default function RequestsOverview() {
               return (
                 <div key={d} className={`mday req ${d === today ? "today" : ""} ${dow(d) === 0 ? "sun" : dow(d) === 6 ? "sat" : ""}`}>
                   <div className="num">{md(d)}{off.length > 0 && <b className="cnt">{off.length}</b>}</div>
-                  {off.map((n) => <div key={n.id} className={`nm ${n.id === me.id ? "me" : ""}`}>{n.name}{key.get(`${n.id}|${d}`) === "paid" ? "(有)" : ""}</div>)}
+                  {off.length > 0 && <div className="names">{off.map((n, i) => <span key={n.id} className={n.id === me.id ? "me" : ""}>{i > 0 && "・"}{short.get(n.id)}{key.get(`${n.id}|${d}`) === "paid" ? "(有)" : ""}</span>)}</div>}
                 </div>
               );
             })}

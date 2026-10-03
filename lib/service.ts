@@ -15,7 +15,7 @@ export type Presence = "online" | "idle" | "loggedout" | "never";
 export const ONLINE_SECONDS = 120; // これ以内に開いていれば「オンライン」
 export interface StaffRow {
   presence?: Presence; seenAgoSec?: number | null; retireOn?: string | null;
-  id: string; name: string; employeeCode: string; storeId: string; level: Level; status: "active" | "disabled"; manageable: boolean; onShift: boolean; displayOnly: boolean; canEvaluate?: boolean; rank?: "assistant" | "stylist" | null;
+  id: string; name: string; employeeCode: string; storeId: string; level: Level; status: "active" | "disabled"; manageable: boolean; onShift: boolean; displayOnly: boolean; canEvaluate?: boolean; rank?: "assistant" | "stylist" | null; shortName?: string | null;
 }
 
 export class ForbiddenError extends Error {
@@ -113,7 +113,7 @@ export async function listStaff(db: Database, userId: string): Promise<StaffRow[
   if (!me) return [];
   const { rows } = await asUser(db, userId, (q) =>
     q.query<StaffRow>(
-      `select id, name, employee_code as "employeeCode", store_id as "storeId", level, status, on_shift as "onShift", display_only as "displayOnly", can_evaluate as "canEvaluate", rank from memberships order by store_id, level desc, name`));
+      `select id, name, employee_code as "employeeCode", store_id as "storeId", level, status, on_shift as "onShift", display_only as "displayOnly", can_evaluate as "canEvaluate", rank, short_name as "shortName" from memberships order by store_id, level desc, name`));
   // ログインの状況は管理者(Lv4)だけに見せる（管理用接続で読む）
   const pres = new Map<string, { presence: Presence; seenAgoSec: number | null; retireOn: string | null }>();
   if (me.level === 4 && rows.length > 0) {
@@ -195,9 +195,15 @@ export async function setStaffLevel(db: Database, userId: string, targetId: stri
 }
 
 /** 名前・社員番号の変更（管理者のみ。自分自身も可）。ログイン中の端末はそのまま使える */
-export async function updateStaffProfile(db: Database, userId: string, targetId: string, input: { name?: string; employeeCode?: string }): Promise<void> {
+export async function updateStaffProfile(db: Database, userId: string, targetId: string, input: { name?: string; employeeCode?: string; shortName?: string | null }): Promise<void> {
   const me = await getMe(db, userId);
   if (!me || me.level < 4) throw new ForbiddenError();
+  if (input.shortName !== undefined) {
+    const sn = (input.shortName ?? "").trim();
+    if (sn.length > 6) throw new Error("短い名前は、6文字までにしてください");
+    try { await asUser(db, userId, (q) => q.query("update memberships set short_name = $2 where id = $1", [targetId, sn || null])); } catch { throw new ForbiddenError(); }
+    if (input.name === undefined && input.employeeCode === undefined) return;
+  }
   const name = input.name?.trim(), code = input.employeeCode?.trim();
   if (name === "" ) throw new Error("名前を入れてください");
   if (code !== undefined && !/^[A-Za-z0-9]{1,20}$/.test(code)) throw new Error("社員番号は、英数字（20文字まで）にしてください");
@@ -373,10 +379,25 @@ export async function toggleMyRequest(db: Database, userId: string, periodId: st
   } catch { throw new Error("いまは希望休を変更できません（受付期間外、または期間外の日付です）"); }
 }
 
-export async function listNames(db: Database, userId: string): Promise<{ id: string; name: string; storeId: string }[]> {
+/** 自分の希望休を、公休(hope)か有給(paid)で出す。kind が null なら、取り消す（受付中のみ。ルールはDBが判定） */
+export async function setMyRequest(db: Database, userId: string, periodId: string, day: string, kind: "hope" | "paid" | null): Promise<void> {
+  const me = await getMe(db, userId);
+  if (!me) throw new ForbiddenError();
+  if (me.displayOnly) throw new Error("このアカウントは、見るだけです（希望休は出せません）");
+  try {
+    await asUser(db, userId, async (q) => {
+      await q.query("delete from time_off_requests where membership_id = $1 and period_id = $2 and day = $3", [userId, periodId, day]);
+      if (kind) await q.query(
+        "insert into time_off_requests (company_id, membership_id, store_id, period_id, day, kind) values ($1,$2,$3,$4,$5,$6)",
+        [me.companyId, userId, me.storeId, periodId, day, kind]);
+    });
+  } catch { throw new Error("いまは希望休を変更できません（受付期間外、または期間外の日付です）"); }
+}
+
+export async function listNames(db: Database, userId: string): Promise<{ id: string; name: string; storeId: string; shortName: string | null }[]> {
   return (await asUser(db, userId, (q) =>
-    q.query<{ id: string; name: string; storeId: string }>(
-      `select id, name, store_id as "storeId" from memberships where status = 'active' and on_shift order by store_id, level desc, name`))).rows;
+    q.query<{ id: string; name: string; storeId: string; shortName: string | null }>(
+      `select id, name, store_id as "storeId", short_name as "shortName" from memberships where status = 'active' and on_shift order by store_id, level desc, name`))).rows;
 }
 
 
@@ -406,10 +427,10 @@ export async function setOnShift(db: Database, userId: string, targetId: string,
 }
 
 /** シフト表に載せる人（その店舗の在籍者でシフトに入る人） */
-export async function listRoster(db: Database, userId: string, storeId: string): Promise<{ id: string; name: string; level: Level }[]> {
+export async function listRoster(db: Database, userId: string, storeId: string): Promise<{ id: string; name: string; level: Level; shortName: string | null }[]> {
   return (await asUser(db, userId, (q) =>
-    q.query<{ id: string; name: string; level: Level }>(
-      "select id, name, level from memberships where store_id = $1 and status = 'active' and on_shift order by level desc, name", [storeId]))).rows;
+    q.query<{ id: string; name: string; level: Level; shortName: string | null }>(
+      "select id, name, level, short_name as \"shortName\" from memberships where store_id = $1 and status = 'active' and on_shift order by level desc, name", [storeId]))).rows;
 }
 
 export async function listShifts(db: Database, userId: string, periodId: string, storeId: string): Promise<ShiftRow[]> {
@@ -481,7 +502,7 @@ export async function applyRequests(db: Database, userId: string, periodId: stri
     (await q.query(
       `insert into shifts (company_id, store_id, period_id, membership_id, day, kind)
        select r.company_id, r.store_id, r.period_id, r.membership_id, r.day,
-              case r.kind when 'paid' then 'paid' when 'holiday' then 'holiday' when 'other' then 'other' else 'off' end
+              case r.kind when 'paid' then 'paid' when 'other' then 'other' else 'holiday' end
          from time_off_requests r join memberships m on m.id = r.membership_id
         where r.period_id = $1 and r.store_id = $2 and m.status = 'active' and m.on_shift
        on conflict (membership_id, day) do nothing returning id`, [periodId, storeId])).rows.length);
@@ -504,7 +525,7 @@ export async function fillDefault(
     const k = `${id}|${day}`;
     if (!input.overwrite && existing.has(k)) continue;
     const req = reqs.get(k);
-    entries.push(req ? { membershipId: id, day, kind: req === "paid" ? "paid" : req === "holiday" ? "holiday" : "off" } : { membershipId: id, day, kind: "work", start: input.start, end: input.end });
+    entries.push(req ? { membershipId: id, day, kind: req === "paid" ? "paid" : "holiday" } : { membershipId: id, day, kind: "work", start: input.start, end: input.end });
   }
   return saveShifts(db, userId, input.periodId, input.storeId, entries);
 }

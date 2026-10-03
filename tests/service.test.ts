@@ -17,7 +17,7 @@ async function person(co: string, code: string, name: string, level: number, st:
 
 beforeAll(async () => {
   db = await newDb();
-  expect(await migrate(db)).toEqual(["0001_tenant_core.sql", "0002_periods_requests.sql", "0003_store_changes.sql", "0004_shifts.sql", "0005_break_rule.sql", "0006_attendance.sql", "0007_products_stocktake.sql", "0008_stock.sql", "0009_display_accounts.sql", "0010_presence.sql", "0011_saturday_hours.sql", "0012_scheduled_retirement.sql", "0013_manual.sql", "0014_ranks.sql"]);
+  expect(await migrate(db)).toEqual(["0001_tenant_core.sql", "0002_periods_requests.sql", "0003_store_changes.sql", "0004_shifts.sql", "0005_break_rule.sql", "0006_attendance.sql", "0007_products_stocktake.sql", "0008_stock.sql", "0009_display_accounts.sql", "0010_presence.sql", "0011_saturday_hours.sql", "0012_scheduled_retirement.sql", "0013_manual.sql", "0014_ranks.sql", "0015_short_name.sql"]);
   expect(await migrate(db)).toEqual([]); // 2回目は何もしない
   const a = (await db.query<{ id: string }>("insert into companies (code, name) values ('co-a','A社') returning id")).rows[0].id;
   const b = (await db.query<{ id: string }>("insert into companies (code, name) values ('co-b','B社') returning id")).rows[0].id;
@@ -179,5 +179,16 @@ describe("退職予定日", () => {
     expect((await svc.listStaff(db, id.office)).find((s) => s.id === p.id)).toMatchObject({ status: "disabled" });
     await expect(svc.setRetireDate(db, id.office, id.office, "2000-01-01")).rejects.toThrow("ほかに有効な管理者"); // 最後の管理者は決められない
     void co;
+  });
+});
+
+describe("希望休を公休／有給で出す", () => {
+  it("同じ日を出し直すと種類が変わり、取り消せる。短い名前は自動で決まり、同じ苗字は区別される", async () => {
+    const { shortNames } = await import("../lib/labels");
+    const m = shortNames([
+      { id: "1", name: "金子直樹" }, { id: "2", name: "金子嵩史" }, { id: "3", name: "永尾和徳" }, { id: "4", name: "山口 遥" }, { id: "5", name: "廣茉紀", shortName: "廣" },
+    ]);
+    expect([...m.values()]).toEqual(["金子直", "金子嵩", "永尾", "山口", "廣"]);
+    await expect(svc.setMyRequest(db, id.staff, "00000000-0000-0000-0000-000000000000", "2026-11-18", "hope")).rejects.toThrow("いまは希望休を変更できません");
   });
 });

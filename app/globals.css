@@ -196,3 +196,7 @@ main.xwide{max-width:1400px;margin:0 auto;padding:16px}
 
 .mday .nm.more{color:var(--blue);font-weight:700;background:none;padding:0}
 .sheet-bg .sheet h3{font-size:15px}
+
+.mday .names{font-size:11px;line-height:1.45;word-break:keep-all;overflow-wrap:anywhere}
+.mday .names .me{font-weight:800;color:var(--blue)}
+@media (min-width:700px){.mday .names{font-size:13px}}

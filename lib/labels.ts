@@ -11,7 +11,7 @@ export const NEXT_ACTION: Partial<Record<PeriodStatus, { to: PeriodStatus; label
   submitted: { to: "acknowledged", label: "確認済みにする" },
 };
 export const WEEKDAYS = ["日", "月", "火", "水", "木", "金", "土"];
-export const KIND_LABEL: Record<string, string> = { hope: "希望休", paid: "有給", holiday: "公休", other: "その他" };
+export const KIND_LABEL: Record<string, string> = { hope: "公休", paid: "有給", holiday: "公休", other: "その他" };
 
 /** 期間の全日付（YYYY-MM-DD）を返す */
 export function daysOf(start: string, end: string): string[] {
@@ -27,4 +27,25 @@ export function hoursOn(store: { defaultOpen: string; defaultClose: string; satO
   const base = { start: store?.defaultOpen ?? "10:00", end: store?.defaultClose ?? "19:00" };
   if (store?.satOpen && store.satClose && new Date(`${day}T00:00:00Z`).getUTCDay() === 6) return { start: store.satOpen, end: store.satClose };
   return base;
+}
+
+/** カレンダー用の短い名前。登録してあればそれ、なければ「空白の前（苗字）」か、先頭2文字。
+ *  同じ短い名前の人が複数いるとき（金子直樹・金子嵩史）は、名前の最初の1文字を足す（金子直・金子嵩）。 */
+export function shortNames(people: { id: string; name: string; shortName?: string | null }[]): Map<string, string> {
+  const base = (p: { name: string; shortName?: string | null }) => {
+    if (p.shortName?.trim()) return p.shortName.trim();
+    const n = p.name.normalize("NFKC").trim();
+    const sp = n.split(/[\s\u3000]+/);
+    if (sp.length > 1) return sp[0];
+    return n.length <= 2 ? n : n.slice(0, 2);
+  };
+  const count = new Map<string, number>();
+  for (const p of people) count.set(base(p), (count.get(base(p)) ?? 0) + 1);
+  const out = new Map<string, string>();
+  for (const p of people) {
+    const b = base(p);
+    const given = p.name.normalize("NFKC").replace(/[\s\u3000]+/g, "").slice(b.length, b.length + 1);
+    out.set(p.id, (count.get(b) ?? 0) > 1 && !p.shortName?.trim() ? b + given : b);
+  }
+  return out;
 }

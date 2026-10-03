@@ -2,14 +2,14 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, MeProvider, useAutoRefresh, useMe } from "@/lib/client";
-import { dow, hoursOn, md, daysOf, WEEKDAYS } from "@/lib/labels";
+import { dow, hoursOn, md, daysOf, shortNames, WEEKDAYS } from "@/lib/labels";
 import { ShiftSheet } from "@/app/admin/shifts/ShiftSheet";
 import { PeriodNav, periodFor, todayJst, tintStyle } from "@/lib/period-nav";
 import type { Period } from "@/lib/periods";
 import { STATUS_ORDER, type PeriodRow, type ShiftRow, type StoreRow } from "@/lib/service";
 import { longText } from "@/lib/shift-ui";
 
-type Person = { id: string; name: string };
+type Person = { id: string; name: string; shortName?: string | null };
 const LABEL: Record<string, string> = { off: "休", paid: "有給", holiday: "公休", other: "他" };
 
 function Page() {
@@ -56,6 +56,7 @@ function Page() {
   useAutoRefresh(() => { load().catch(() => {}); });
 
   const name = useMemo(() => new Map(roster.map((r) => [r.id, r.name])), [roster]);
+  const short = useMemo(() => shortNames(roster), [roster]);
   const byDay = useMemo(() => { const m = new Map<string, ShiftRow[]>(); for (const s of shifts) m.set(s.day, [...(m.get(s.day) ?? []), s]); return m; }, [shifts]);
   if (!ready || !view) return null;
   const days = daysOf(view.start, view.end);
@@ -95,17 +96,17 @@ function Page() {
             {Array.from({ length: dow(days[0]) }).map((_, i) => <div key={`b${i}`} />)}
             {days.map((d) => {
               const list = (byDay.get(d) ?? []).filter((s) => (show === "work" ? s.kind === "work" : s.kind !== "work"));
-              const SHOW = 3;
-              return (
+                            return (
                 <div key={d} role="button" tabIndex={0} aria-label={`${md(d)}の詳細`} onClick={() => setDetail(d)} onKeyDown={(e) => { if (e.key === "Enter") setDetail(d); }}
                   className={`mday ${d === today ? "today" : ""} ${myOff.has(d) ? "myoff" : ""} ${dow(d) === 0 ? "sun" : dow(d) === 6 ? "sat" : ""}`} style={{ cursor: "pointer" }}>
                   <div className="num"><span>{md(d)}</span>{myOff.has(d) && <small className="myoff-tag"> 休み</small>}</div>
-                  {list.length === 0 && show === "off" ? <small className="sub">なし</small> : <>
-                    {list.slice(0, SHOW).map((s) => (
-                      <div key={s.id} className={`nm ${s.membershipId === me.id ? "me" : ""}`}>{name.get(s.membershipId) ?? ""}{show === "off" ? `(${LABEL[s.kind]})` : ""}</div>
-                    ))}
-                    {list.length > SHOW && <div className="nm more">ほか{list.length - SHOW}人 ▸</div>}
-                  </>}
+                  {list.length === 0 && show === "off" ? <small className="sub">なし</small> : (
+                    <div className="names">
+                      {list.map((s, i) => (
+                        <span key={s.id} className={s.membershipId === me.id ? "me" : ""}>{i > 0 && "・"}{short.get(s.membershipId) ?? ""}{show === "off" && s.kind === "paid" ? "(有)" : ""}</span>
+                      ))}
+                    </div>
+                  )}
                 </div>
               );
             })}

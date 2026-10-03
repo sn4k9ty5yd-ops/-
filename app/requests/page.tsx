@@ -13,6 +13,8 @@ function Page() {
   const [view, setView] = useState<Period | null>(null);
   const [mine, setMine] = useState<Map<string, string>>(new Map());
   const [msg, setMsg] = useState("");
+  const [pick, setPick] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     api<PeriodRow[]>("/api/periods").then((ps) => {
@@ -48,7 +50,7 @@ function Page() {
       <div className="tintbox" style={tintStyle(view.start)}>
         <p className="sub" style={{ margin: "4px 4px 10px" }}>
           {!db ? "この期間は、まだ作成されていません。" : open
-            ? `${STATUS_LABEL[st!.status]}。休みたい日をタップしてください（もう一度タップで取り消し）。`
+            ? `${STATUS_LABEL[st!.status]}。休みたい日をタップして、公休か有給かを選んでください。`
             : `いまは受付していません（${st ? STATUS_LABEL[st.status] : ""}）。`}
         </p>
         <div className="cal2">
@@ -58,16 +60,34 @@ function Page() {
             const kind = mine.get(d);
             return (
               <button key={d} disabled={!open && !kind} className={`d ${kind ? "on" : ""}`}
-                onClick={async () => {
-                  try { await api("/api/requests", { periodId: db!.id, day: d }); setMsg(""); await load(); } catch (e) { setMsg((e as Error).message); }
-                }}>
+                onClick={() => { setMsg(""); setPick(d); }}>
                 <span>{md(d)}</span>{kind && <small>{KIND_LABEL[kind]}</small>}
               </button>
             );
           })}
         </div>
       </div>
-      <p className="hint">この期間に出した希望休：{mine.size}日</p>
+      <p className="hint">この期間に出した希望休：{mine.size}日（公休 {[...mine.values()].filter((k) => k !== "paid").length}日・有給 {[...mine.values()].filter((k) => k === "paid").length}日）</p>
+      {pick && (
+        <div className="sheet-bg" onClick={() => setPick(null)}>
+          <div className="sheet" onClick={(e) => e.stopPropagation()} role="dialog" aria-label="公休か有給か選ぶ">
+            <b style={{ fontSize: 18 }}>{md(pick)}（{WEEKDAYS[dow(pick)]}）</b>
+            <div className="sub">{mine.has(pick) ? `いまは「${KIND_LABEL[mine.get(pick)!]}」で出しています。` : "この日を、どちらで出しますか？"}</div>
+            <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
+            {([["hope", "公休で出す"], ["paid", "有給で出す"]] as const).map(([k, label]) => (
+              <button key={k} disabled={busy || !open} className={mine.get(pick) === k ? "" : "ghost"} style={mine.get(pick) === k ? undefined : { color: "var(--ink)", border: "1px solid var(--line)" }}
+                onClick={async () => { setBusy(true); try { await api("/api/requests", { periodId: db!.id, day: pick, kind: k }); setMsg(""); await load(); setPick(null); } catch (e) { setMsg((e as Error).message); setPick(null); } finally { setBusy(false); } }}>
+                {label}{mine.get(pick) === k ? "（いまの）" : ""}
+              </button>
+            ))}
+            {mine.has(pick) && (
+              <button className="ghost" disabled={busy || !open} onClick={async () => { setBusy(true); try { await api("/api/requests", { periodId: db!.id, day: pick, kind: null }); setMsg(""); await load(); setPick(null); } catch (e) { setMsg((e as Error).message); setPick(null); } finally { setBusy(false); } }}>この日の希望を取り消す</button>
+            )}
+            <button className="ghost" style={{ color: "var(--ink)" }} onClick={() => setPick(null)}>閉じる</button>
+            </div>
+          </div>
+        </div>
+      )}
       {msg && <p className="err">{msg}</p>}
     </main>
   );
