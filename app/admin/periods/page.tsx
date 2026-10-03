@@ -49,7 +49,13 @@ export default function PeriodsPage() {
                   )}
                   {next && canManage(s.storeId) && (!needOffice || me.level === 4) && (
                     <button style={{ width: "auto", margin: 0, padding: "10px 14px", fontSize: 14 }}
-                      onClick={() => confirm(`${name(s.storeId)}：「${next.label}」でよいですか？`) && run(() => api("/api/periods", { periodId: p.id, storeId: s.storeId, status: next.to }))}>
+                      onClick={() => confirm(`${name(s.storeId)}：「${next.label}」でよいですか？`) && run(async () => {
+                        try { await api("/api/periods", { periodId: p.id, storeId: s.storeId, status: next.to }); }
+                        catch (e) {
+                          if (!(e as Error).message.includes("かぶっている")) throw e;
+                          if (confirm(`${(e as Error).message}\n\nそれでも、このまま確定しますか？`)) await api("/api/periods", { periodId: p.id, storeId: s.storeId, status: next.to, force: true });
+                        }
+                      })}>
                       {next.label}
                     </button>
                   )}

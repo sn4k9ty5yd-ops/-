@@ -337,9 +337,13 @@ export async function createNextPeriod(db: Database, userId: string, today: stri
 
 export async function setPeriodStatus(
   db: Database, userId: string,
-  input: { periodId: string; storeId: string; status?: PeriodStatus; openAt?: string | null; closeAt?: string | null },
+  input: { periodId: string; storeId: string; status?: PeriodStatus; openAt?: string | null; closeAt?: string | null; force?: boolean },
 ): Promise<void> {
   if (input.status && !STATUS_ORDER.includes(input.status)) throw new Error("状態が正しくありません");
+  if (input.status === "confirmed" && !input.force) {
+    const cs = await listConflicts(db, userId, input.periodId, input.storeId).catch(() => []);
+    if (cs.length > 0) throw new Error(`休みがかぶっている日があります（${cs.slice(0, 6).map((c) => `${jpDay(c.day)} ${c.count}人／上限${c.maxOff}人`).join("、")}${cs.length > 6 ? " ほか" : ""}）。先に、かぶっている人に知らせて、話し合ってください。`);
+  }
   let n = 0;
   try {
     n = (await asUser(db, userId, (q) =>
@@ -1247,4 +1251,120 @@ export async function setRank(db: Database, userId: string, targetId: string, ra
   const ok = await asUser(db, userId, (q) => q.query("select 1 from memberships where id = $1 and status = 'active'", [targetId]));
   if (ok.rows.length === 0) throw new ForbiddenError();
   await db.query("update memberships set rank = $2 where id = $1", [targetId, rank]);
+}
+
+
+// ------------------------------------------------------------------ 休みの上限・かぶりの知らせ・話し合い
+const jpDay = (iso: string) => { const d = new Date(iso + "T00:00:00Z"); return `${d.getUTCMonth() + 1}/${d.getUTCDate()}（${"日月火水木金土"[d.getUTCDay()]}）`; };
+export interface DayLimit { day: string; maxOff: number }
+export interface Conflict { day: string; maxOff: number; count: number }
+export interface DayInfo {
+  day: string; label: string; maxOff: number | null; people: { id: string; name: string; kind: string }[];
+  messages: { id: number; userId: string; name: string; body: string; at: string }[]; canEdit: boolean;
+}
+export interface NotificationRow { id: string; kind: string; title: string; body: string; link: string | null; createdAt: string; read: boolean }
+
+export async function listDayLimits(db: Database, userId: string, periodId: string, storeId: string): Promise<DayLimit[]> {
+  return (await asUser(db, userId, (q) => q.query<DayLimit>(
+    `select day::text as day, max_off as "maxOff" from day_limits where period_id = $1 and store_id = $2 order by day`, [periodId, storeId]))).rows;
+}
+
+/** 日ごとの「休みの上限（◯人まで）」を決める。null で、上限なしに戻す（シフトを作れる人だけ） */
+export async function setDayLimits(db: Database, userId: string, periodId: string, storeId: string, days: string[], maxOff: number | null): Promise<number> {
+  if (maxOff !== null && (!Number.isInteger(maxOff) || maxOff < 0 || maxOff > 99)) throw new Error("人数は、0〜99で入れてください");
+  if (days.length === 0 || days.length > 62 || days.some((d) => !/^\d{4}-\d{2}-\d{2}$/.test(d))) throw new Error("日付が正しくありません");
+  try {
+    return await asUser(db, userId, async (q) => {
+      const per = (await q.query<{ ok: boolean; company_id: string }>("select true as ok, company_id from shift_periods where id = $1 and start_date <= all($2::date[]) and end_date >= all($2::date[])", [periodId, days])).rows[0];
+      if (!per) throw new Error("期間の外の日付です");
+      if (maxOff === null) { await q.query("delete from day_limits where period_id = $1 and store_id = $2 and day = any($3::date[])", [periodId, storeId, days]); return days.length; }
+      for (const d of days) {
+        await q.query(
+          `insert into day_limits (period_id, store_id, company_id, day, max_off, updated_by) values ($1,$2,$3,$4,$5,$6)
+           on conflict (period_id, store_id, day) do update set max_off = excluded.max_off, updated_at = now(), updated_by = excluded.updated_by`,
+          [periodId, storeId, per.company_id, d, maxOff, userId]);
+      }
+      return days.length;
+    });
+  } catch (e) { if (e instanceof Error && e.message.includes("期間")) throw e; throw new ForbiddenError(); }
+}
+
+export async function listConflicts(db: Database, userId: string, periodId: string, storeId: string): Promise<Conflict[]> {
+  return (await asUser(db, userId, (q) => q.query<Conflict>(
+    `select day::text as day, max_off as "maxOff", cnt as count from app.period_conflicts($1, $2)`, [periodId, storeId]))).rows;
+}
+
+export async function getDayInfo(db: Database, userId: string, periodId: string, storeId: string, day: string): Promise<DayInfo> {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) throw new Error("日付が正しくありません");
+  return asUser(db, userId, async (q) => {
+    const people = (await q.query<{ id: string; name: string; kind: string }>(
+      `select p.membership_id as id, m.name, p.kind from app.day_off_people($1, $2, $3::date) p join memberships m on m.id = p.membership_id order by m.name`, [periodId, storeId, day])).rows;
+    const canEdit = (await q.query<{ ok: boolean }>("select app.has_perm('shift.edit', $1) as ok", [storeId])).rows[0].ok;
+    if (people.length === 0 && !canEdit) throw new ForbiddenError("この日の話し合いは見られません");
+    const lim = (await q.query<{ m: number }>("select max_off as m from day_limits where period_id = $1 and store_id = $2 and day = $3::date", [periodId, storeId, day])).rows[0];
+    const messages = (await q.query<{ id: number; userId: string; name: string; body: string; at: string }>(
+      `select d.id::int as id, d.user_id as "userId", u.name, d.body, to_char(d.created_at at time zone 'Asia/Tokyo', 'MM/DD HH24:MI') as at
+         from day_messages d join memberships u on u.id = d.user_id
+        where d.period_id = $1 and d.store_id = $2 and d.day = $3::date order by d.id`, [periodId, storeId, day])).rows;
+    return { day, label: jpDay(day), maxOff: lim?.m ?? null, people, messages, canEdit };
+  });
+}
+
+export async function postDayMessage(db: Database, userId: string, periodId: string, storeId: string, day: string, body: string): Promise<void> {
+  const text = body.trim();
+  if (!text) throw new Error("メッセージを入れてください");
+  if (text.length > 500) throw new Error("メッセージは500文字までです");
+  const me = await getMe(db, userId);
+  if (!me) throw new ForbiddenError();
+  try {
+    await asUser(db, userId, (q) => q.query(
+      "insert into day_messages (company_id, period_id, store_id, day, user_id, body) values ($1,$2,$3,$4::date,$5,$6)", [me.companyId, periodId, storeId, day, userId, text]));
+  } catch { throw new ForbiddenError("この日の話し合いには書き込めません"); }
+  // 話し合いに参加している他の人に、お知らせ（まだ読んでいない同じ日のお知らせは、まとめる）
+  const info = await getDayInfo(db, userId, periodId, storeId, day).catch(() => null);
+  if (!info) return;
+  const link = `/conflict?periodId=${periodId}&storeId=${storeId}&day=${day}`;
+  const editors = (await db.query<{ id: string }>("select id from memberships where store_id = $1 and level >= 2 and status = 'active'", [storeId])).rows.map((r) => r.id);
+  for (const uid of new Set([...info.people.map((p) => p.id), ...info.messages.map((m) => m.userId), ...editors])) {
+    if (uid === userId) continue;
+    await db.query("delete from notifications where user_id = $1 and link = $2 and kind = 'message' and read_at is null", [uid, link]);
+    await db.query("insert into notifications (company_id, user_id, kind, title, body, link) values ($1,$2,'message',$3,$4,$5)",
+      [me.companyId, uid, `${jpDay(day)} の話し合いに、${me.name} さんが書き込みました`, text.slice(0, 80), link]);
+  }
+}
+
+/** 休みの上限を超えた日の、その日に休みを希望している人たちに、お知らせを送る（day を指定すると、その日だけ） */
+export async function notifyConflicts(db: Database, userId: string, periodId: string, storeId: string, day?: string): Promise<{ days: number; people: number }> {
+  const me = await getMe(db, userId);
+  if (!me) throw new ForbiddenError();
+  const can = (await asUser(db, userId, (q) => q.query<{ ok: boolean }>("select app.has_perm('shift.edit', $1) as ok", [storeId]))).rows[0].ok;
+  if (!can) throw new ForbiddenError();
+  const conflicts = (await listConflicts(db, userId, periodId, storeId)).filter((c) => !day || c.day === day);
+  let people = 0;
+  for (const c of conflicts) {
+    const who = (await asUser(db, userId, (q) => q.query<{ id: string; name: string }>(
+      `select p.membership_id as id, m.name from app.day_off_people($1, $2, $3::date) p join memberships m on m.id = p.membership_id`, [periodId, storeId, c.day]))).rows;
+    const link = `/conflict?periodId=${periodId}&storeId=${storeId}&day=${c.day}`;
+    for (const w of who) {
+      await db.query("delete from notifications where user_id = $1 and link = $2 and kind = 'conflict' and read_at is null", [w.id, link]);
+      await db.query("insert into notifications (company_id, user_id, kind, title, body, link) values ($1,$2,'conflict',$3,$4,$5)",
+        [me.companyId, w.id, `休みがかぶっています（${jpDay(c.day)}）`,
+         `${jpDay(c.day)} は、休みの上限が ${c.maxOff} 人ですが、いま ${c.count} 人が休みを希望しています。希望している人：${who.map((x) => x.name).join("、")}。押して、話し合ってください。`, link]);
+      people++;
+    }
+  }
+  return { days: conflicts.length, people };
+}
+
+export async function listNotifications(db: Database, userId: string): Promise<{ items: NotificationRow[]; unread: number }> {
+  const items = (await asUser(db, userId, (q) => q.query<NotificationRow>(
+    `select id, kind, title, body, link, to_char(created_at at time zone 'Asia/Tokyo', 'MM/DD HH24:MI') as "createdAt", (read_at is not null) as read
+       from notifications order by created_at desc limit 60`))).rows;
+  return { items, unread: items.filter((i) => !i.read).length };
+}
+
+export async function markNotificationsRead(db: Database, userId: string, ids?: string[]): Promise<void> {
+  await asUser(db, userId, (q) => ids?.length
+    ? q.query("update notifications set read_at = now() where read_at is null and id = any($1::uuid[])", [ids])
+    : q.query("update notifications set read_at = now() where read_at is null"));
 }

@@ -137,3 +137,40 @@ describe("休憩ルールの設定", () => {
     expect((await svc.getMe(db, id.office))?.breakRule).toEqual({ capMinutes: 480, tiers: [] });
   });
 });
+
+describe("休みの上限・かぶりの知らせ・話し合い", () => {
+  it("シフト担当が上限を決め、超えた日が分かり、かぶっている人にお知らせが届き、話し合える。確定は、かぶりがあると止まる", async () => {
+    await svc.createNextPeriod(db, id.office, "2026-12-20");                    // 12/16〜1/15（まだ確定していない新しい期間）
+    const periodId = (await svc.listPeriods(db, id.office))[0].id;
+    await svc.setPeriodStatus(db, id.office, { periodId, storeId: st.s1, status: "drafting" });
+    const day = "2026-12-24";
+    await svc.saveShifts(db, id.shift1, periodId, st.s1, [{ membershipId: id.a, day, kind: "holiday" }, { membershipId: id.b, day, kind: "paid" }]);
+    await expect(svc.setDayLimits(db, id.a, periodId, st.s1, [day], 1)).rejects.toThrow(svc.ForbiddenError);           // スタッフは決められない
+    expect(await svc.setDayLimits(db, id.shift1, periodId, st.s1, [day], 1)).toBe(1);
+    await expect(svc.setDayLimits(db, id.shift1, periodId, st.s1, ["2030-01-01"], 1)).rejects.toThrow("期間の外");
+    expect(await svc.listDayLimits(db, id.a, periodId, st.s1)).toEqual([{ day, maxOff: 1 }]);                         // 自店のスタッフは上限が見える
+    expect(await svc.listConflicts(db, id.shift1, periodId, st.s1)).toEqual([{ day, maxOff: 1, count: 2 }]);
+    expect(await svc.listConflicts(db, id.a, periodId, st.s1)).toEqual([]);                                           // スタッフには、一覧は出ない
+    // 知らせる
+    expect(await svc.notifyConflicts(db, id.shift1, periodId, st.s1)).toEqual({ days: 1, people: 2 });
+    await expect(svc.notifyConflicts(db, id.a, periodId, st.s1)).rejects.toThrow(svc.ForbiddenError);
+    const mine = await svc.listNotifications(db, id.a);
+    expect(mine.unread).toBe(1);
+    expect(mine.items[0].title).toContain("休みがかぶっています");
+    expect((await svc.listNotifications(db, id.c)).items).toHaveLength(0);                                            // 関係ない人には届かない
+    // 話し合い
+    const info = await svc.getDayInfo(db, id.a, periodId, st.s1, day);
+    expect(info.people.map((p) => p.name).sort()).toEqual(["a", "b"]);
+    await svc.postDayMessage(db, id.a, periodId, st.s1, day, "私が譲ります");
+    await expect(svc.getDayInfo(db, id.c, periodId, st.s1, day)).rejects.toThrow();                                   // 他店のスタッフは読めない
+    await expect(svc.postDayMessage(db, id.c, periodId, st.s1, day, "のぞき見")).rejects.toThrow(svc.ForbiddenError);
+    expect((await svc.getDayInfo(db, id.b, periodId, st.s1, day)).messages.map((m) => m.body)).toEqual(["私が譲ります"]);
+    expect((await svc.listNotifications(db, id.b)).items.some((i) => i.kind === "message")).toBe(true);
+    await svc.markNotificationsRead(db, id.a);
+    expect((await svc.listNotifications(db, id.a)).unread).toBe(0);
+    // 確定は、かぶりがあると止まる（無理に確定もできる）
+    await expect(svc.setPeriodStatus(db, id.mgr1, { periodId, storeId: st.s1, status: "confirmed" })).rejects.toThrow("休みがかぶっている日があります");
+    await svc.setDayLimits(db, id.shift1, periodId, st.s1, [day], 2);
+    await svc.setPeriodStatus(db, id.mgr1, { periodId, storeId: st.s1, status: "confirmed" });
+  });
+});

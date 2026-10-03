@@ -1,5 +1,6 @@
 "use client";
 import { PasteOff } from "./PasteOff";
+import { LimitAll } from "./LimitAll";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, useAutoRefresh, useMe } from "@/lib/client";
 import { daysOf, dow, hoursOn, md, WEEKDAYS } from "@/lib/labels";
@@ -96,6 +97,7 @@ export default function ShiftsPage() {
         <div className="actions" style={{ marginBottom: 8 }}>
           <button className="ghost" style={{ color: "var(--blue)" }} onClick={async () => { const n = await post({ action: "applyRequests" }); setNote(`希望休を${n}件、シフトに反映しました`); }}>希望休をシフトに反映</button>
           {note && <span className="sub">{note}</span>}
+          {dbPeriod && <LimitAll periodId={dbPeriod.id} storeId={storeId} days={daysOf(view.start, view.end)} onDone={() => {}} />}
           <PasteOff roster={roster} start={view.start} end={view.end} onApply={save} />
         </div>
       )}
