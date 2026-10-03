@@ -1374,24 +1374,28 @@ export async function markNotificationsRead(db: Database, userId: string, ids?: 
 export type MaterialKind = "supply" | "retail" | "other";
 export const MATERIAL_KIND_LABEL: Record<MaterialKind, string> = { supply: "材料（業務）", retail: "店販", other: "その他" };
 export interface MaterialOrder {
-  id: string; storeId: string; orderedOn: string; supplier: string; item: string; kind: MaterialKind; amount: number; note: string;
+  id: string; storeId: string; orderedOn: string; supplier: string; item: string; kind: MaterialKind; amount: number; note: string; lines: { name: string; qty: number; amount: number }[];
   by: string | null; at: string; deleted: boolean; edited: boolean;
 }
 export interface MaterialLogRow { id: number; orderId: string; action: string; by: string | null; at: string; before: Record<string, unknown> | null; after: Record<string, unknown> | null }
-export interface MaterialInput { orderedOn: string; supplier: string; item: string; kind: MaterialKind; amount: number; note?: string }
+export interface MaterialInput { orderedOn: string; supplier: string; item: string; kind: MaterialKind; amount: number; note?: string; lines?: { name: string; qty: number; amount: number }[] }
 
 function checkMaterial(i: MaterialInput) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(i.orderedOn ?? "")) throw new Error("発注した日が正しくありません");
   if (!["supply", "retail", "other"].includes(i.kind)) throw new Error("種類が正しくありません");
   if (!Number.isInteger(i.amount) || i.amount < 0 || i.amount > 100000000) throw new Error("金額は、0円以上の整数で入れてください");
   if (!i.supplier?.trim()) throw new Error("発注先（業者）を入れてください");
+  if (i.lines !== undefined) {
+    if (!Array.isArray(i.lines) || i.lines.length > 200) throw new Error("明細が多すぎます（200行まで）");
+    for (const l of i.lines) if (typeof l.name !== "string" || !l.name.trim() || l.name.length > 120 || !Number.isInteger(l.qty) || l.qty < 1 || l.qty > 100000 || !Number.isInteger(l.amount) || l.amount < 0 || l.amount > 100000000) throw new Error("明細の商品名・数量・金額を確認してください");
+  }
   if ((i.supplier ?? "").length > 80 || (i.item ?? "").length > 200 || (i.note ?? "").length > 500) throw new Error("文字が長すぎます");
 }
 
 /** 期間（from〜to）の発注を、新しい順に。取り消したものは、店長以上だけに「取り消し」として見える */
 export async function listMaterialOrders(db: Database, userId: string, storeId: string, from: string, to: string): Promise<MaterialOrder[]> {
   return (await asUser(db, userId, (q) => q.query<MaterialOrder>(
-    `select o.id, o.store_id as "storeId", o.ordered_on::text as "orderedOn", o.supplier, o.item, o.kind, o.amount, o.note,
+    `select o.id, o.store_id as "storeId", o.ordered_on::text as "orderedOn", o.supplier, o.item, o.kind, o.amount, o.note, o.lines,
             m.name as by, o.created_at as at, (o.deleted_at is not null) as deleted, (o.updated_at is not null) as edited
        from material_orders o left join memberships m on m.id = o.created_by
       where o.store_id = $1 and o.ordered_on between $2 and $3
@@ -1404,9 +1408,9 @@ export async function addMaterialOrder(db: Database, userId: string, storeId: st
   if (!me) throw new ForbiddenError();
   try {
     return await asUser(db, userId, async (q) => (await q.query<{ id: string }>(
-      `insert into material_orders (company_id, store_id, ordered_on, supplier, item, kind, amount, note, created_by)
-       values ($1,$2,$3,$4,$5,$6,$7,$8,$9) returning id`,
-      [me.companyId, storeId, i.orderedOn, i.supplier.trim(), (i.item ?? "").trim(), i.kind, i.amount, (i.note ?? "").trim(), userId])).rows[0].id);
+      `insert into material_orders (company_id, store_id, ordered_on, supplier, item, kind, amount, note, lines, created_by)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10) returning id`,
+      [me.companyId, storeId, i.orderedOn, i.supplier.trim(), (i.item ?? "").trim(), i.kind, i.amount, (i.note ?? "").trim(), JSON.stringify((i.lines ?? []).map((l) => ({ name: l.name.trim(), qty: l.qty, amount: l.amount }))), userId])).rows[0].id);
   } catch { throw new ForbiddenError(); }
 }
 
@@ -1415,9 +1419,9 @@ export async function updateMaterialOrder(db: Database, userId: string, id: stri
   let n = 0;
   try {
     n = await asUser(db, userId, async (q) => (await q.query(
-      `update material_orders set ordered_on=$2, supplier=$3, item=$4, kind=$5, amount=$6, note=$7, updated_at=now(), updated_by=$8
+      `update material_orders set ordered_on=$2, supplier=$3, item=$4, kind=$5, amount=$6, note=$7, lines=coalesce($9::jsonb, lines), updated_at=now(), updated_by=$8
         where id = $1 and deleted_at is null returning id`,
-      [id, i.orderedOn, i.supplier.trim(), (i.item ?? "").trim(), i.kind, i.amount, (i.note ?? "").trim(), userId])).rows.length);
+      [id, i.orderedOn, i.supplier.trim(), (i.item ?? "").trim(), i.kind, i.amount, (i.note ?? "").trim(), userId, i.lines === undefined ? null : JSON.stringify(i.lines.map((l) => ({ name: l.name.trim(), qty: l.qty, amount: l.amount })))])).rows.length);
   } catch { throw new ForbiddenError(); }
   if (n === 0) throw new ForbiddenError();
 }

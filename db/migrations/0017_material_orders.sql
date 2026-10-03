@@ -15,6 +15,7 @@ create table public.material_orders (
   kind        text not null default 'supply' check (kind in ('supply','retail','other')),   -- 材料(業務)／店販／その他
   amount      int  not null check (amount >= 0 and amount <= 100000000),                    -- 金額（税抜・円）
   note        text not null default '',
+  lines       jsonb not null default '[]',               -- 明細（商品名・数量・金額。スクリーンショットから読み取った分）
   created_by  uuid not null references public.memberships(id),
   created_at  timestamptz not null default now(),
   updated_by  uuid,
@@ -91,7 +92,7 @@ create policy mol_select on public.material_order_log for select to app_user
   using (company_id = app.my_company_id() and app.my_level() >= 3 and app.has_perm('material.view', store_id));
 
 grant select, insert on public.material_orders to app_user;
-grant update (ordered_on, supplier, item, kind, amount, note, deleted_at, deleted_by, updated_at, updated_by) on public.material_orders to app_user;
+grant update (ordered_on, supplier, item, kind, amount, note, lines, deleted_at, deleted_by, updated_at, updated_by) on public.material_orders to app_user;
 grant select, insert, update, delete on public.material_budgets to app_user;
 grant select on public.material_order_log to app_user;
 

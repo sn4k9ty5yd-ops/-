@@ -245,4 +245,14 @@ describe("材料費（発注額）", () => {
     await expect(svc.addMaterialImage(db, id.staff2, oid, "image/png", png)).rejects.toThrow(svc.ForbiddenError);
     await expect(svc.addMaterialImage(db, id.staff, oid, "text/html", png)).rejects.toThrow("画像");
   });
+  it("明細（商品名・数量・金額）を保存でき、直すと記録に残る。不正な明細は断る", async () => {
+    const lines = [{ name: "シャンプー", qty: 2, amount: 7600 }, { name: "カラー剤", qty: 12, amount: 14400 }];
+    const oid = await svc.addMaterialOrder(db, id.staff, store.a1, { ...inp, amount: 22000, lines });
+    expect((await svc.listMaterialOrders(db, id.staff, store.a1, "2026-10-01", "2026-10-31")).find((o) => o.id === oid)?.lines).toEqual(lines);
+    await svc.updateMaterialOrder(db, id.staff, oid, { ...inp, amount: 7600, lines: [lines[0]] });
+    expect((await svc.listMaterialOrders(db, id.staff, store.a1, "2026-10-01", "2026-10-31")).find((o) => o.id === oid)?.lines).toHaveLength(1);
+    const log = await svc.listMaterialLog(db, id.mgr, store.a1);
+    expect(log.some((l) => l.orderId === oid && l.action === "変更")).toBe(true);
+    await expect(svc.addMaterialOrder(db, id.staff, store.a1, { ...inp, lines: [{ name: "", qty: 1, amount: 1 }] })).rejects.toThrow("明細");
+  });
 });

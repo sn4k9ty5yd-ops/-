@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, MeProvider, useAutoRefresh, useMe } from "@/lib/client";
+import { parseOrderText, type OrderLine } from "@/lib/material-ocr";
 import { todayJst } from "@/lib/period-nav";
 import { MATERIAL_KIND_LABEL, type MaterialImage, type MaterialKind, type MaterialLogRow, type MaterialOrder, type StoreRow } from "@/lib/service";
 
@@ -23,7 +24,7 @@ async function shrink(file: File): Promise<{ mime: string; base64: string; previ
   return { mime: "image/jpeg", base64: url.split(",")[1], preview: url };
 }
 interface Pic { mime: string; base64: string; preview: string }
-interface Form { id?: string; orderedOn: string; supplier: string; item: string; kind: MaterialKind; amount: string; note: string; pics: Pic[] }
+interface Form { id?: string; orderedOn: string; supplier: string; item: string; kind: MaterialKind; amount: string; note: string; pics: Pic[]; lines: OrderLine[] | null }
 
 function Page() {
   const { me } = useMe();
@@ -58,7 +59,7 @@ function Page() {
 
   const save = async () => {
     if (!form) return;
-    const input = { orderedOn: form.orderedOn, supplier: form.supplier, item: form.item, kind: form.kind, amount: Number(form.amount || "x"), note: form.note };
+    const input = { orderedOn: form.orderedOn, supplier: form.supplier, item: form.item, kind: form.kind, amount: Number(form.amount || "x"), note: form.note, ...(form.lines ? { lines: form.lines } : {}) };
     try {
       const r = await api<{ id?: string }>("/api/material", form.id ? { action: "update", id: form.id, input } : { action: "add", storeId, input });
       const oid = form.id ?? r.id;
@@ -73,6 +74,21 @@ function Page() {
       for (const f of Array.from(files)) if (f.type.startsWith("image/")) pics.push(await shrink(f));
       setForm((cur) => (cur ? { ...cur, pics: [...cur.pics, ...pics] } : cur));
     } catch { setMsg("画像を読みこめませんでした"); }
+  };
+  const [reading, setReading] = useState("");
+  /** 画像の文字を読み取って、明細の下書きにする（スマホ・パソコンの中で読む。お金はかからない） */
+  const readPic = async (p: Pic) => {
+    setMsg(""); setReading("読み取っています…（初回は少し時間がかかります）");
+    try {
+      const { createWorker } = await import("tesseract.js");
+      const w = await createWorker(["jpn", "eng"]);
+      const { data } = await w.recognize(p.preview);
+      await w.terminate();
+      const r = parseOrderText(data.text);
+      if (r.lines.length === 0) setMsg("商品の行を読み取れませんでした。画像を大きく・まっすぐ撮り直すか、下の「＋行を足す」で入れてください。");
+      setForm((cur) => (cur ? { ...cur, lines: [...(cur.lines ?? []), ...r.lines], amount: cur.amount === "" && (r.total ?? 0) > 0 ? String(r.total) : cur.amount } : cur));
+    } catch { setMsg("読み取りに失敗しました（通信を確認してください）"); }
+    setReading("");
   };
   const cancel = async (o: MaterialOrder) => {
     if (!confirm(`「${md(o.orderedOn)} ${o.supplier} ${yen(o.amount)}」を取り消しますか？\n（記録は消えずに、取り消しとして残ります）`)) return;
@@ -110,7 +126,7 @@ function Page() {
       </div>
 
       <div className="toolbar">
-        {canEdit && <button onClick={() => { setMsg(""); setForm({ orderedOn: todayJst(), supplier: "", item: "", kind: "supply", amount: "", note: "", pics: [] }); }}>＋ 発注を記録する</button>}
+        {canEdit && <button onClick={() => { setMsg(""); setForm({ orderedOn: todayJst(), supplier: "", item: "", kind: "supply", amount: "", note: "", pics: [], lines: [] }); }}>＋ 発注を記録する</button>}
         <button className="ghost" style={{ color: "var(--blue)" }} onClick={async () => setNote((await copyText(tsv())) ? "表をコピーしました（Excelやメールに貼れます）" : "コピーできませんでした")}>表をコピー</button>
         <button className="ghost" style={{ color: "var(--blue)" }} onClick={() => window.print()}>印刷</button>
         {me.level >= 3 && <button className="ghost" style={{ color: "var(--blue)" }} onClick={async () => setLog(await api<MaterialLogRow[]>(`/api/material?storeId=${storeId}&log=1`))}>変更の記録</button>}
@@ -122,10 +138,11 @@ function Page() {
         : <ul className="list">
           {data.orders.map((o) => (
             <li key={o.id} style={{ opacity: o.deleted ? 0.5 : 1, textDecoration: o.deleted ? "line-through" : "none", cursor: canEdit && !o.deleted ? "pointer" : "default" }}
-              onClick={() => { if (canEdit && !o.deleted) { setMsg(""); setForm({ id: o.id, orderedOn: o.orderedOn, supplier: o.supplier, item: o.item, kind: o.kind, amount: String(o.amount), note: o.note, pics: [] }); } }}>
+              onClick={() => { if (canEdit && !o.deleted) { setMsg(""); setForm({ id: o.id, orderedOn: o.orderedOn, supplier: o.supplier, item: o.item, kind: o.kind, amount: String(o.amount), note: o.note, pics: [], lines: o.lines ?? [] }); } }}>
               <div style={{ minWidth: 0, flex: 1 }}>
                 <b>{md(o.orderedOn)}　{o.supplier}</b><span className="chip">{MATERIAL_KIND_LABEL[o.kind]}</span>{o.edited && !o.deleted && <span className="chip">直した</span>}{o.deleted && <span className="chip warn">取り消し</span>}
                 <div className="sub">{[o.item, o.note, o.by && `記入: ${o.by}`].filter(Boolean).join("　")}</div>
+                {(o.lines ?? []).length > 0 && <details onClick={(e) => e.stopPropagation()}><summary className="sub">明細 {o.lines.length}件</summary>{o.lines.map((l, i) => <div key={i} className="sub">{l.name} ×{l.qty}　{yen(l.amount)}</div>)}</details>}
                 {(data.images ?? []).filter((i) => i.orderId === o.id).map((i) => (
                   <a key={i.id} href={`/api/material/image/${i.id}`} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} style={{ display: "inline-block", marginRight: 8 }}>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -160,9 +177,26 @@ function Page() {
               <div>{form.pics.map((p, i) => (
                 // eslint-disable-next-line @next/next/no-img-element
                 <span key={i} style={{ position: "relative", display: "inline-block", marginRight: 6 }}><img src={p.preview} alt="" style={{ height: 64, borderRadius: 6 }} />
-                  <button className="ghost" style={{ position: "absolute", top: -6, right: -6 }} onClick={() => setForm({ ...form, pics: form.pics.filter((_, j) => j !== i) })}>×</button></span>))}</div>
+                  <button className="ghost" style={{ position: "absolute", top: -6, right: -6 }} onClick={() => setForm({ ...form, pics: form.pics.filter((_, j) => j !== i) })}>×</button>
+                  <button className="ghost" style={{ color: "var(--blue)", display: "block" }} disabled={!!reading} onClick={() => readPic(p)}>文字を読み取る</button></span>))}</div>
+              {reading && <p className="sub">{reading}</p>}
               {form.id && (data?.images ?? []).some((i) => i.orderId === form.id) && <p className="sub">すでに付いている画像は、一覧に出ています（あとから消せません）。</p>}
             </div>
+            {form.lines !== null && (form.lines.length > 0 || form.pics.length > 0) && (
+              <div>
+                <b>明細（読み取った結果。まちがいは直してください）</b>
+                {form.lines.map((l, i) => (
+                  <div key={i} className="toolbar" style={{ margin: "4px 0" }}>
+                    <input aria-label="商品名" style={{ flex: 3, minWidth: 120 }} value={l.name} onChange={(e) => setForm({ ...form, lines: form.lines!.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)) })} />
+                    <input aria-label="数量" inputMode="numeric" style={{ width: 56 }} value={String(l.qty)} onChange={(e) => setForm({ ...form, lines: form.lines!.map((x, j) => (j === i ? { ...x, qty: Number(toInt(e.target.value)) || 1 } : x)) })} />
+                    <input aria-label="金額" inputMode="numeric" style={{ width: 90 }} value={String(l.amount)} onChange={(e) => setForm({ ...form, lines: form.lines!.map((x, j) => (j === i ? { ...x, amount: Number(toInt(e.target.value)) || 0 } : x)) })} />
+                    <button className="ghost" onClick={() => setForm({ ...form, lines: form.lines!.filter((_, j) => j !== i) })}>×</button>
+                  </div>))}
+                <div className="toolbar">
+                  <button className="ghost" style={{ color: "var(--blue)" }} onClick={() => setForm({ ...form, lines: [...form.lines!, { name: "", qty: 1, amount: 0 }] })}>＋行を足す</button>
+                  {form.lines.length > 0 && <button className="ghost" style={{ color: "var(--blue)" }} onClick={() => setForm({ ...form, amount: String(form.lines!.reduce((s, l) => s + l.amount, 0)) })}>明細の合計（{yen(form.lines.reduce((s, l) => s + l.amount, 0))}）を金額に入れる</button>}
+                </div>
+              </div>)}
             {msg && <p className="err">{msg}</p>}
             <div className="toolbar">
               <button onClick={save} disabled={!form.supplier.trim() || form.amount === ""}>保存</button>
