@@ -775,3 +775,138 @@ export async function stocktakeSummary(db: Database, userId: string, takenOn: st
 export async function listStocktakeDates(db: Database, userId: string): Promise<string[]> {
   return (await asUser(db, userId, (q) => q.query<{ d: string }>("select distinct taken_on::text as d from stocktakes order by d desc limit 36"))).rows.map((r) => r.d);
 }
+
+// ------------------------------------------------------------------ 在庫管理
+export interface StockSettings { useMovements: boolean; useRecount: boolean; useReorder: boolean; trackRetail: boolean; trackSupply: boolean; }
+export const DEFAULT_STOCK_SETTINGS: StockSettings = { useMovements: true, useRecount: true, useReorder: true, trackRetail: true, trackSupply: true };
+export interface StockItem {
+  productId: string; kind: ProductKind; maker: string; name: string; spec: string; costPrice: number; status: "active" | "discontinued";
+  quantity: number; min: number | null; target: number | null; low: boolean; suggested: number | null;
+}
+export interface MovementRow { id: string; productId: string; name: string; kind: "in" | "out" | "recount"; delta: number; after: number | null; note: string | null; at: string; by: string | null; }
+
+export async function getStockSettings(db: Database, userId: string, storeId: string): Promise<StockSettings> {
+  const r = (await asUser(db, userId, (q) =>
+    q.query<StockSettings>(`select use_movements as "useMovements", use_recount as "useRecount", use_reorder as "useReorder", track_retail as "trackRetail", track_supply as "trackSupply"
+                              from store_stock_settings where store_id = $1`, [storeId]))).rows[0];
+  return r ?? { ...DEFAULT_STOCK_SETTINGS };
+}
+
+/** お店ごとの「使う機能」を決める（店長は自店、オフィスは全店） */
+export async function setStockSettings(db: Database, userId: string, storeId: string, s: StockSettings): Promise<void> {
+  const me = await getMe(db, userId);
+  if (!me) throw new ForbiddenError();
+  try {
+    await asUser(db, userId, (q) =>
+      q.query(
+        `insert into store_stock_settings (store_id, company_id, use_movements, use_recount, use_reorder, track_retail, track_supply)
+         values ($1,$2,$3,$4,$5,$6,$7)
+         on conflict (store_id) do update set use_movements = excluded.use_movements, use_recount = excluded.use_recount, use_reorder = excluded.use_reorder,
+           track_retail = excluded.track_retail, track_supply = excluded.track_supply, updated_at = now(), updated_by = $8`,
+        [storeId, me.companyId, !!s.useMovements, !!s.useRecount, !!s.useReorder, !!s.trackRetail, !!s.trackSupply, userId]));
+  } catch { throw new ForbiddenError(); }
+}
+
+export async function listStock(db: Database, userId: string, storeId: string): Promise<{ settings: StockSettings; items: StockItem[] }> {
+  const settings = await getStockSettings(db, userId, storeId);
+  const rows = (await asUser(db, userId, (q) =>
+    q.query<Omit<StockItem, "low" | "suggested">>(
+      `select p.id as "productId", p.kind, p.maker, p.name, p.spec, p.cost_price as "costPrice", p.status,
+              coalesce(l.quantity, 0) as quantity, l.min_quantity as min, l.target_quantity as target
+         from products p join product_stores ps on ps.product_id = p.id and ps.store_id = $1
+         left join stock_levels l on l.store_id = $1 and l.product_id = p.id
+        where p.status = 'active' or coalesce(l.quantity, 0) > 0
+        order by p.kind, p.maker, p.name, p.spec`, [storeId]))).rows;
+  const items = rows
+    .filter((r) => (r.kind === "retail" ? settings.trackRetail : settings.trackSupply))
+    .map((r) => {
+      const low = settings.useReorder && r.min !== null && r.quantity <= r.min && r.status === "active";
+      return { ...r, low, suggested: low && r.target !== null ? Math.max(0, r.target - r.quantity) : null };
+    });
+  return { settings, items };
+}
+
+const NO_MOVEMENTS = "このお店では「入庫・出庫」を使わない設定になっています";
+const NO_RECOUNT = "このお店では「数え直し」を使わない設定になっています";
+
+function mapStockError(e: unknown): never {
+  const m = (e as Error).message ?? "";
+  const have = m.match(/not enough stock \(have (\d+)\)/);
+  if (have) throw new Error(`在庫（${have[1]}個）より多くは出せません`);
+  if (/stock_levels_quantity_check|violates check/.test(m)) throw new Error("在庫がマイナスになるため、出せません");
+  throw new ForbiddenError("この操作をする権限がないか、このお店で管理していない商品です");
+}
+
+/** 入庫（入った）・出庫（使った）を記録。1件でも失敗したら全部取り消し */
+export async function recordMovements(db: Database, userId: string, storeId: string, items: { productId: string; kind: "in" | "out"; qty: number; note?: string }[]): Promise<void> {
+  for (const it of items) {
+    if (!["in", "out"].includes(it.kind)) throw new Error("種類が正しくありません");
+    if (!Number.isInteger(it.qty) || it.qty < 1 || it.qty > 1000000) throw new Error("数は、1以上の整数で入れてください");
+  }
+  if (items.length === 0) return;
+  if (!(await getStockSettings(db, userId, storeId)).useMovements) throw new Error(NO_MOVEMENTS);
+  const me = await getMe(db, userId);
+  if (!me) throw new ForbiddenError();
+  try {
+    await asUser(db, userId, async (q) => {
+      for (const it of items)
+        await q.query("insert into stock_movements (company_id, store_id, product_id, kind, delta, note) values ($1,$2,$3,$4,$5,$6)",
+          [me.companyId, storeId, it.productId, it.kind, it.kind === "in" ? it.qty : -it.qty, it.note?.trim() || null]);
+    });
+  } catch (e) { mapStockError(e); }
+}
+
+/** 数え直し: 数えた数を入れると、いまの在庫との差が「数え直し」として記録され、在庫が合う */
+export async function recountStock(db: Database, userId: string, storeId: string, entries: { productId: string; counted: number }[], note = "数え直し"): Promise<number> {
+  for (const e of entries) if (!Number.isInteger(e.counted) || e.counted < 0 || e.counted > 1000000) throw new Error("数は、0以上の整数で入れてください");
+  if (entries.length === 0) return 0;
+  if (!(await getStockSettings(db, userId, storeId)).useRecount) throw new Error(NO_RECOUNT);
+  const me = await getMe(db, userId);
+  if (!me) throw new ForbiddenError();
+  try {
+    return await asUser(db, userId, async (q) => {
+      let n = 0;
+      for (const e of entries) {
+        const cur = Number((await q.query<{ quantity: number }>("select quantity from stock_levels where store_id = $1 and product_id = $2", [storeId, e.productId])).rows[0]?.quantity ?? 0);
+        const delta = e.counted - cur;
+        if (delta === 0) continue;
+        await q.query("insert into stock_movements (company_id, store_id, product_id, kind, delta, note) values ($1,$2,$3,'recount',$4,$5)", [me.companyId, storeId, e.productId, delta, note]);
+        n++;
+      }
+      return n;
+    });
+  } catch (e) { mapStockError(e); }
+}
+
+export async function setStockLimits(db: Database, userId: string, storeId: string, productId: string, min: number | null, target: number | null): Promise<void> {
+  for (const v of [min, target]) if (v !== null && (!Number.isInteger(v) || v < 0 || v > 1000000)) throw new Error("数は、0以上の整数で入れてください");
+  if (min !== null && target !== null && target < min) throw new Error("補充の目標は、発注点以上の数にしてください");
+  const me = await getMe(db, userId);
+  if (!me) throw new ForbiddenError();
+  try {
+    await asUser(db, userId, (q) =>
+      q.query(
+        `insert into stock_levels (store_id, product_id, company_id, min_quantity, target_quantity) values ($1,$2,$3,$4,$5)
+         on conflict (store_id, product_id) do update set min_quantity = excluded.min_quantity, target_quantity = excluded.target_quantity`,
+        [storeId, productId, me.companyId, min, target]));
+  } catch { throw new ForbiddenError(); }
+}
+
+export async function listMovements(db: Database, userId: string, storeId: string, productId?: string, limit = 100): Promise<MovementRow[]> {
+  return (await asUser(db, userId, (q) =>
+    q.query<MovementRow>(
+      `select m.id, m.product_id as "productId", coalesce(m.name, '') as name, m.kind, m.delta, m.quantity_after as after, m.note,
+              to_char(m.created_at at time zone 'Asia/Tokyo', 'YYYY-MM-DD HH24:MI') as at, u.name as by
+         from stock_movements m left join memberships u on u.id = m.created_by
+        where m.store_id = $1 and ($2::uuid is null or m.product_id = $2) order by m.created_at desc, m.id desc limit $3`,
+      [storeId, productId ?? null, Math.min(Math.max(limit, 1), 500)]))).rows;
+}
+
+/** 棚卸しの数量を、在庫に反映する（数え直しとして記録）。提出済み・確認済みの棚卸しだけ */
+export async function applyStocktakeToStock(db: Database, userId: string, stocktakeId: string): Promise<number> {
+  const d = await getStocktake(db, userId, stocktakeId);
+  if (!d || !d.canManage) throw new ForbiddenError();
+  if (d.status === "open") throw new Error("提出してから、在庫に反映してください");
+  const entries = d.items.filter((i) => i.productId && i.quantity !== null).map((i) => ({ productId: i.productId as string, counted: i.quantity as number }));
+  return recountStock(db, userId, d.storeId, entries, `棚卸し ${d.takenOn} を反映`);
+}
