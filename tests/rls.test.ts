@@ -24,7 +24,7 @@ let db: PGlite;
 
 /** 指定ユーザーとして実行（RLSが効く authenticated ロール） */
 async function as<T>(user: string | null, fn: () => Promise<T>): Promise<T> {
-  await db.exec(`select set_config('request.jwt.claim.sub', '${user ?? ""}', false); set role ${user ? "authenticated" : "anon"};`);
+  await db.exec(`select set_config('app.user_id', '${user ?? ""}', false); set role app_user;`);
   try {
     return await fn();
   } finally {
@@ -44,40 +44,41 @@ const fails = async (sql: string) => {
 
 beforeAll(async () => {
   db = new PGlite();
-  // Supabase が提供するものの代用
-  await db.exec(`
-    create schema auth;
-    create table auth.users (id uuid primary key);
-    create function auth.uid() returns uuid language sql stable
-      as $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
-    create role authenticated; create role anon;
-    grant usage on schema auth to authenticated, anon;
-    grant usage on schema public to authenticated, anon;
-  `);
   await db.exec(readFileSync("supabase/migrations/0001_tenant_core.sql", "utf8"));
   await db.exec(`
-    insert into auth.users (id) values ${Object.values(U).map((u) => `('${u}')`).join(",")};
     insert into companies (id, code, name) values ('${CO_A}', 'company-a', '会社A'), ('${CO_B}', 'company-b', '会社B');
     insert into stores (id, company_id, name) values
       ('${ST_A1}', '${CO_A}', 'A店1'), ('${ST_A2}', '${CO_A}', 'A店2'), ('${ST_B1}', '${CO_B}', 'B店1');
-    insert into memberships (company_id, auth_user_id, store_id, name, email, level, status) values
-      ('${CO_A}', '${U.officeA}',   '${ST_A1}', 'オフィスA',   'office@a.example',  4, 'active'),
-      ('${CO_A}', '${U.managerA1}', '${ST_A1}', '店長A1',      'mgr@a.example',     3, 'active'),
-      ('${CO_A}', '${U.shiftA1}',   '${ST_A1}', 'シフト担当A1', 'shift@a.example',   2, 'active'),
-      ('${CO_A}', '${U.staffA1}',   '${ST_A1}', 'スタッフA1',   'staff1@a.example',  1, 'active'),
-      ('${CO_A}', '${U.staffA2}',   '${ST_A2}', 'スタッフA2',   'staff2@a.example',  1, 'active'),
-      ('${CO_B}', '${U.officeB}',   '${ST_B1}', 'オフィスB',   'office@b.example',  4, 'active'),
-      ('${CO_B}', '${U.staffB1}',   '${ST_B1}', 'スタッフB1',   'staff1@b.example',  1, 'active'),
-      ('${CO_A}', '${U.retiredA1}', '${ST_A1}', '退職者',       'gone@a.example',    1, 'disabled');
+    insert into memberships (company_id, id, store_id, name, employee_code, level, status) values
+      ('${CO_A}', '${U.officeA}',   '${ST_A1}', 'オフィスA',   'office-a',  4, 'active'),
+      ('${CO_A}', '${U.managerA1}', '${ST_A1}', '店長A1',      'mgr-a',     3, 'active'),
+      ('${CO_A}', '${U.shiftA1}',   '${ST_A1}', 'シフト担当A1', 'shift-a',   2, 'active'),
+      ('${CO_A}', '${U.staffA1}',   '${ST_A1}', 'スタッフA1',   'staff1-a',  1, 'active'),
+      ('${CO_A}', '${U.staffA2}',   '${ST_A2}', 'スタッフA2',   'staff2-a',  1, 'active'),
+      ('${CO_B}', '${U.officeB}',   '${ST_B1}', 'オフィスB',   'office-b',  4, 'active'),
+      ('${CO_B}', '${U.staffB1}',   '${ST_B1}', 'スタッフB1',   'staff1-b',  1, 'active'),
+      ('${CO_A}', '${U.retiredA1}', '${ST_A1}', '退職者',       'gone-a',    1, 'disabled');
   `);
 });
 
 describe("会社ごとのデータ分離", () => {
-  it("未ログインは何も見えない・書けない", async () => {
+  it("ログインしていない接続は何も見えない・書けない", async () => {
     await as(null, async () => {
-      await expect(q("select * from memberships")).rejects.toThrow();
-      await expect(q("select * from companies")).rejects.toThrow();
+      expect(await q("select id from memberships")).toHaveLength(0);
+      expect(await q("select id from companies")).toHaveLength(0);
+      expect(await q("select id from stores")).toHaveLength(0);
+      expect(await fails(`insert into stores (company_id, name) values ('${CO_A}', '侵入')`)).toBe(true);
     });
+  });
+
+  it("パスコードのハッシュ・ログイン状態は、アプリ用の接続からは読めない（オフィスでも）", async () => {
+    for (const u of [U.officeA, U.staffA1]) {
+      await as(u, async () => {
+        await expect(q("select passcode_hash from memberships")).rejects.toThrow();
+        await expect(q("select failed_attempts, locked_until from memberships")).rejects.toThrow();
+        await expect(q("select * from sessions")).rejects.toThrow();
+      });
+    }
   });
 
   it("会社Aの人は会社Bのスタッフ・店舗・会社が一切見えない（最大レベルでも）", async () => {
@@ -95,16 +96,16 @@ describe("会社ごとのデータ分離", () => {
     await as(U.officeA, async () => {
       expect(await fails(`insert into stores (company_id, name) values ('${CO_B}', '侵入')`)).toBe(true);
       expect(
-        await fails(`insert into memberships (company_id, store_id, name, email) values ('${CO_B}', '${ST_B1}', 'x', 'x@b.example')`),
+        await fails(`insert into memberships (company_id, store_id, employee_code, name, email) values ('${CO_B}','${ST_B1}','x@b.example','x','x@b.example')`),
       ).toBe(true);
       expect(await fails(`update memberships set name='改ざん' where company_id='${CO_B}'`)).toBe(true);
-      expect(await fails(`update memberships set company_id='${CO_B}' where id in (select id from memberships where auth_user_id='${U.staffA1}')`)).toBe(true);
+      expect(await fails(`update memberships set company_id='${CO_B}' where id in (select id from memberships where id='${U.staffA1}')`)).toBe(true);
     });
   });
 
   it("会社Aの店舗に会社Bのスタッフを所属させられない", async () => {
     await expect(
-      db.exec(`insert into memberships (company_id, store_id, name, email) values ('${CO_B}', '${ST_A1}', 'x', 'y@b.example')`),
+      db.exec(`insert into memberships (company_id, store_id, employee_code, name, email) values ('${CO_B}','${ST_A1}','y@b.example','x','y@b.example')`),
     ).rejects.toThrow();
   });
 });
@@ -122,8 +123,8 @@ describe("操作レベルごとの見える範囲", () => {
   it("Lv1/Lv2: 他のスタッフを変更できない", async () => {
     for (const u of [U.staffA1, U.shiftA1]) {
       await as(u, async () => {
-        expect(await fails(`update memberships set name='変更' where auth_user_id='${U.staffA1}'`)).toBe(true);
-        expect(await fails(`insert into memberships (company_id, store_id, name, email) values ('${CO_A}','${ST_A1}','新人','n@a.example')`)).toBe(true);
+        expect(await fails(`update memberships set name='変更' where id='${U.staffA1}'`)).toBe(true);
+        expect(await fails(`insert into memberships (company_id, store_id, employee_code, name, email) values ('${CO_A}','${ST_A1}','n@a.example','新人','n@a.example')`)).toBe(true);
       });
     }
   });
@@ -138,24 +139,24 @@ describe("操作レベルごとの見える範囲", () => {
 
   it("Lv3 店長: 自店舗の入社登録・退職処理はできる", async () => {
     await as(U.managerA1, async () => {
-      expect(await fails(`insert into memberships (company_id, store_id, name, email) values ('${CO_A}','${ST_A1}','新人','new@a.example')`)).toBe(false);
-      expect(await fails(`update memberships set status='disabled', left_on=current_date where email='new@a.example'`)).toBe(false);
+      expect(await fails(`insert into memberships (company_id, store_id, employee_code, name, email) values ('${CO_A}','${ST_A1}','new@a.example','新人','new@a.example')`)).toBe(false);
+      expect(await fails(`update memberships set status='disabled', left_on=current_date where employee_code='new@a.example'`)).toBe(false);
     });
   });
 
   it("Lv3 店長: 他店舗のスタッフ登録・変更はできない", async () => {
     await as(U.managerA1, async () => {
-      expect(await fails(`insert into memberships (company_id, store_id, name, email) values ('${CO_A}','${ST_A2}','他店','o@a.example')`)).toBe(true);
-      expect(await fails(`update memberships set name='変更' where auth_user_id='${U.staffA2}'`)).toBe(true);
+      expect(await fails(`insert into memberships (company_id, store_id, employee_code, name, email) values ('${CO_A}','${ST_A2}','o@a.example','他店','o@a.example')`)).toBe(true);
+      expect(await fails(`update memberships set name='変更' where id='${U.staffA2}'`)).toBe(true);
       // 自店のスタッフを他店へ移す（=他店への登録）もできない
-      expect(await fails(`update memberships set store_id='${ST_A2}' where auth_user_id='${U.staffA1}'`)).toBe(true);
+      expect(await fails(`update memberships set store_id='${ST_A2}' where id='${U.staffA1}'`)).toBe(true);
     });
   });
 
   it("Lv4 オフィス: 全店舗のスタッフを登録・変更できる", async () => {
     await as(U.officeA, async () => {
-      expect(await fails(`insert into memberships (company_id, store_id, name, email) values ('${CO_A}','${ST_A2}','他店新人','o2@a.example')`)).toBe(false);
-      expect(await fails(`update memberships set name='変更済' where auth_user_id='${U.staffA2}'`)).toBe(false);
+      expect(await fails(`insert into memberships (company_id, store_id, employee_code, name, email) values ('${CO_A}','${ST_A2}','o2@a.example','他店新人','o2@a.example')`)).toBe(false);
+      expect(await fails(`update memberships set name='変更済' where id='${U.staffA2}'`)).toBe(false);
       expect(await fails(`insert into stores (company_id, name) values ('${CO_A}', '新店舗')`)).toBe(false);
     });
   });
@@ -173,9 +174,9 @@ describe("操作レベルごとの見える範囲", () => {
 describe("自分より上のレベルの人には触れない", () => {
   it("店長は同じ店のオフィス（Lv4）や店長（Lv3）を無効化・変更できない", async () => {
     await as(U.managerA1, async () => {
-      expect(await fails(`update memberships set status='disabled' where auth_user_id='${U.officeA}'`)).toBe(true);
-      expect(await fails(`update memberships set name='改ざん' where auth_user_id='${U.officeA}'`)).toBe(true);
-      expect(await fails(`update memberships set status='disabled' where auth_user_id='${U.managerA1}'`)).toBe(true);
+      expect(await fails(`update memberships set status='disabled' where id='${U.officeA}'`)).toBe(true);
+      expect(await fails(`update memberships set name='改ざん' where id='${U.officeA}'`)).toBe(true);
+      expect(await fails(`update memberships set status='disabled' where id='${U.managerA1}'`)).toBe(true);
     });
   });
 });
@@ -183,17 +184,17 @@ describe("自分より上のレベルの人には触れない", () => {
 describe("レベルの割り当て（オフィスのみ）", () => {
   it("店長は自分や他人のレベルを変えられない（昇格できない）", async () => {
     await as(U.managerA1, async () => {
-      expect(await fails(`update memberships set level=4 where auth_user_id='${U.managerA1}'`)).toBe(true);
-      expect(await fails(`update memberships set level=3 where auth_user_id='${U.staffA1}'`)).toBe(true);
+      expect(await fails(`update memberships set level=4 where id='${U.managerA1}'`)).toBe(true);
+      expect(await fails(`update memberships set level=3 where id='${U.staffA1}'`)).toBe(true);
       // レベル2以上での新規登録もできない（Lv1のみ）
-      expect(await fails(`insert into memberships (company_id, store_id, name, email, level) values ('${CO_A}','${ST_A1}','昇格','up@a.example',4)`)).toBe(true);
+      expect(await fails(`insert into memberships (company_id, store_id, employee_code, name, email, level) values ('${CO_A}','${ST_A1}','up@a.example','昇格','up@a.example',4)`)).toBe(true);
     });
   });
 
   it("オフィスはレベルを入れ替えられ、履歴が残る", async () => {
     await as(U.officeA, async () => {
-      expect(await fails(`update memberships set level=2 where auth_user_id='${U.staffA1}'`)).toBe(false);
-      expect(await fails(`update memberships set level=1 where auth_user_id='${U.staffA1}'`)).toBe(false);
+      expect(await fails(`update memberships set level=2 where id='${U.staffA1}'`)).toBe(false);
+      expect(await fails(`update memberships set level=1 where id='${U.staffA1}'`)).toBe(false);
       const logs = await q("select action, detail from audit_logs where action='staff.update'");
       expect(logs.length).toBeGreaterThanOrEqual(2);
     });
@@ -217,7 +218,7 @@ describe("無効化（退職）", () => {
 
   it("スタッフは削除できない（退職は無効化で表す）", async () => {
     await as(U.officeA, async () => {
-      expect(await fails(`delete from memberships where auth_user_id='${U.staffA1}'`)).toBe(true);
+      expect(await fails(`delete from memberships where id='${U.staffA1}'`)).toBe(true);
     });
   });
 });
