@@ -14,3 +14,13 @@
 - `tests/rls.test.ts` — 「他社が見えない」「レベルごとの権限」のテスト
 - `app/` — Next.js（スマホ優先、PWA）
 - `app/admin/` — 管理画面（デモデータで動作。`/admin/staff` を開く）
+
+## お試しで動かす（アカウント不要）
+1. `npm install`
+2. `npm run seed` — お試しデータ（会社ID `atena`、社員番号とパスコードが表示される）を作成
+3. `npm run dev` → http://localhost:3000/login を開き、表示された社員番号・パスコードでログイン
+   （データは `.data/` に保存される。消すと初期化）
+
+## 本番（Neon など）
+- 環境変数 `DATABASE_URL` に PostgreSQL の接続文字列を設定すると、起動時に自動でテーブルが作られる。
+- `npm run backup` で全データを `backups/` にJSONで書き出し（個人情報を含むため Git には入らない）。

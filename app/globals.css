@@ -25,3 +25,9 @@ select{font-size:16px;padding:12px;border-radius:12px;border:1px solid var(--lin
 .actions select{width:auto}
 button.ghost{width:auto;margin:0;padding:10px 14px;background:transparent;color:#d70015;border:1px solid var(--line);font-size:14px}
 .err{color:#d70015;font-size:14px}
+.notice{background:#e8f1fb;border-radius:14px;padding:14px;margin:12px 0}
+.notice .pc{font-size:28px;font-weight:700;letter-spacing:4px;margin-left:8px}
+button:disabled{opacity:.6}
+.actions{flex-wrap:wrap}
+button.ghost{white-space:nowrap}
+.chip{white-space:nowrap}
