@@ -89,7 +89,7 @@ function Page() {
             <p>選んだ日：<b>{chosen.size}日</b>　{data?.submitted && !draft ? <span className="chip" style={{ background: "color-mix(in srgb,var(--ok) 20%,var(--card))" }}>提出済み</span> : <span className="chip warn">まだ提出していません</span>}</p>
           </div>
           {months.map((m) => <MonthPick key={m} ym={m} range={[win.rangeStart, win.rangeEnd]} chosen={chosen} onToggle={toggle} />)}
-          <div className="toolbar" style={{ position: "sticky", bottom: 12 }}>
+          <div className="stickybar">
             <button onClick={() => save(true)}>提出する（{chosen.size}日）</button>
             {draft && <button className="ghost" onClick={() => save(false)}>保存だけ</button>}
             {draft && <button className="ghost" onClick={() => setDraft(null)}>やめる</button>}

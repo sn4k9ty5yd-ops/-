@@ -467,3 +467,5 @@ button:not(.ghost):not(.mvbtn):not(.linkcell):not(.logout):not(.monthrow):not(.d
 .leaveday.on{background:linear-gradient(135deg,var(--ok),#2fb5a0) !important;color:#fff !important;border-color:transparent}
 .leaveday.on>span,.leaveday.on .holname{color:#fff !important}
 .leaveday .lv{font-size:10px;font-weight:700}
+.stickybar{position:sticky;bottom:12px;display:flex;gap:8px;align-items:center;padding:10px;margin-top:8px;border-radius:26px;background:var(--glass);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);border:1px solid var(--hair);box-shadow:0 10px 30px rgba(0,0,0,.12)}
+.stickybar button{margin:0}.stickybar button:first-child{flex:1}
