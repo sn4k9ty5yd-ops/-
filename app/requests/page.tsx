@@ -43,6 +43,7 @@ function Page() {
     <main>
       <Link href="/home" className="back">← ホーム</Link>
       <h1>希望休</h1>
+      {me.level >= 2 && <p style={{ margin: "0 0 12px" }}><Link href="/admin/requests">みんなの希望休（一覧）を見る</Link></p>}
       <PeriodNav period={view} startDay={me.closingStartDay} onChange={setView} />
       <div className="tintbox" style={tintStyle(view.start)}>
         <p className="sub" style={{ margin: "4px 4px 10px" }}>

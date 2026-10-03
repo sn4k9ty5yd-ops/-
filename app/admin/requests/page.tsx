@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useCallback } from "react";
 import { api, useAutoRefresh, useMe } from "@/lib/client";
@@ -31,6 +32,7 @@ export default function RequestsOverview() {
   return (
     <>
       <h1>みんなの希望休</h1>
+      {!me.displayOnly && <p style={{ margin: "0 0 12px" }}><Link href="/requests" style={{ fontWeight: 700 }}>▶ 自分の希望休を、カレンダーで出す</Link></p>}
       <PeriodNav period={view} startDay={me.closingStartDay} onChange={setView} />
       {!db && <p className="hint">この期間は、まだ作成されていません。</p>}
       <div className="tintbox" style={tintStyle(view.start)}>
