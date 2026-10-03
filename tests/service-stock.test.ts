@@ -1,6 +1,5 @@
-import { PGlite } from "@electric-sql/pglite";
 import { beforeAll, describe, expect, it } from "vitest";
-import { pgliteDatabase } from "../lib/db/adapters";
+import { newDb } from "./helpers";
 import { migrate } from "../lib/db/migrate";
 import type { Database } from "../lib/db/types";
 import * as svc from "../lib/service";
@@ -12,7 +11,7 @@ const pr: Record<string, string> = {};
 const item = async (u: string, s: string, name: string) => (await svc.listStock(db, u, s)).items.find((i) => i.name === name)!;
 
 beforeAll(async () => {
-  db = pgliteDatabase(new PGlite());
+  db = await newDb();
   await migrate(db);
   const co = (await db.query<{ id: string }>("insert into companies (code, name) values ('x-co','X') returning id")).rows[0].id;
   for (const n of ["s1", "s2"]) st[n] = (await db.query<{ id: string }>("insert into stores (company_id, name) values ($1,$2) returning id", [co, n])).rows[0].id;

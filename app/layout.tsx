@@ -4,6 +4,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "株式会社ALBUM",
   manifest: "/manifest.webmanifest",
+  icons: { icon: "/icon-192.png", apple: "/apple-touch-icon.png" },
   appleWebApp: { capable: true, title: "ALBUM" },
 };
 export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#0071e3" };

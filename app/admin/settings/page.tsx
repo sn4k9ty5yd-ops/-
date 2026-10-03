@@ -73,6 +73,21 @@ export default function SettingsPage() {
       )}
       {saved && <p className="hint">{saved}</p>}
       {msg && <p className="err">{msg}</p>}
+      {canEdit && (
+        <div className="card" style={{ marginTop: 16 }}>
+          <b>バックアップ</b>
+          <p className="sub" style={{ margin: "4px 0 8px" }}>すべてのデータ（シフト・出勤簿・有給・商品・棚卸し・在庫など）を、1つのファイルにしてダウンロードします。月に1回くらい、保管しておくと安心です。個人情報を含むので、安全な場所に保管してください（パスコードは含まれません）。</p>
+          <button className="ghost" style={{ color: "var(--blue)", width: "auto" }} onClick={async () => {
+            try {
+              const res = await fetch("/api/backup", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+              if (!res.ok) throw new Error((await res.json()).error ?? "ダウンロードできませんでした");
+              const blob = await res.blob(); const a = document.createElement("a");
+              a.href = URL.createObjectURL(blob); a.download = res.headers.get("content-disposition")?.match(/filename="(.+)"/)?.[1] ?? "album-backup.json"; a.click(); URL.revokeObjectURL(a.href);
+              setSaved("バックアップをダウンロードしました。");
+            } catch (e) { setMsg((e as Error).message); }
+          }}>バックアップをダウンロード</button>
+        </div>
+      )}
       <p className="hint">初期設定：実働は最大8時間。8時間以内は休憩なし、8時間を超えた分が休憩（10〜19時なら休憩1時間）。すでに保存した出勤簿の休憩は、自動では変わりません。</p>
     </>
   );

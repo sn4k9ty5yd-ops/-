@@ -62,3 +62,6 @@ Lv1 スタッフ / Lv2 シフト担当（自店のシフト作成のみ）/ Lv3 
 - 完了（在庫）: 在庫一覧（店販/業務）/ 入庫・出庫（使った・入った。在庫より多くは出せない）/ 数え直し（差が記録される）/ 発注の目安（発注点・補充の目標、少ないと表示・コピー・印刷）/ 履歴（追記のみ・消せない）/ 棚卸しの数量を在庫に反映 / **お店ごとに使う機能を選べる**（入庫・出庫／数え直し／発注の目安／業務を管理／店販を管理。店長=自店・管理者=全店が変更）。権限: 見る=Lv2(自店)以上、記録=Lv2以上(自店)・Lv4全店、設定・発注点=Lv3(自店)/Lv4。スタッフ(Lv1)は不可。
 - **店舗の編集は管理者(Lv4)だけ**。上のバーの「⚙ 店舗の編集」とホームのカードから開く。店舗は追加・名前変更・並び替え・営業時間・閉店/再開（在籍スタッフがいると閉店不可）。最初のデータは `npm run setup`（会社・5店舗・管理者を作る。`lib/bootstrap.ts`）。お試しは `npm run seed`。
 - 次の作業: 通知（メール/Web）→ **無料サーバー(Neon＋Cloudflare/Render)へ公開（アカウント作成が必要。やさしく手順を案内する）** → iPhoneのホーム画面追加(PWA)の確認 → 出退勤ボタン（将来）。
+- **公開の準備（完了）**: 手順書 `docs/DEPLOY.md`、Render用 `render.yaml`（Blueprint・無料・シンガポール・`npm ci --include=dev`）、`/setup`（初回だけの初期設定ページ。`SETUP_KEY`(16文字以上)が一致し、会社が0件のときだけ動く）、`/api/health`、`/robots.txt`(全拒否)、ホーム画面アイコン、管理者のバックアップダウンロード（設定画面。パスコード・ログイン状態は含めない）。
+- **本物のPostgreSQL 16（Neonと同じ非スーパーユーザー）でも検証済み**: `TEST_DATABASE_URL=... npx vitest run --fileParallelism=false tests/service*.test.ts tests/bootstrap.test.ts`（82項目合格）。本番モード(next start)＋実PostgreSQLで、画面の通しテストも確認。ローカルのPostgreSQL起動例: `su postgres -c "/usr/lib/postgresql/16/bin/initdb ..."`。
+- 次の作業: ユーザーが Neon と Render のアカウントを作る手順を案内（`docs/DEPLOY.md`）→ 公開後の動作確認 → 通知（メール/Web）→ 出退勤ボタン（将来）。

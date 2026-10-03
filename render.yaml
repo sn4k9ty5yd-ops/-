@@ -1,0 +1,17 @@
+# Render（無料）にこのアプリを公開するための設定。Render の「New → Blueprint」で、このリポジトリを選ぶと読み込まれる。
+services:
+  - type: web
+    name: album-system
+    runtime: node
+    plan: free
+    region: singapore          # 日本からいちばん近い地域
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: DATABASE_URL      # Neon の接続用の文字列（自分で貼りつける）
+        sync: false
+      - key: SETUP_KEY         # 初期設定のための合言葉（自動で作られる。Render の画面で見られる）
+        generateValue: true

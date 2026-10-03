@@ -1,14 +1,13 @@
-import { PGlite } from "@electric-sql/pglite";
 import { beforeAll, describe, expect, it } from "vitest";
 import { login } from "../lib/auth/login";
 import { bootstrapCompany, DEFAULT_STORE_NAMES } from "../lib/bootstrap";
-import { pgliteDatabase } from "../lib/db/adapters";
+import { newDb } from "./helpers";
 import { migrate } from "../lib/db/migrate";
 import type { Database } from "../lib/db/types";
 import * as svc from "../lib/service";
 
 let db: Database;
-beforeAll(async () => { db = pgliteDatabase(new PGlite()); await migrate(db); });
+beforeAll(async () => { db = await newDb(); await migrate(db); });
 
 describe("最初の設定（会社・5店舗・管理者）", () => {
   it("教えていただいた5店舗が、この順番で作られる", () => {

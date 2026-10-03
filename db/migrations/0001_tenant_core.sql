@@ -208,6 +208,7 @@ create index on public.sessions (membership_id);
 alter table public.sessions enable row level security;  -- ポリシーなし＋権限なし
 
 -- ------------------------------------------------------------- grants
+grant usage on schema public to app_user;   -- 明示的に付ける（データベースの初期設定に頼らない）
 grant usage on schema app to app_user;
 grant execute on all functions in schema app to app_user;
 grant select on public.companies, public.level_permissions, public.audit_logs to app_user;

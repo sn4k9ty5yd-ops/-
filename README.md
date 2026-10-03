@@ -21,6 +21,9 @@
 3. `npm run dev` → http://localhost:3000/login を開き、表示された社員番号・パスコードでログイン
    （データは `.data/` に保存される。消すと初期化）
 
+## 公開する
+`docs/DEPLOY.md`（無料: Neon＋Render）を見てください。
+
 ## 最初の設定（本番・お試し共通）
 - `npm run setup` — 会社・お店（ATENA／ATENA六本松／ATENA福津／Organ／ATENA AVEDA SAKURAMACHI）・管理者アカウントを作る。管理者のパスコードは、ここで1度だけ表示される。
 - お店の追加・名前の変更・閉店は、ログイン後の「⚙ 店舗の編集」（管理者のみ）でいつでもできる。

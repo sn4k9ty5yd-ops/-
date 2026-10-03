@@ -1,7 +1,6 @@
-import { PGlite } from "@electric-sql/pglite";
 import { beforeAll, describe, expect, it } from "vitest";
 import { login, validateSession } from "../lib/auth/login";
-import { pgliteDatabase } from "../lib/db/adapters";
+import { newDb } from "./helpers";
 import { migrate } from "../lib/db/migrate";
 import type { Database } from "../lib/db/types";
 import * as svc from "../lib/service";
@@ -17,7 +16,7 @@ async function person(co: string, code: string, name: string, level: number, st:
 }
 
 beforeAll(async () => {
-  db = pgliteDatabase(new PGlite());
+  db = await newDb();
   expect(await migrate(db)).toEqual(["0001_tenant_core.sql", "0002_periods_requests.sql", "0003_store_changes.sql", "0004_shifts.sql", "0005_break_rule.sql", "0006_attendance.sql", "0007_products_stocktake.sql", "0008_stock.sql"]);
   expect(await migrate(db)).toEqual([]); // 2回目は何もしない
   const a = (await db.query<{ id: string }>("insert into companies (code, name) values ('co-a','A社') returning id")).rows[0].id;

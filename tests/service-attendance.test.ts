@@ -1,6 +1,5 @@
-import { PGlite } from "@electric-sql/pglite";
 import { beforeAll, describe, expect, it } from "vitest";
-import { pgliteDatabase } from "../lib/db/adapters";
+import { newDb } from "./helpers";
 import { migrate } from "../lib/db/migrate";
 import type { Database } from "../lib/db/types";
 import * as svc from "../lib/service";
@@ -13,7 +12,7 @@ const get = async (u: string, s = st.s1) => (await svc.listAttendance(db, u, per
 const find = (rows: svc.AttendanceRow[], who: string, day: string) => rows.find((r) => r.membershipId === id[who] && r.day === day);
 
 beforeAll(async () => {
-  db = pgliteDatabase(new PGlite());
+  db = await newDb();
   await migrate(db);
   const co = (await db.query<{ id: string }>("insert into companies (code, name) values ('x-co','X') returning id")).rows[0].id;
   for (const n of ["s1", "s2"]) st[n] = (await db.query<{ id: string }>("insert into stores (company_id, name) values ($1,$2) returning id", [co, n])).rows[0].id;
