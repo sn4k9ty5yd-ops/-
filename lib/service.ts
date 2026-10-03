@@ -188,6 +188,24 @@ export async function setStaffLevel(db: Database, userId: string, targetId: stri
   if (n === 0) throw new ForbiddenError();
 }
 
+/** 名前・社員番号の変更（管理者のみ。自分自身も可）。ログイン中の端末はそのまま使える */
+export async function updateStaffProfile(db: Database, userId: string, targetId: string, input: { name?: string; employeeCode?: string }): Promise<void> {
+  const me = await getMe(db, userId);
+  if (!me || me.level < 4) throw new ForbiddenError();
+  const name = input.name?.trim(), code = input.employeeCode?.trim();
+  if (name === "" ) throw new Error("名前を入れてください");
+  if (code !== undefined && !/^[A-Za-z0-9]{1,20}$/.test(code)) throw new Error("社員番号は、英数字（20文字まで）にしてください");
+  if (name === undefined && code === undefined) throw new Error("変える内容がありません");
+  try {
+    const r = await asUser(db, userId, (q) =>
+      q.query("update memberships set name = coalesce($2, name), employee_code = coalesce($3, employee_code) where id = $1 returning id", [targetId, name ?? null, code ?? null]));
+    if (r.rows.length === 0) throw new ForbiddenError();
+  } catch (e) {
+    if ((e as { code?: string }).code === "23505") throw new Error("その社員番号はすでに使われています");
+    throw e instanceof ForbiddenError || e instanceof Error && e.message.includes("社員番号") ? e : new ForbiddenError();
+  }
+}
+
 /** 退職した人の社員番号を「◯◯-退職」に変えて、元の番号を空ける（管理者のみ・退職者のみ） */
 export async function releaseRetiredCode(db: Database, userId: string, targetId: string): Promise<string> {
   const me = await getMe(db, userId);

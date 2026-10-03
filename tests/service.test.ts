@@ -127,3 +127,14 @@ describe("ログイン状況と並び順（管理者のみ）", () => {
     void co;
   });
 });
+
+describe("名前・社員番号の変更（管理者のみ）", () => {
+  it("管理者は自分も含めて名前・番号を変えられ、重複は断られ、店長はできない", async () => {
+    await svc.updateStaffProfile(db, id.office, id.office, { name: "成田和樹", employeeCode: "6" });
+    const me = (await svc.listStaff(db, id.office)).find((s) => s.id === id.office)!;
+    expect(me).toMatchObject({ name: "成田和樹", employeeCode: "6" });
+    await expect(svc.updateStaffProfile(db, id.office, id.staff, { employeeCode: "6" })).rejects.toThrow("すでに");
+    await expect(svc.updateStaffProfile(db, id.mgr, id.staff, { name: "x" })).rejects.toThrow(svc.ForbiddenError);
+    await expect(svc.updateStaffProfile(db, id.office, id.staff, { employeeCode: "あ" })).rejects.toThrow("英数字");
+  });
+});

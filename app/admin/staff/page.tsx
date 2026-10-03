@@ -79,6 +79,13 @@ export default function StaffPage() {
               {s.status === "active" && <PresenceBadge s={s} />}
             </div>
             <div className="actions">
+              {me.level === 4 && (
+                <button className="ghost" style={{ color: "var(--blue)" }} onClick={() => {
+                  const name = prompt("名前（変えないときはそのまま）", s.name); if (name === null) return;
+                  const code = prompt("社員番号（変えないときはそのまま）", s.employeeCode); if (code === null) return;
+                  run(() => api(`/api/staff/${s.id}/profile`, { name, employeeCode: code }));
+                }}>名前・番号を変える</button>
+              )}
               {me.level === 4 && s.status === "disabled" && !s.employeeCode.includes("-退職") && (
                 <button className="ghost" style={{ color: "var(--blue)" }}
                   onClick={() => confirm(`${s.name} さんの社員番号「${s.employeeCode}」を空けて、新しい人が使えるようにしますか？（${s.name} さんの番号は「${s.employeeCode}-退職」に変わります。過去の記録はそのまま残ります）`) &&
