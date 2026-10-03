@@ -741,3 +741,37 @@ export async function deleteStocktake(db: Database, userId: string, stocktakeId:
   catch { throw new ForbiddenError(); }
   if (n === 0) throw new ForbiddenError("入力中の棚卸しだけ削除できます");
 }
+
+// ------------------------------------------------------------------ 棚卸しの合算（店販・業務・店舗・全店）
+export interface SummaryPart { id: string; status: StocktakeStatus; lines: number; counted: number; total: number; }
+export interface SummaryStore { storeId: string; retail: SummaryPart | null; supply: SummaryPart | null; total: number; }
+export interface StocktakeSummary { takenOn: string; stores: SummaryStore[]; retailTotal: number; supplyTotal: number; grandTotal: number; }
+
+/** 棚卸日ごとに、店販・業務・お店ごとの合計、全店の合計を出す（見られる範囲のお店だけ） */
+export async function stocktakeSummary(db: Database, userId: string, takenOn: string): Promise<StocktakeSummary> {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(takenOn)) throw new Error("棚卸日を指定してください");
+  const { rows } = await asUser(db, userId, (q) =>
+    q.query<{ id: string; storeId: string; kind: ProductKind; status: StocktakeStatus; lines: number; counted: number; total: string }>(
+      `select s.id, s.store_id as "storeId", s.kind, s.status, count(l.id)::int as lines, count(l.quantity)::int as counted, coalesce(sum(l.amount), 0)::text as total
+         from stocktakes s left join stocktake_lines l on l.stocktake_id = s.id
+        where s.taken_on = $1 group by s.id`, [takenOn]));
+  const by = new Map<string, SummaryStore>();
+  for (const r of rows) {
+    const s = by.get(r.storeId) ?? { storeId: r.storeId, retail: null, supply: null, total: 0 };
+    const part: SummaryPart = { id: r.id, status: r.status, lines: r.lines, counted: r.counted, total: Number(r.total) };
+    if (r.kind === "retail") s.retail = part; else s.supply = part;
+    s.total = (s.retail?.total ?? 0) + (s.supply?.total ?? 0);
+    by.set(r.storeId, s);
+  }
+  const stores = [...by.values()];
+  return {
+    takenOn, stores,
+    retailTotal: stores.reduce((a, s) => a + (s.retail?.total ?? 0), 0),
+    supplyTotal: stores.reduce((a, s) => a + (s.supply?.total ?? 0), 0),
+    grandTotal: stores.reduce((a, s) => a + s.total, 0),
+  };
+}
+
+export async function listStocktakeDates(db: Database, userId: string): Promise<string[]> {
+  return (await asUser(db, userId, (q) => q.query<{ d: string }>("select distinct taken_on::text as d from stocktakes order by d desc limit 36"))).rows.map((r) => r.d);
+}

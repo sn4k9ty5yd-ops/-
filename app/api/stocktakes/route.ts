@@ -1,0 +1,17 @@
+import { getDb } from "@/lib/db";
+import { authed, json } from "@/lib/http";
+import { listStocktakeDates, listStocktakes, startStocktake, stocktakeSummary, type ProductKind } from "@/lib/service";
+
+export const GET = authed(async (userId, req) => {
+  const u = new URL(req.url); const kind = u.searchParams.get("kind"), storeId = u.searchParams.get("storeId");
+  if (u.searchParams.get("dates")) return json(await listStocktakeDates(await getDb(), userId));
+  const sum = u.searchParams.get("summary");
+  if (sum) return json(await stocktakeSummary(await getDb(), userId, sum));
+  if ((kind !== "retail" && kind !== "supply") || !storeId) throw new Error("お店と種類を指定してください");
+  return json(await listStocktakes(await getDb(), userId, storeId, kind));
+});
+export const POST = authed(async (userId, req) => {
+  const b = (await req.json()) as { storeId?: string; kind?: ProductKind; takenOn?: string };
+  if (!b.storeId || (b.kind !== "retail" && b.kind !== "supply")) throw new Error("お店と種類を指定してください");
+  return json({ id: await startStocktake(await getDb(), userId, b.storeId, b.kind, b.takenOn ?? "") });
+}, { write: true });

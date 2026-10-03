@@ -121,3 +121,42 @@ describe("棚卸し", () => {
     expect((await svc.getStocktake(db, id.mgr1, sup))!.items.map((i) => i.name)).toEqual(["ｶﾗｰ剤"]);
   });
 });
+
+describe("棚卸しの合算（店販・業務・店舗・全店）", () => {
+  it("店販は店販、業務は業務で計算し、お店ごとの合算と全店の合算が出る", async () => {
+    // 店1: 店販 R8.10.31（上のテストで 3,600円＋6,000円… 確認済みで合計は既存）／業務 10/31（ｶﾗｰ剤を未入力→0円）。店2: 業務 10/31 を作って ｶﾗｰ剤 × 5 = 3,000円
+    const s1 = (await svc.listStocktakes(db, id.office, st.s1, "retail"))[0];
+    const sup1 = (await svc.listStocktakes(db, id.office, st.s1, "supply"))[0];
+    const d1 = (await svc.getStocktake(db, id.office, sup1.id))!;
+    await svc.saveQuantities(db, id.mgr1, sup1.id, [{ lineId: d1.items[0].id, quantity: 7 }]);                // 店1 業務: 600×7 = 4,200
+    const sup2 = await svc.startStocktake(db, id.office, st.s2, "supply", "2026-10-31");
+    const d2 = (await svc.getStocktake(db, id.office, sup2))!;
+    await svc.saveQuantities(db, id.office, sup2, [{ lineId: d2.items[0].id, quantity: 5 }]);                // 店2 業務: 600×5 = 3,000
+    await svc.startStocktake(db, id.office, st.s1, "retail", "2026-11-30");                                   // 別の日（合算には入らない）
+
+    const sum = await svc.stocktakeSummary(db, id.office, "2026-10-31");
+    const a = sum.stores.find((x) => x.storeId === st.s1)!, b = sum.stores.find((x) => x.storeId === st.s2)!;
+    expect(a.retail!.total).toBe(s1.total);                       // 店販だけの合計
+    expect(a.supply!.total).toBe(4200);                           // 業務だけの合計
+    expect(a.total).toBe(s1.total + 4200);                        // お店の合算（店販＋業務）
+    expect(b.retail).toBeNull(); expect(b.supply!.total).toBe(3000); expect(b.total).toBe(3000);
+    expect(sum.retailTotal).toBe(s1.total); expect(sum.supplyTotal).toBe(7200);
+    expect(sum.grandTotal).toBe(s1.total + 7200);                 // 全店の合算
+    expect(sum.stores).toHaveLength(2);
+  });
+  it("見える範囲だけ合算される: 店長は他店も、シフト担当は自店だけ。日が違えば別", async () => {
+    expect((await svc.stocktakeSummary(db, id.mgr1, "2026-10-31")).stores).toHaveLength(2);
+    const own = await svc.stocktakeSummary(db, id.shift1, "2026-10-31");
+    expect(own.stores.map((x) => x.storeId)).toEqual([st.s1]);
+    expect(own.grandTotal).toBe(own.stores[0].total);
+    expect((await svc.stocktakeSummary(db, id.office, "2026-12-31")).grandTotal).toBe(0);
+    expect(await svc.listStocktakeDates(db, id.office)).toEqual(["2026-11-30", "2026-10-31"]);
+    await expect(svc.stocktakeSummary(db, id.office, "x")).rejects.toThrow("棚卸日");
+  });
+  it("商品マスターの仕入値を変えても、過去の合算は変わらない", async () => {
+    const before = (await svc.stocktakeSummary(db, id.office, "2026-10-31")).grandTotal;
+    const kara = (await svc.listProducts(db, id.office, "supply"))[0];
+    await svc.updateProduct(db, id.office, kara.id, { maker: kara.maker, name: kara.name, spec: kara.spec, costPrice: 99999 });
+    expect((await svc.stocktakeSummary(db, id.office, "2026-10-31")).grandTotal).toBe(before);
+  });
+});

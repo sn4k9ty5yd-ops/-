@@ -1,14 +1,15 @@
 import { mkdirSync } from "node:fs";
 import type { Database } from "./types";
 
-let cached: Promise<Database> | undefined;
+// 開発サーバーは画面(API)ごとにモジュールを別々に読み込むことがあるため、接続は globalThis に1つだけ持つ
+const g = globalThis as unknown as { __albumDb?: Promise<Database> };
 
 /**
  * DATABASE_URL があれば本物のPostgreSQL（Neon等）に、なければ手元のお試し用DB(PGlite)に接続する。
  * お試し用DBは .data/ に保存され、アカウント不要で動作確認できる。
  */
 export function getDb(): Promise<Database> {
-  cached ??= (async () => {
+  g.__albumDb ??= (async () => {
     const { migrate } = await import("./migrate");
     let db: Database;
     if (process.env.DATABASE_URL) {
@@ -25,5 +26,5 @@ export function getDb(): Promise<Database> {
     await migrate(db);
     return db;
   })();
-  return cached;
+  return g.__albumDb;
 }

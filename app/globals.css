@@ -119,3 +119,37 @@ main.xwide{max-width:1400px;margin:0 auto;padding:16px}
   .dot{display:none}
   @page{size:A4 landscape;margin:8mm}
 }
+.storeboxes{display:flex;flex-wrap:wrap;gap:6px 14px;margin:6px 0 12px}
+.storeboxes label{display:flex;gap:6px;align-items:center;margin:0;font-size:14px;color:var(--ink)}
+.storeboxes input{width:18px;height:18px}
+.sttable{width:100%;border-collapse:collapse;font-size:14px}
+.sttable th,.sttable td{border-bottom:1px solid var(--line);padding:8px 6px;text-align:left;background:var(--card);color:var(--ink)}
+.sttable th{background:var(--bg);font-size:12px;color:var(--sub);position:sticky;top:0}
+.sttable td.r{text-align:right;white-space:nowrap}
+.sttable td.nm .subline{display:block}
+.sttable tr.empty td{background:color-mix(in srgb,#ffcc00 12%,var(--card))}
+.sttable .sumrow td{font-weight:700;background:var(--bg);position:sticky;bottom:0}
+.sttable .maker,.sttable .spec{display:none}
+@media (min-width:700px){.sttable .maker,.sttable .spec{display:table-cell}.sttable td.nm .subline{display:none}}
+.stepper{display:inline-flex;align-items:center;gap:4px}
+.stepper button{width:40px;height:40px;margin:0;padding:0;font-size:22px;line-height:1;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:10px}
+.stepper input{width:64px;height:40px;padding:0 4px;text-align:center;font-size:18px;border-radius:10px}
+@media print{
+  .sttable .maker,.sttable .spec{display:table-cell !important}
+  .sttable td.nm .subline{display:none !important}
+  .sttable th,.sttable td{font-size:10px;padding:2px 4px;background:#fff !important;color:#000 !important;position:static}
+  .sttable .stepper button{display:none}
+  .sttable .stepper input{border:0;width:auto;text-align:right;height:auto;font-size:10px;padding:0}
+  .sttable tr.empty td{background:#fff !important}
+  .sttable .sumrow td{position:static}
+}
+.linkcell{width:auto;margin:0;padding:6px 8px;color:var(--blue) !important;font-size:14px;text-align:right}
+.linkcell small{display:block;color:var(--sub);font-size:11px;font-weight:400}
+.sumtable td,.sumtable th{padding:10px 8px}
+@media print{.linkcell{color:#000 !important;border:0 !important;padding:0 !important}.linkcell small{display:none}}
+@media (max-width:520px){
+  .stepper{gap:2px}
+  .stepper button{width:32px;height:36px;font-size:20px;border-radius:8px}
+  .stepper input{width:44px;height:36px;font-size:16px;padding:0 2px}
+  .sttable th,.sttable td{padding:6px 3px;font-size:13px}
+}

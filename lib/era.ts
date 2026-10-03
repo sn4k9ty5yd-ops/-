@@ -6,3 +6,9 @@ export function reiwa(date: string): string {
 }
 /** 例: R8年10月16日〜R8年11月15日 */
 export const reiwaRange = (start: string, end: string) => `${reiwa(start)}〜${reiwa(end)}`;
+
+/** 棚卸日の書き方。例: R8.10.31 */
+export function reiwaDot(date: string): string {
+  const ry = Number(date.slice(0, 4)) - 2018;
+  return `R${ry}.${Number(date.slice(5, 7))}.${Number(date.slice(8, 10))}`;
+}

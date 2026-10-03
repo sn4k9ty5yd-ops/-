@@ -11,6 +11,8 @@ function Cards() {
   const cards = [
     { href: "/shifts", title: "シフトを見る", sub: "今日の出勤・月のシフト・みんなの休み", show: true },
     { href: "/admin/attendance", title: "出勤簿", sub: "出勤・退勤・休憩・実働、有給の残り", show: me.level >= 3 },
+    { href: "/admin/stocktake", title: "棚卸し", sub: "店販・業務の棚卸し（印刷・コピーもできます）", show: me.level >= 2 },
+    { href: "/admin/products", title: "商品一覧", sub: "店販・業務の商品と仕入値", show: me.level >= 3 },
     { href: "/admin/shifts", title: "シフトを作る", sub: "日ごと・人ごと・一覧表で入力します", show: me.level >= 2 },
     { href: "/requests", title: "希望休を出す", sub: "休みたい日をえらびます", show: true },
     { href: "/admin/requests", title: "みんなの希望休", sub: "スタッフの希望休を一覧で見ます", show: me.level >= 2 },
