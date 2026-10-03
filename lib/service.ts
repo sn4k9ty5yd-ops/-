@@ -1368,3 +1368,131 @@ export async function markNotificationsRead(db: Database, userId: string, ids?: 
     ? q.query("update notifications set read_at = now() where read_at is null and id = any($1::uuid[])", [ids])
     : q.query("update notifications set read_at = now() where read_at is null"));
 }
+
+
+// ------------------------------------------------------------------ 材料費（発注した額）
+export type MaterialKind = "supply" | "retail" | "other";
+export const MATERIAL_KIND_LABEL: Record<MaterialKind, string> = { supply: "材料（業務）", retail: "店販", other: "その他" };
+export interface MaterialOrder {
+  id: string; storeId: string; orderedOn: string; supplier: string; item: string; kind: MaterialKind; amount: number; note: string;
+  by: string | null; at: string; deleted: boolean; edited: boolean;
+}
+export interface MaterialLogRow { id: number; orderId: string; action: string; by: string | null; at: string; before: Record<string, unknown> | null; after: Record<string, unknown> | null }
+export interface MaterialInput { orderedOn: string; supplier: string; item: string; kind: MaterialKind; amount: number; note?: string }
+
+function checkMaterial(i: MaterialInput) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(i.orderedOn ?? "")) throw new Error("発注した日が正しくありません");
+  if (!["supply", "retail", "other"].includes(i.kind)) throw new Error("種類が正しくありません");
+  if (!Number.isInteger(i.amount) || i.amount < 0 || i.amount > 100000000) throw new Error("金額は、0円以上の整数で入れてください");
+  if (!i.supplier?.trim()) throw new Error("発注先（業者）を入れてください");
+  if ((i.supplier ?? "").length > 80 || (i.item ?? "").length > 200 || (i.note ?? "").length > 500) throw new Error("文字が長すぎます");
+}
+
+/** 期間（from〜to）の発注を、新しい順に。取り消したものは、店長以上だけに「取り消し」として見える */
+export async function listMaterialOrders(db: Database, userId: string, storeId: string, from: string, to: string): Promise<MaterialOrder[]> {
+  return (await asUser(db, userId, (q) => q.query<MaterialOrder>(
+    `select o.id, o.store_id as "storeId", o.ordered_on::text as "orderedOn", o.supplier, o.item, o.kind, o.amount, o.note,
+            m.name as by, o.created_at as at, (o.deleted_at is not null) as deleted, (o.updated_at is not null) as edited
+       from material_orders o left join memberships m on m.id = o.created_by
+      where o.store_id = $1 and o.ordered_on between $2 and $3
+      order by o.ordered_on desc, o.created_at desc`, [storeId, from, to]))).rows;
+}
+
+export async function addMaterialOrder(db: Database, userId: string, storeId: string, i: MaterialInput): Promise<string> {
+  checkMaterial(i);
+  const me = await getMe(db, userId);
+  if (!me) throw new ForbiddenError();
+  try {
+    return await asUser(db, userId, async (q) => (await q.query<{ id: string }>(
+      `insert into material_orders (company_id, store_id, ordered_on, supplier, item, kind, amount, note, created_by)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9) returning id`,
+      [me.companyId, storeId, i.orderedOn, i.supplier.trim(), (i.item ?? "").trim(), i.kind, i.amount, (i.note ?? "").trim(), userId])).rows[0].id);
+  } catch { throw new ForbiddenError(); }
+}
+
+export async function updateMaterialOrder(db: Database, userId: string, id: string, i: MaterialInput): Promise<void> {
+  checkMaterial(i);
+  let n = 0;
+  try {
+    n = await asUser(db, userId, async (q) => (await q.query(
+      `update material_orders set ordered_on=$2, supplier=$3, item=$4, kind=$5, amount=$6, note=$7, updated_at=now(), updated_by=$8
+        where id = $1 and deleted_at is null returning id`,
+      [id, i.orderedOn, i.supplier.trim(), (i.item ?? "").trim(), i.kind, i.amount, (i.note ?? "").trim(), userId])).rows.length);
+  } catch { throw new ForbiddenError(); }
+  if (n === 0) throw new ForbiddenError();
+}
+
+/** 消さずに「取り消し」にする（記録は残る） */
+export async function cancelMaterialOrder(db: Database, userId: string, id: string): Promise<void> {
+  let ok = false;
+  try { ok = await asUser(db, userId, async (q) => (await q.query<{ ok: boolean }>("select public.material_cancel($1) as ok", [id])).rows[0].ok); } catch { throw new ForbiddenError(); }
+  if (!ok) throw new ForbiddenError();
+}
+
+export async function listMaterialSuppliers(db: Database, userId: string, storeId: string): Promise<string[]> {
+  return (await asUser(db, userId, (q) => q.query<{ supplier: string }>(
+    `select supplier from material_orders where store_id = $1 and supplier <> '' group by supplier order by count(*) desc, max(created_at) desc limit 50`, [storeId]))).rows.map((r) => r.supplier);
+}
+
+export async function getMaterialBudget(db: Database, userId: string, storeId: string, month: string): Promise<number | null> {
+  const r = (await asUser(db, userId, (q) => q.query<{ amount: number }>("select amount from material_budgets where store_id = $1 and month = $2", [storeId, month]))).rows[0];
+  return r ? r.amount : null;
+}
+
+/** 月の予算（税抜）を決める。null で消す（店長=自店・管理者=全店） */
+export async function setMaterialBudget(db: Database, userId: string, storeId: string, month: string, amount: number | null): Promise<void> {
+  if (!/^\d{4}-\d{2}-01$/.test(month)) throw new Error("月が正しくありません");
+  if (amount !== null && (!Number.isInteger(amount) || amount < 0 || amount > 1000000000)) throw new Error("予算は、0円以上の整数で入れてください");
+  const me = await getMe(db, userId);
+  if (!me) throw new ForbiddenError();
+  try {
+    await asUser(db, userId, async (q) => {
+      if (amount === null) { await q.query("delete from material_budgets where store_id=$1 and month=$2", [storeId, month]); return; }
+      await q.query(
+        `insert into material_budgets (store_id, company_id, month, amount, updated_by) values ($1,$2,$3,$4,$5)
+         on conflict (store_id, month) do update set amount = excluded.amount, updated_at = now(), updated_by = excluded.updated_by`, [storeId, me.companyId, month, amount, userId]);
+    });
+  } catch { throw new ForbiddenError(); }
+}
+
+/** 変更・取り消しの記録（店長以上） */
+export async function listMaterialLog(db: Database, userId: string, storeId: string, limit = 100): Promise<MaterialLogRow[]> {
+  return (await asUser(db, userId, (q) => q.query<MaterialLogRow>(
+    `select l.id, l.order_id as "orderId", l.action, m.name as by, l.at, l.before, l.after
+       from material_order_log l left join memberships m on m.id = l.user_id
+      where l.store_id = $1 order by l.id desc limit $2`, [storeId, limit]))).rows;
+}
+
+export interface MaterialImage { id: string; orderId: string; by: string | null; at: string; size: number }
+const MAX_MATERIAL_IMAGE = 3 * 1024 * 1024, MAX_IMAGES_PER_ORDER = 8;
+
+/** 発注画面のスクリーンショットを付ける。貼った人・日時は自動で記録される */
+export async function addMaterialImage(db: Database, userId: string, orderId: string, mime: string, data: Buffer): Promise<string> {
+  if (!["image/jpeg", "image/png", "image/webp"].includes(mime)) throw new Error("画像（JPEG・PNG・WebP）を選んでください");
+  if (data.length === 0 || data.length > MAX_MATERIAL_IMAGE) throw new Error("画像が大きすぎます（3MBまで）");
+  const me = await getMe(db, userId);
+  if (!me) throw new ForbiddenError();
+  try {
+    return await asUser(db, userId, async (q) => {
+      const o = (await q.query<{ store_id: string }>("select store_id from material_orders where id = $1 and deleted_at is null", [orderId])).rows[0];
+      if (!o) throw new Error("x");
+      const n = Number((await q.query<{ n: number }>("select count(*)::int as n from material_order_images where order_id = $1", [orderId])).rows[0].n);
+      if (n >= MAX_IMAGES_PER_ORDER) throw new Error("limit");
+      return (await q.query<{ id: string }>(
+        `insert into material_order_images (order_id, company_id, store_id, mime, size, data, created_by) values ($1,$2,$3,$4,$5,decode($6::text,'hex'),$7) returning id`,
+        [orderId, me.companyId, o.store_id, mime, data.length, data.toString("hex"), userId])).rows[0].id;
+    });
+  } catch (e) { if ((e as Error).message === "limit") throw new Error(`1件に付けられる画像は${MAX_IMAGES_PER_ORDER}枚までです`); throw new ForbiddenError(); }
+}
+
+export async function listMaterialImages(db: Database, userId: string, storeId: string, from: string, to: string): Promise<MaterialImage[]> {
+  return (await asUser(db, userId, (q) => q.query<MaterialImage>(
+    `select i.id, i.order_id as "orderId", m.name as by, i.created_at as at, i.size
+       from material_order_images i join material_orders o on o.id = i.order_id left join memberships m on m.id = i.created_by
+      where i.store_id = $1 and o.ordered_on between $2 and $3 order by i.created_at`, [storeId, from, to]))).rows;
+}
+
+export async function getMaterialImage(db: Database, userId: string, id: string): Promise<{ mime: string; data: Buffer } | null> {
+  const r = (await asUser(db, userId, (q) => q.query<{ mime: string; data: Uint8Array }>("select mime, data from material_order_images where id = $1", [id]))).rows[0];
+  return r ? { mime: r.mime, data: Buffer.from(r.data) } : null;
+}

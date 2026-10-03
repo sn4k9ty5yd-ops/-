@@ -17,7 +17,7 @@ async function person(co: string, code: string, name: string, level: number, st:
 
 beforeAll(async () => {
   db = await newDb();
-  expect(await migrate(db)).toEqual(["0001_tenant_core.sql", "0002_periods_requests.sql", "0003_store_changes.sql", "0004_shifts.sql", "0005_break_rule.sql", "0006_attendance.sql", "0007_products_stocktake.sql", "0008_stock.sql", "0009_display_accounts.sql", "0010_presence.sql", "0011_saturday_hours.sql", "0012_scheduled_retirement.sql", "0013_manual.sql", "0014_ranks.sql", "0015_short_name.sql", "0016_day_limits.sql"]);
+  expect(await migrate(db)).toEqual(["0001_tenant_core.sql", "0002_periods_requests.sql", "0003_store_changes.sql", "0004_shifts.sql", "0005_break_rule.sql", "0006_attendance.sql", "0007_products_stocktake.sql", "0008_stock.sql", "0009_display_accounts.sql", "0010_presence.sql", "0011_saturday_hours.sql", "0012_scheduled_retirement.sql", "0013_manual.sql", "0014_ranks.sql", "0015_short_name.sql", "0016_day_limits.sql", "0017_material_orders.sql"]);
   expect(await migrate(db)).toEqual([]); // 2回目は何もしない
   const a = (await db.query<{ id: string }>("insert into companies (code, name) values ('co-a','A社') returning id")).rows[0].id;
   const b = (await db.query<{ id: string }>("insert into companies (code, name) values ('co-b','B社') returning id")).rows[0].id;
@@ -190,5 +190,59 @@ describe("希望休を公休／有給で出す", () => {
     ]);
     expect([...m.values()]).toEqual(["金子直", "金子嵩", "永尾", "山口", "廣"]);
     await expect(svc.setMyRequest(db, id.staff, "00000000-0000-0000-0000-000000000000", "2026-11-18", "hope")).rejects.toThrow("いまは希望休を変更できません");
+  });
+});
+
+describe("材料費（発注額）", () => {
+  const inp = { orderedOn: "2026-10-05", supplier: "○○商事", item: "カラー剤", kind: "supply" as const, amount: 12800 };
+  it("同じお店のスタッフ(Lv1)も記入でき、同じお店の人は見られる。記入した人が自動で残る", async () => {
+    const oid = await svc.addMaterialOrder(db, id.staff, store.a1, inp);
+    const rows = await svc.listMaterialOrders(db, id.mgr, store.a1, "2026-10-01", "2026-10-31");
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ amount: 12800, by: "スタッフ", deleted: false });
+    expect(await svc.listMaterialSuppliers(db, id.staff, store.a1)).toEqual(["○○商事"]);
+    await svc.updateMaterialOrder(db, id.mgr, oid, { ...inp, amount: 13000 });
+    expect((await svc.listMaterialOrders(db, id.staff, store.a1, "2026-10-01", "2026-10-31"))[0]).toMatchObject({ amount: 13000, edited: true });
+  });
+  it("他のお店のスタッフは見られず・書けない。店長は他店を見るだけ。オフィスは全店", async () => {
+    expect(await svc.listMaterialOrders(db, id.staff2, store.a1, "2026-10-01", "2026-10-31")).toHaveLength(0);
+    await expect(svc.addMaterialOrder(db, id.staff2, store.a1, inp)).rejects.toThrow(svc.ForbiddenError);
+    expect(await svc.listMaterialOrders(db, id.mgr, store.a2, "2026-10-01", "2026-10-31")).toHaveLength(0);
+    await expect(svc.addMaterialOrder(db, id.mgr, store.a2, inp)).rejects.toThrow(svc.ForbiddenError);
+    await expect(svc.addMaterialOrder(db, id.office, store.a2, inp)).resolves.toBeTruthy();
+    expect(await svc.listMaterialOrders(db, id.mgr, store.a2, "2026-10-01", "2026-10-31")).toHaveLength(1);
+  });
+  it("金額の入力チェック", async () => {
+    await expect(svc.addMaterialOrder(db, id.staff, store.a1, { ...inp, amount: -1 })).rejects.toThrow("金額");
+    await expect(svc.addMaterialOrder(db, id.staff, store.a1, { ...inp, supplier: " " })).rejects.toThrow("発注先");
+  });
+  it("取り消しは消さずに残り、スタッフからは見えなくなり、店長は記録を見られる", async () => {
+    const oid = await svc.addMaterialOrder(db, id.staff, store.a1, { ...inp, amount: 500 });
+    await svc.cancelMaterialOrder(db, id.staff, oid);
+    const staffView = await svc.listMaterialOrders(db, id.staff, store.a1, "2026-10-01", "2026-10-31");
+    expect(staffView.some((o) => o.id === oid)).toBe(false);
+    const mgrView = await svc.listMaterialOrders(db, id.mgr, store.a1, "2026-10-01", "2026-10-31");
+    expect(mgrView.find((o) => o.id === oid)?.deleted).toBe(true);
+    const log = await svc.listMaterialLog(db, id.mgr, store.a1);
+    expect(log.filter((l) => l.orderId === oid).map((l) => l.action).sort()).toEqual(["取り消し", "追加"]);
+    await expect(svc.listMaterialLog(db, id.staff, store.a1)).resolves.toHaveLength(0);
+    await expect(svc.cancelMaterialOrder(db, id.staff2, oid)).rejects.toThrow(svc.ForbiddenError);
+  });
+  it("予算は店長(自店)・管理者だけ決められる", async () => {
+    await svc.setMaterialBudget(db, id.mgr, store.a1, "2026-10-01", 300000);
+    expect(await svc.getMaterialBudget(db, id.staff, store.a1, "2026-10-01")).toBe(300000);
+    await expect(svc.setMaterialBudget(db, id.staff, store.a1, "2026-10-01", 1)).rejects.toThrow(svc.ForbiddenError);
+    await expect(svc.setMaterialBudget(db, id.mgr, store.a2, "2026-10-01", 1)).rejects.toThrow(svc.ForbiddenError);
+  });
+  it("スクリーンショットを付けると、貼った人と日時が自動で残る。他店は見られない", async () => {
+    const oid = await svc.addMaterialOrder(db, id.staff, store.a1, inp);
+    const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", "base64");
+    const iid = await svc.addMaterialImage(db, id.staff, oid, "image/png", png);
+    const imgs = await svc.listMaterialImages(db, id.mgr, store.a1, "2026-10-01", "2026-10-31");
+    expect(imgs.find((i) => i.id === iid)).toMatchObject({ orderId: oid, by: "スタッフ" });
+    expect((await svc.getMaterialImage(db, id.mgr, iid))?.data.equals(png)).toBe(true);
+    expect(await svc.getMaterialImage(db, id.staff2, iid)).toBeNull();
+    await expect(svc.addMaterialImage(db, id.staff2, oid, "image/png", png)).rejects.toThrow(svc.ForbiddenError);
+    await expect(svc.addMaterialImage(db, id.staff, oid, "text/html", png)).rejects.toThrow("画像");
   });
 });

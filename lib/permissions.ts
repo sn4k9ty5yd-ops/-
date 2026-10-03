@@ -37,6 +37,9 @@ export const LEVEL_PERMISSIONS: ReadonlyArray<readonly [Level, string, Scope]> =
   [2, "stock.edit", "own"], [3, "stock.edit", "own"], [4, "stock.edit", "all"],
   [3, "stock.settings", "own"], [4, "stock.settings", "all"],
   [4, "manual.manage", "all"],
+  [1, "material.view", "own"], [2, "material.view", "own"], [3, "material.view", "all"], [4, "material.view", "all"],
+  [1, "material.edit", "own"], [2, "material.edit", "own"], [3, "material.edit", "own"], [4, "material.edit", "all"],
+  [3, "material.budget", "own"], [4, "material.budget", "all"],
 ];
 
 export interface Actor {
