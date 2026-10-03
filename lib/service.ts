@@ -7,9 +7,9 @@ import type { Level } from "./permissions";
 // 画面(API)から呼ばれる業務処理。権限の判定はすべてDB側(RLS)で行い、ここでは再実装しない。
 
 export interface Me { id: string; name: string; level: Level; storeId: string; companyId: string; companyName: string; closingStartDay: number; }
-export interface StoreRow { id: string; name: string; status: "active" | "closed"; }
+export interface StoreRow { id: string; name: string; status: "active" | "closed"; defaultOpen: string; defaultClose: string; }
 export interface StaffRow {
-  id: string; name: string; employeeCode: string; storeId: string; level: Level; status: "active" | "disabled"; manageable: boolean;
+  id: string; name: string; employeeCode: string; storeId: string; level: Level; status: "active" | "disabled"; manageable: boolean; onShift: boolean;
 }
 
 export class ForbiddenError extends Error {
@@ -26,7 +26,7 @@ export async function getMe(db: Database, userId: string): Promise<Me | null> {
 }
 
 export async function listStores(db: Database, userId: string): Promise<StoreRow[]> {
-  return (await asUser(db, userId, (q) => q.query<StoreRow>("select id, name, status from stores order by status, sort_order, name"))).rows;
+  return (await asUser(db, userId, (q) => q.query<StoreRow>(`select id, name, status, to_char(default_open, 'HH24:MI') as "defaultOpen", to_char(default_close, 'HH24:MI') as "defaultClose" from stores order by status, sort_order, name`))).rows;
 }
 
 const cleanName = (name: string) => {
@@ -89,7 +89,7 @@ export async function listStaff(db: Database, userId: string): Promise<StaffRow[
   if (!me) return [];
   const { rows } = await asUser(db, userId, (q) =>
     q.query<StaffRow>(
-      `select id, name, employee_code as "employeeCode", store_id as "storeId", level, status from memberships order by store_id, level desc, name`));
+      `select id, name, employee_code as "employeeCode", store_id as "storeId", level, status, on_shift as "onShift" from memberships order by store_id, level desc, name`));
   // 「操作できる人」かは、画面のボタン表示のための目安（本当の判定はDBが行う）
   return rows.map((r) => ({
     ...r,
@@ -244,4 +244,133 @@ export async function listNames(db: Database, userId: string): Promise<{ id: str
   return (await asUser(db, userId, (q) =>
     q.query<{ id: string; name: string; storeId: string }>(
       `select id, name, store_id as "storeId" from memberships where status = 'active' order by store_id, level desc, name`))).rows;
+}
+
+
+// ------------------------------------------------------------------ シフト
+export type ShiftKind = "work" | "off" | "paid" | "holiday" | "other";
+export interface ShiftRow { id: string; membershipId: string; storeId: string; periodId: string; day: string; kind: ShiftKind; start: string | null; end: string | null; }
+export interface ShiftEntry { membershipId: string; day: string; kind: ShiftKind; start?: string | null; end?: string | null; }
+export const SHIFT_KIND_LABEL: Record<ShiftKind, string> = { work: "出勤", off: "休み", paid: "有給", holiday: "公休", other: "その他" };
+
+const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
+const KINDS: ShiftKind[] = ["work", "off", "paid", "holiday", "other"];
+
+export async function setStoreHours(db: Database, userId: string, storeId: string, open: string, close: string): Promise<void> {
+  if (!TIME.test(open) || !TIME.test(close) || close <= open) throw new Error("オープンとクローズの時間が正しくありません");
+  let n = 0;
+  try { n = (await asUser(db, userId, (q) => q.query("update stores set default_open = $2, default_close = $3 where id = $1 returning id", [storeId, open, close]))).rows.length; }
+  catch { throw new ForbiddenError(); }
+  if (n === 0) throw new ForbiddenError();
+}
+
+export async function setOnShift(db: Database, userId: string, targetId: string, onShift: boolean): Promise<void> {
+  let n = 0;
+  try { n = (await asUser(db, userId, (q) => q.query("update memberships set on_shift = $2 where id = $1 returning id", [targetId, onShift]))).rows.length; }
+  catch { throw new ForbiddenError(); }
+  if (n === 0) throw new ForbiddenError();
+}
+
+/** シフト表に載せる人（その店舗の在籍者でシフトに入る人） */
+export async function listRoster(db: Database, userId: string, storeId: string): Promise<{ id: string; name: string; level: Level }[]> {
+  return (await asUser(db, userId, (q) =>
+    q.query<{ id: string; name: string; level: Level }>(
+      "select id, name, level from memberships where store_id = $1 and status = 'active' and on_shift order by level desc, name", [storeId]))).rows;
+}
+
+export async function listShifts(db: Database, userId: string, periodId: string, storeId: string): Promise<ShiftRow[]> {
+  return (await asUser(db, userId, (q) =>
+    q.query<ShiftRow>(
+      `select id, membership_id as "membershipId", store_id as "storeId", period_id as "periodId", day::text as day, kind,
+              to_char(start_time, 'HH24:MI') as start, to_char(end_time, 'HH24:MI') as "end"
+         from shifts where period_id = $1 and store_id = $2 order by day`, [periodId, storeId]))).rows;
+}
+
+/** 編集できる状態か（権限＋進行状況）。画面の表示と、保存前の確認に使う */
+export async function canEditShifts(db: Database, userId: string, periodId: string, storeId: string): Promise<boolean> {
+  return (await asUser(db, userId, (q) =>
+    q.query<{ ok: boolean }>("select app.has_perm('shift.edit', $2) and app.shift_editable($1, $2) as ok", [periodId, storeId]))).rows[0].ok;
+}
+
+const NOT_EDITABLE = "いまはシフトを変更できません（確定済み、またはその期間・お店の権限がありません）";
+
+function validateEntry(e: ShiftEntry) {
+  if (!KINDS.includes(e.kind)) throw new Error("種類が正しくありません");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(e.day)) throw new Error("日付が正しくありません");
+  if (e.kind === "work") {
+    if (!e.start || !e.end || !TIME.test(e.start) || !TIME.test(e.end)) throw new Error("入店と退店の時間を入れてください");
+    if (e.end <= e.start) throw new Error("退店は入店より後の時間にしてください");
+  }
+}
+
+/** シフトを保存（同じ人・同じ日は上書き）。1件でも失敗したら全部取り消す */
+export async function saveShifts(db: Database, userId: string, periodId: string, storeId: string, entries: ShiftEntry[]): Promise<number> {
+  entries.forEach(validateEntry);
+  if (entries.length === 0) return 0;
+  const me = await getMe(db, userId);
+  if (!me) throw new ForbiddenError();
+  if (!(await canEditShifts(db, userId, periodId, storeId))) throw new ForbiddenError(NOT_EDITABLE);
+  try {
+    await asUser(db, userId, async (q) => {
+      for (const e of entries)
+        await q.query(
+          `insert into shifts (company_id, store_id, period_id, membership_id, day, kind, start_time, end_time)
+           values ($1,$2,$3,$4,$5,$6,$7,$8)
+           on conflict (membership_id, day) do update set kind = excluded.kind, start_time = excluded.start_time, end_time = excluded.end_time`,
+          [me.companyId, storeId, periodId, e.membershipId, e.day, e.kind, e.kind === "work" ? e.start : null, e.kind === "work" ? e.end : null]);
+    });
+  } catch (err) {
+    const msg = (err as Error).message ?? "";
+    if (msg.includes("outside the period")) throw new Error("この期間の外の日付が含まれています");
+    if (msg.includes("roster") || msg.includes("not belong") || msg.includes("not active")) throw new Error("このお店のシフトに入るスタッフを選んでください");
+    throw new ForbiddenError(NOT_EDITABLE);
+  }
+  return entries.length;
+}
+
+export async function clearShifts(db: Database, userId: string, periodId: string, storeId: string, items: { membershipId: string; day: string }[]): Promise<number> {
+  if (items.length === 0) return 0;
+  if (!(await canEditShifts(db, userId, periodId, storeId))) throw new ForbiddenError(NOT_EDITABLE);
+  return asUser(db, userId, async (q) => {
+    let n = 0;
+    for (const it of items) n += (await q.query("delete from shifts where period_id = $1 and store_id = $2 and membership_id = $3 and day = $4 returning id", [periodId, storeId, it.membershipId, it.day])).rows.length;
+    return n;
+  });
+}
+
+/** 希望休を、シフトの「休み/有給」として一括で反映（すでにシフトがある日は上書きしない） */
+export async function applyRequests(db: Database, userId: string, periodId: string, storeId: string): Promise<number> {
+  const me = await getMe(db, userId);
+  if (!me) throw new ForbiddenError();
+  if (!(await canEditShifts(db, userId, periodId, storeId))) throw new ForbiddenError(NOT_EDITABLE);
+  return asUser(db, userId, async (q) =>
+    (await q.query(
+      `insert into shifts (company_id, store_id, period_id, membership_id, day, kind)
+       select r.company_id, r.store_id, r.period_id, r.membership_id, r.day,
+              case r.kind when 'paid' then 'paid' when 'holiday' then 'holiday' when 'other' then 'other' else 'off' end
+         from time_off_requests r join memberships m on m.id = r.membership_id
+        where r.period_id = $1 and r.store_id = $2 and m.status = 'active' and m.on_shift
+       on conflict (membership_id, day) do nothing returning id`, [periodId, storeId])).rows.length);
+}
+
+/**
+ * 全員を基本時間で一括入力。希望休の人は休み/有給にする。
+ * overwrite=false のときは、すでにシフトがある人・日は変えない。
+ */
+export async function fillDefault(
+  db: Database, userId: string,
+  input: { periodId: string; storeId: string; days: string[]; membershipIds?: string[]; start: string; end: string; overwrite?: boolean },
+): Promise<number> {
+  if (!TIME.test(input.start) || !TIME.test(input.end) || input.end <= input.start) throw new Error("入店と退店の時間が正しくありません");
+  const roster = (await listRoster(db, userId, input.storeId)).map((r) => r.id).filter((id) => !input.membershipIds || input.membershipIds.includes(id));
+  const existing = new Set((await listShifts(db, userId, input.periodId, input.storeId)).map((s) => `${s.membershipId}|${s.day}`));
+  const reqs = new Map((await listRequests(db, userId, input.periodId)).map((r) => [`${r.membershipId}|${r.day}`, r.kind]));
+  const entries: ShiftEntry[] = [];
+  for (const day of input.days) for (const id of roster) {
+    const k = `${id}|${day}`;
+    if (!input.overwrite && existing.has(k)) continue;
+    const req = reqs.get(k);
+    entries.push(req ? { membershipId: id, day, kind: req === "paid" ? "paid" : req === "holiday" ? "holiday" : "off" } : { membershipId: id, day, kind: "work", start: input.start, end: input.end });
+  }
+  return saveShifts(db, userId, input.periodId, input.storeId, entries);
 }

@@ -25,6 +25,7 @@ async function main() {
     const id = (await db.query<{ id: string }>(
       "insert into memberships (company_id, store_id, employee_code, name, level) values ($1,$2,$3,$4,$5) returning id", [co, store, code, name, level])).rows[0].id;
     const pc = String(Math.floor(100000 + Math.random() * 899999)); // お試し用（本番はオフィスが発行）
+    if (level === 4) await db.query("update memberships set on_shift = false where id = $1", [id]);
     const pcode = /^(\d)\1{5}$/.test(pc) ? "493817" : pc;
     await setPasscode(db, id, pcode);
     console.log(`  社員番号 ${code}  パスコード ${pcode}  … ${name}（レベル${level}）`);
