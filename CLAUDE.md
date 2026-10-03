@@ -65,3 +65,4 @@ Lv1 スタッフ / Lv2 シフト担当（自店のシフト作成のみ）/ Lv3 
 - **公開の準備（完了）**: 手順書 `docs/DEPLOY.md`、Render用 `render.yaml`（Blueprint・無料・シンガポール・`npm ci --include=dev`）、`/setup`（初回だけの初期設定ページ。`SETUP_KEY`(16文字以上)が一致し、会社が0件のときだけ動く）、`/api/health`、`/robots.txt`(全拒否)、ホーム画面アイコン、管理者のバックアップダウンロード（設定画面。パスコード・ログイン状態は含めない）。
 - **本物のPostgreSQL 16（Neonと同じ非スーパーユーザー）でも検証済み**: `TEST_DATABASE_URL=... npx vitest run --fileParallelism=false tests/service*.test.ts tests/bootstrap.test.ts`（82項目合格）。本番モード(next start)＋実PostgreSQLで、画面の通しテストも確認。ローカルのPostgreSQL起動例: `su postgres -c "/usr/lib/postgresql/16/bin/initdb ..."`。
 - 次の作業: ユーザーが Neon と Render のアカウントを作る手順を案内（`docs/DEPLOY.md`）→ 公開後の動作確認 → 通知（メール/Web）→ 出退勤ボタン（将来）。
+- **次のセッションの最初の仕事: 公開作業。`docs/HANDOFF_DEPLOY.md` を読んで、そのとおりに進める**（ユーザーは Neon/Render のカギ `NEON_API_KEY`/`RENDER_API_KEY` と接続許可を設定済みのはず。カギはチャットに貼らせない）。
