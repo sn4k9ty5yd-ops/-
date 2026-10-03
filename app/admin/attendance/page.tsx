@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, useAutoRefresh, useMe } from "@/lib/client";
+import { reiwaRange } from "@/lib/era";
 import { fmt } from "@/lib/hours";
 import { daysOf, dow, md, WEEKDAYS } from "@/lib/labels";
 import { PeriodNav, periodFor, todayJst, tintStyle } from "@/lib/period-nav";
@@ -73,7 +74,8 @@ export default function AttendancePage() {
 
   return (
     <>
-      <h1>出勤簿</h1>
+      <h1 className="noprint">出勤簿</h1>
+      <h1 className="printonly" style={{ fontSize: 20 }}>出　勤　簿　（{reiwaRange(view.start, view.end)}）　　店名：{store?.name}</h1>
       <div className="toolbar">
         <select aria-label="お店" value={storeId} onChange={(e) => setStoreId(e.target.value)}>{stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
         <div className="seg" style={{ margin: 0 }}>
@@ -91,6 +93,7 @@ export default function AttendancePage() {
           {me.level === 4 && attStatus === "submitted" && <button style={{ width: "auto", margin: 0, padding: "10px 14px", fontSize: 14 }} onClick={() => post({ action: "status", status: "acknowledged" })}>確認済みにする</button>}
           {me.level === 4 && attStatus !== "open" && <button className="ghost" style={{ color: "var(--sub)" }} onClick={() => confirm("入力中に戻しますか？") && post({ action: "status", status: attStatus === "acknowledged" ? "submitted" : "open" })}>ひとつ戻す</button>}
           {note && <span className="sub">{note}</span>}
+          {mode === "table" && <button className="ghost" style={{ color: "var(--ink)" }} onClick={() => window.print()}>印刷</button>}
         </div>
       )}
       {showBulk && editable && (

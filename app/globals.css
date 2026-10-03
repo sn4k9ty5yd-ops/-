@@ -105,3 +105,17 @@ main.xwide{max-width:1400px;margin:0 auto;padding:16px}
 .atttable td.wk{font-weight:700}
 .atttable td.tot{min-width:70px;background:#fff3c4;color:#1d1d1f}
 .atttable td.name{vertical-align:middle}
+.printonly{display:none}
+@media print{
+  header.demo,.tabs,.toolbar,.pnav,.actions,.hint,.sub,.err,.noprint,.back,.floating,nextjs-portal{display:none !important}
+  .printonly{display:block}
+  body{background:#fff;color:#000}
+  main.xwide,main.wide{max-width:none;padding:0}
+  .tintbox{background:#fff !important;padding:0}
+  .scroll{overflow:visible;background:#fff}
+  .atttable td,.atttable th{font-size:8px;padding:1px 2px;color:#000 !important;background:#fff !important}
+  .atttable td.tot{background:#fff !important}
+  .atttable tr{break-inside:avoid}
+  .dot{display:none}
+  @page{size:A4 landscape;margin:8mm}
+}

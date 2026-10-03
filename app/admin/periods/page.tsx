@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, useAutoRefresh, useMe } from "@/lib/client";
 import { NEXT_ACTION } from "@/lib/labels";
+import { reiwaRange } from "@/lib/era";
 import { periodFor, todayJst, tintStyle } from "@/lib/period-nav";
 import { relationLabel } from "@/lib/periods";
 import { STATUS_LABEL, STATUS_ORDER, type PeriodRow, type PeriodStatus } from "@/lib/service";
@@ -30,7 +31,7 @@ export default function PeriodsPage() {
         const rel = relationLabel(p.start, periodFor(todayJst(), me.closingStartDay).start);
         return (
         <div key={p.id} className="card tint" style={{ marginTop: 16, ...tintStyle(p.start) }}>
-          <span className={`badge2 ${rel.kind}`}>{rel.label}</span> <b style={{ fontSize: 18 }}>{p.label}</b> <span className="sub">{p.start} 〜 {p.end}</span>
+          <span className={`badge2 ${rel.kind}`}>{rel.label}</span> <b style={{ fontSize: 18 }}>{p.label}</b> <span className="sub">{reiwaRange(p.start, p.end)}</span>
           {p.stores.filter((s) => stores.find((x) => x.id === s.storeId)?.status !== "closed").map((s) => {
             const next = NEXT_ACTION[s.status];
             const needOffice = next?.to === "acknowledged";

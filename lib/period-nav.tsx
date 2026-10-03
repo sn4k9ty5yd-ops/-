@@ -1,4 +1,5 @@
 "use client";
+import { reiwaRange } from "./era";
 import { nextPeriod, periodFor, periodHue, prevPeriod, relationLabel, type Period } from "./periods";
 
 /** 日本時間の今日（YYYY-MM-DD） */
@@ -16,7 +17,7 @@ export function PeriodNav({ period, startDay, onChange }: { period: Period; star
       <div>
         <span className={`badge2 ${rel.kind}`}>{rel.label}</span>
         <div className="plabel">{period.label}</div>
-        <div className="sub">{period.start.replace(/-/g, "/")} 〜 {period.end.replace(/-/g, "/")}</div>
+        <div className="sub">{reiwaRange(period.start, period.end)}</div>
       </div>
       <button aria-label="次の期間" onClick={() => onChange(nextPeriod(period, startDay))}>›</button>
     </div>
