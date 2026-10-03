@@ -159,3 +159,9 @@ main.xwide{max-width:1400px;margin:0 auto;padding:16px}
 .mvbtn.out{background:#fdecec;color:#b00020}.mvbtn.in{background:#e6f4ea;color:#1e5e2e}
 @media (max-width:520px){.stockrow{flex-wrap:wrap}.stockrow .actions{width:100%}.stockrow .mvbtn{flex:1;padding:12px 8px}}
 .storelink{background:#fff;color:#1d1d1f;border-radius:999px;padding:8px 14px;text-decoration:none;font-size:14px;font-weight:600;border:1px solid var(--line)}
+@media print{
+  body.printing-result main > *:not(.sheet-bg){display:none !important}
+  body.printing-result .sheet-bg{position:static;background:none;display:block}
+  body.printing-result .sheet{max-width:none;max-height:none;border-radius:0;padding:0;background:#fff;color:#000}
+  body.printing-result .sheet .scroll{max-height:none !important;overflow:visible !important}
+}

@@ -69,3 +69,4 @@ Lv1 スタッフ / Lv2 シフト担当（自店のシフト作成のみ）/ Lv3 
 - **公開済み（2026-10）**: https://album-system.onrender.com （Render無料・シンガポール・サービスID `srv-db080uc9v7es73aa62h0`・**autoDeploy=オフ**＝確認してから手動で公開）。DB: Neon プロジェクト `album`（`small-leaf-13808839`・無料・PG16・シンガポール）。初期設定済み（会社ID `album`・管理者 社員番号 `9000`）。Neon上で db/migrations 8本と権限(RLS)を、確認用ブランチで検証済み。公開版の通しAPI確認も合格。keepalive: `.github/workflows/keepalive.yml`（5分ごとに /api/health）。
 - 公開の更新手順: コードを直す → テスト → push → Render API `POST /v1/services/srv-db080uc9v7es73aa62h0/deploys` で手動公開 → `/api/health` と主要API確認。資格情報は環境の「API認証情報」（Neon/Render。値は見えない・チャットに出さない）。
 - 次の作業: 公開版の実運用の確認（ユーザーがスタッフ登録・商品登録を始める）→ 通知（メール/Web）→ 出退勤ボタン（将来）。
+- **スタッフのまとめて登録（完了）**: 「スタッフ」画面の「Excelからまとめて登録」。Excelの表を貼ると、見出しの言葉（名前/氏名・社員番号・お店/店舗/所属・レベル/権限）で列を読み、**メールアドレス（@を含む列）は無視**。登録前に行ごとにチェック（重複・英数字以外・お店が無い・レベル）、全員成功か全員取り消し（`addStaffBulk`、100人まで）、全員のパスコードを表で1度だけ表示（印刷・表をコピー）。店長は自店のレベル1だけ。`lib/staff-paste.ts`。

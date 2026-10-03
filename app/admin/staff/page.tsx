@@ -2,9 +2,14 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, useAutoRefresh, useMe } from "@/lib/client";
 import { LEVEL_NAMES, type Level } from "@/lib/permissions";
+import { parseStaffPaste } from "@/lib/staff-paste";
+import type { BulkStaffResult } from "@/lib/service";
 import type { StaffRow } from "@/lib/service";
 
 type Store = { id: string; name: string; status: "active" | "closed" };
+async function copyText(text: string) {
+  try { await navigator.clipboard.writeText(text); return true; } catch { const t = document.createElement("textarea"); t.value = text; document.body.appendChild(t); t.select(); const ok = document.execCommand("copy"); t.remove(); return ok; }
+}
 const LEVELS: Level[] = [1, 2, 3, 4];
 
 export default function StaffPage() {
@@ -13,6 +18,9 @@ export default function StaffPage() {
   const [stores, setStores] = useState<Store[]>([]);
   const [form, setForm] = useState({ name: "", employeeCode: "", storeId: me.storeId, level: 1 as Level });
   const [msg, setMsg] = useState("");
+  const [bulk, setBulk] = useState<{ text: string; storeId: string } | null>(null);
+  const [bulkDone, setBulkDone] = useState<BulkStaffResult[] | null>(null);
+  const [bulkMsg, setBulkMsg] = useState(""); const [bulkBusy, setBulkBusy] = useState(false); const [bulkNote, setBulkNote] = useState("");
   const [issued, setIssued] = useState<{ name: string; passcode: string } | null>(null);
 
   const load = useCallback(async () => {
@@ -28,6 +36,10 @@ export default function StaffPage() {
   const storeName = (id: string) => stores.find((s) => s.id === id)?.name ?? "";
   const canRegister = me.level >= 3;
   const registrableStores = (me.level === 4 ? stores : stores.filter((s) => s.id === me.storeId)).filter((s) => s.status === "active");
+
+  const parsed = bulk ? parseStaffPaste(bulk.text, registrableStores, { defaultStoreId: bulk.storeId, canAssignLevel: me.level === 4 }) : null;
+  const okRows = parsed?.rows.filter((r) => !r.error) ?? [];
+  const nameOfStore = (id: string | null) => stores.find((x) => x.id === id)?.name ?? "";
 
   return (
     <>
@@ -76,6 +88,7 @@ export default function StaffPage() {
       </ul>
 
       <h2>スタッフを追加</h2>
+      {canRegister && <button className="ghost" style={{ color: "var(--blue)", width: "auto", margin: "8px 0" }} disabled={registrableStores.length === 0} onClick={() => { setBulk({ text: "", storeId: registrableStores[0]?.id ?? me.storeId }); setBulkMsg(""); }}>Excelからまとめて登録</button>}
       {!canRegister ? <p className="hint">スタッフの登録ができるのは、レベル3（店長）以上です。</p> : (
         <form onSubmit={(e) => {
           e.preventDefault();
@@ -103,6 +116,59 @@ export default function StaffPage() {
           )}
           <button type="submit">追加する（パスコードが発行されます）</button>
         </form>
+      )}
+
+      {bulk && parsed && (
+        <div className="sheet-bg" onClick={() => !bulkBusy && setBulk(null)}>
+          <div className="sheet" style={{ maxWidth: 640 }} onClick={(e) => e.stopPropagation()} role="dialog" aria-label="まとめて登録">
+            <b style={{ fontSize: 18 }}>Excelからまとめて登録</b>
+            <p className="sub">Excelの表をコピーして、下にはりつけてください。列は「名前・社員番号・お店・レベル」の順です（お店・レベルは省けます）。見出しの行があれば、見出しの言葉で読みます。<b>メールアドレスの列は、無視します。</b></p>
+            <textarea aria-label="貼り付け" rows={7} style={{ width: "100%", fontSize: 14, padding: 10, borderRadius: 12, border: "1px solid var(--line)", background: "var(--card)", color: "var(--ink)" }}
+              value={bulk.text} onChange={(e) => setBulk({ ...bulk, text: e.target.value })} placeholder={"名前\t社員番号\t（お店）\t（レベル）\n大坪\t1003\n永尾\t1004"} />
+            <label>お店が書かれていない行は、このお店にします
+              <select value={bulk.storeId} onChange={(e) => setBulk({ ...bulk, storeId: e.target.value })}>{registrableStores.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
+            {parsed.rows.length > 0 && (
+              <div className="scroll" style={{ marginTop: 10, maxHeight: 260, overflow: "auto" }}>
+                <table className="sttable"><thead><tr><th>名前</th><th>社員番号</th><th>お店</th><th>レベル</th><th>確認</th></tr></thead>
+                  <tbody>{parsed.rows.map((r) => (
+                    <tr key={r.line} className={r.error ? "empty" : ""}><td>{r.name}</td><td>{r.employeeCode}</td><td>{nameOfStore(r.storeId) || r.storeName}</td><td>{LEVEL_NAMES[r.level].replace(/^レベル\d /, "")}</td>
+                      <td style={{ color: r.error ? "#d70015" : "#1e7e34" }}>{r.error ?? "OK"}</td></tr>))}</tbody></table>
+              </div>
+            )}
+            <p className="sub" style={{ margin: "8px 0" }}>{parsed.rows.length === 0 ? "" : parsed.rows.length === okRows.length ? `${okRows.length}人を登録します。` : `${parsed.rows.length - okRows.length}行に問題があります。直してから、もう一度はりつけてください。`}</p>
+            {bulkMsg && <p className="err">{bulkMsg}</p>}
+            <button disabled={bulkBusy || parsed.rows.length === 0 || okRows.length !== parsed.rows.length} onClick={async () => {
+              if (!confirm(`${okRows.length}人を登録します。登録すると、全員のパスコードが1度だけ表示されます。よろしいですか？`)) return;
+              setBulkBusy(true); setBulkMsg("");
+              try {
+                const r = await api<{ count: number; created: BulkStaffResult[] }>("/api/staff/bulk", { rows: okRows.map((x) => ({ name: x.name, employeeCode: x.employeeCode, storeId: x.storeId, level: x.level })) });
+                setBulk(null); setBulkDone(r.created); setBulkNote(""); await load();
+              } catch (e) { setBulkMsg((e as Error).message); }
+              setBulkBusy(false);
+            }}>{bulkBusy ? "登録中…" : `${okRows.length}人を登録する`}</button>
+            <button className="ghost" style={{ color: "var(--ink)", width: "100%" }} disabled={bulkBusy} onClick={() => setBulk(null)}>キャンセル</button>
+          </div>
+        </div>
+      )}
+
+      {bulkDone && (
+        <div className="sheet-bg">
+          <div className="sheet printable" style={{ maxWidth: 640 }} role="dialog" aria-label="登録できました">
+            <b style={{ fontSize: 18 }}>{bulkDone.length}人を登録しました</b>
+            <div className="notice noprint"><b>パスコードは、この画面でしか見られません。</b><div className="sub">閉じる前に、印刷するか、コピーして、本人に伝えてください。閉じると、二度と表示されません（忘れたときは、再発行できます）。</div></div>
+            <h1 className="printonly" style={{ fontSize: 16 }}>スタッフのパスコード（会社ID: album）　※本人にだけ渡してください</h1>
+            <div className="scroll" style={{ maxHeight: 340, overflow: "auto" }}>
+              <table className="sttable"><thead><tr><th>名前</th><th>社員番号</th><th>お店</th><th>パスコード</th></tr></thead>
+                <tbody>{bulkDone.map((r) => <tr key={r.employeeCode}><td>{r.name}</td><td>{r.employeeCode}</td><td>{nameOfStore(r.storeId)}</td><td><b style={{ letterSpacing: 2, fontSize: 16 }}>{r.passcode}</b></td></tr>)}</tbody></table>
+            </div>
+            <div className="actions noprint" style={{ margin: "10px 0" }}>
+              <button className="ghost" style={{ color: "var(--ink)" }} onClick={() => { document.body.classList.add("printing-result"); window.print(); document.body.classList.remove("printing-result"); }}>印刷</button>
+              <button className="ghost" style={{ color: "var(--ink)" }} onClick={async () => setBulkNote((await copyText(["名前\t社員番号\tお店\tパスコード", ...bulkDone.map((r) => [r.name, r.employeeCode, nameOfStore(r.storeId), r.passcode].join("\t"))].join("\n"))) ? "表をコピーしました" : "コピーできませんでした")}>表をコピー</button>
+              {bulkNote && <span className="sub">{bulkNote}</span>}
+            </div>
+            <button className="noprint" onClick={() => confirm("パスコードは、もう表示できません。控えましたか？") && setBulkDone(null)}>控えました。閉じる</button>
+          </div>
+        </div>
       )}
       {msg && <p className="err">{msg}</p>}
     </>

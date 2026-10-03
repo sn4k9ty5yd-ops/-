@@ -1,8 +1,9 @@
 import { issuePasscode } from "./auth/login";
+import { generatePasscode, hashPasscode } from "./auth/passcode";
 import { calcHours, DEFAULT_BREAK_RULE, validateBreakRule, type BreakRule } from "./hours";
 import { upcomingPeriods } from "./periods";
 import { asUser } from "./db/user-context";
-import type { Database } from "./db/types";
+import type { Database, Queryable } from "./db/types";
 import type { Level } from "./permissions";
 
 // 画面(API)から呼ばれる業務処理。権限の判定はすべてDB側(RLS)で行い、ここでは再実装しない。
@@ -909,4 +910,70 @@ export async function applyStocktakeToStock(db: Database, userId: string, stockt
   if (d.status === "open") throw new Error("提出してから、在庫に反映してください");
   const entries = d.items.filter((i) => i.productId && i.quantity !== null).map((i) => ({ productId: i.productId as string, counted: i.quantity as number }));
   return recountStock(db, userId, d.storeId, entries, `棚卸し ${d.takenOn} を反映`);
+}
+
+// ------------------------------------------------------------------ スタッフのまとめて登録
+export interface BulkStaffInput { name: string; employeeCode: string; storeId: string; level: Level; }
+export interface BulkStaffResult { name: string; employeeCode: string; storeId: string; level: Level; passcode: string; }
+const CODE_PATTERN = /^[A-Za-z0-9]{1,20}$/;
+
+/**
+ * スタッフをまとめて登録する。1人でも問題があれば、全員を登録しない（途中までは作らない）。
+ * dryRun=true なら、チェックだけして、何も作らない。パスコードは、登録した全員分を返す（このときだけ見られる）。
+ */
+export async function addStaffBulk(db: Database, userId: string, rows: BulkStaffInput[], dryRun = false): Promise<{ count: number; created: BulkStaffResult[] }> {
+  if (rows.length === 0) throw new Error("登録する人がいません");
+  if (rows.length > 100) throw new Error("一度に登録できるのは、100人までです");
+  const seen = new Set<string>();
+  for (const [i, r] of rows.entries()) {
+    const at = `${i + 1}人目（${r.name || "名前なし"}）`;
+    if (!r.name?.trim() || r.name.trim().length > 50) throw new Error(`${at}：名前を確認してください`);
+    if (!CODE_PATTERN.test(r.employeeCode ?? "")) throw new Error(`${at}：社員番号は、英数字（20文字まで）にしてください`);
+    if (![1, 2, 3, 4].includes(r.level)) throw new Error(`${at}：レベルが正しくありません`);
+    if (seen.has(r.employeeCode)) throw new Error(`${at}：社員番号「${r.employeeCode}」が、2回出てきます`);
+    seen.add(r.employeeCode);
+  }
+  const me = await getMe(db, userId);
+  if (!me) throw new ForbiddenError();
+  // すでに使われている社員番号（会社の中）
+  const taken = (await db.query<{ employee_code: string }>("select employee_code from memberships where company_id = $1 and employee_code = any($2::text[])", [me.companyId, [...seen]])).rows.map((r) => r.employee_code);
+  if (taken.length > 0) throw new Error(`社員番号「${taken.slice(0, 5).join("・")}」は、すでに使われています`);
+
+  // 権限の確認（どのお店・どのレベルに登録できるか）は、データベースのルールで行う。dryRun でも、同じルールで試して取り消す
+  const insertAll = async (q: Queryable) => {
+    const ids: string[] = [];
+    for (const r of rows)
+      ids.push((await q.query<{ id: string }>(
+        "insert into memberships (company_id, store_id, employee_code, name, level) values ($1,$2,$3,$4,$5) returning id",
+        [me.companyId, r.storeId, r.employeeCode, r.name.trim(), r.level])).rows[0].id);
+    return ids;
+  };
+  class Rollback extends Error {}
+  let ids: string[] = [];
+  try {
+    await asUser(db, userId, async (q) => {
+      ids = await insertAll(q);
+      if (dryRun) throw new Rollback();               // チェックだけ: 全部取り消す
+    });
+  } catch (e) {
+    if (!(e instanceof Rollback)) {
+      if ((e as { code?: string }).code === "23505") throw new Error("すでに使われている社員番号があります");
+      throw new ForbiddenError("このお店・このレベルの人を登録する権限がありません（店長は、自分のお店のスタッフ(レベル1)だけ登録できます）");
+    }
+  }
+  if (dryRun) return { count: rows.length, created: [] };
+
+  // パスコードを発行して保存（失敗したら、いま作った人を全員取り消す）
+  try {
+    const out: BulkStaffResult[] = [];
+    const passcodes = rows.map(() => generatePasscode());
+    const hashes = await Promise.all(passcodes.map((p) => hashPasscode(p)));
+    await db.tx(async (q) => { for (const [i, id] of ids.entries()) await q.query("update memberships set passcode_hash = $2 where id = $1", [id, hashes[i]]); });
+    rows.forEach((r, i) => out.push({ name: r.name.trim(), employeeCode: r.employeeCode, storeId: r.storeId, level: r.level, passcode: passcodes[i] }));
+    return { count: rows.length, created: out };
+  } catch {
+    await db.query("delete from audit_logs where target_id = any($1::uuid[])", [ids]).catch(() => {});
+    await db.query("delete from memberships where id = any($1::uuid[])", [ids]).catch(() => {});
+    throw new Error("パスコードを作れなかったため、登録を取り消しました。もう一度お試しください");
+  }
 }
