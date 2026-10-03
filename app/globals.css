@@ -11,8 +11,8 @@ button{width:100%;margin-top:24px;font-size:17px;font-weight:600;padding:16px;bo
 main.wide{max-width:760px;padding:16px}
 .shell .demo{background:#fff3c4;color:#1d1d1f;padding:10px 16px;font-size:13px;display:flex;gap:12px;flex-wrap:wrap;align-items:center}
 .shell .demo select{font-size:14px;padding:6px;margin-left:6px}
-.tabs{display:flex;gap:8px;padding:12px 16px 0;max-width:760px;margin:0 auto}
-.tabs a{padding:10px 16px;border-radius:999px;background:var(--card);color:var(--ink);text-decoration:none;font-size:15px}
+.tabs{display:flex;gap:8px;padding:12px 16px 0;max-width:1400px;margin:0 auto;overflow-x:auto;-webkit-overflow-scrolling:touch}
+.tabs a{flex:0 0 auto;white-space:nowrap;padding:10px 16px;border-radius:999px;background:var(--card);color:var(--ink);text-decoration:none;font-size:15px}
 .tabs a.on{background:var(--blue);color:#fff}
 h2{font-size:18px;margin:32px 0 0}
 select{font-size:16px;padding:12px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--ink);width:100%}
@@ -55,3 +55,44 @@ button.ghost{white-space:nowrap}
 .badge2.now{background:var(--blue);color:#fff}
 .tintbox{background:hsl(var(--h) 75% 96%);border-radius:16px;padding:10px}
 @media (prefers-color-scheme: dark){.tintbox{background:hsl(var(--h) 30% 12%)}}
+main.xwide{max-width:1400px;margin:0 auto;padding:16px}
+.toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.toolbar select{width:auto;min-width:200px;flex:1}
+.seg{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0}
+.seg button{width:auto;margin:0;flex:1;padding:12px 10px;font-size:15px;background:var(--card);color:var(--ink);border:1px solid var(--line);white-space:nowrap}
+.seg button.on{background:var(--blue);color:#fff;border-color:var(--blue)}
+.daystrip{display:flex;gap:6px;overflow-x:auto;padding:4px 2px 8px;scroll-snap-type:x proximity}
+.daystrip button{flex:0 0 auto;width:56px;margin:0;padding:8px 0;display:flex;flex-direction:column;align-items:center;gap:2px;background:var(--card);color:var(--ink);border-radius:12px;scroll-snap-align:center;font-size:13px}
+.daystrip button b{font-size:15px}.daystrip button small{font-size:11px;color:var(--sub)}
+.daystrip button.on{background:var(--blue);color:#fff}.daystrip button.on small{color:#e5f0ff}
+.daystrip button.su small{color:#d70015}.daystrip button.sa small{color:#0071e3}
+.rowbtn{min-height:56px}
+.pill{padding:8px 12px;border-radius:999px;background:var(--bg);font-size:14px;white-space:nowrap}
+.k-work{background:#fff;color:#1d1d1f}.k-off{background:#f9d9dc;color:#1d1d1f}.k-paid{background:#fff3c4;color:#1d1d1f}.k-holiday{background:#dff1ff;color:#1d1d1f}.k-other{background:#ececf0;color:#1d1d1f}
+.pill.k-work{background:#e6f4ea;color:#1e5e2e}
+.chip.warn{background:#fff3c4;color:#7a5200;margin-left:6px}
+.cal2 .d.cellp{min-height:60px;position:relative;font-size:12px}
+.cal2 .d.cellp small{font-size:12px;font-weight:700}
+.cal2 .d.cellp.pick{outline:3px solid var(--blue)}
+.dot{position:absolute;top:4px;right:5px;width:8px;height:8px;border-radius:50%;background:#e8590c;display:inline-block}
+.times{display:flex;gap:10px;margin-top:10px}.times label{flex:1;margin:0;font-size:13px}.times input{font-size:20px;padding:12px}
+.sheet-bg{position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:flex-end;justify-content:center;z-index:50}
+.sheet{background:var(--card);width:100%;max-width:520px;border-radius:22px 22px 0 0;padding:18px 18px 28px;max-height:90vh;overflow:auto}
+@media (min-width:700px){.sheet-bg{align-items:center}.sheet{border-radius:22px}}
+.shifttable td,.shifttable th{min-width:46px;padding:6px 4px;font-size:12px}
+.shifttable td.click{cursor:pointer}.shifttable td.click:hover{outline:2px solid var(--blue);outline-offset:-2px}
+.shifttable td{position:relative;color:var(--ink)}.shifttable td.name{min-width:90px}
+.shifttable .sumrow td{background:var(--bg);font-weight:700}
+.shifttable th.su{color:#d70015}.shifttable th.sa{color:#0071e3}
+@media (min-width:900px){.pnav{max-width:520px}}
+.mcal{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px}
+.mcal .h{text-align:center;font-size:12px;color:var(--sub);padding:4px 0}
+.mcal .h.su{color:#d70015}.mcal .h.sa{color:#0071e3}
+.mday{background:var(--card);border-radius:8px;min-height:92px;padding:4px;font-size:11px;overflow:hidden;color:var(--ink)}
+.mday.sun{background:color-mix(in srgb,#ff3b30 8%,var(--card))}.mday.sat{background:color-mix(in srgb,#0071e3 8%,var(--card))}
+.mday.k-paid{background:#fff3c4;color:#1d1d1f}
+.mday.today{outline:2px solid var(--blue)}
+.mday .num{font-size:11px;color:var(--sub);margin-bottom:2px}
+.mday .nm{line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mday .nm.me{font-weight:800;color:var(--blue)}
+@media (min-width:700px){.mday{font-size:13px;min-height:110px}}

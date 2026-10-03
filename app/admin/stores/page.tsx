@@ -22,12 +22,13 @@ export default function StoresPage() {
       <ul className="list">
         {active.map((s, i) => (
           <li key={s.id}>
-            <b>{s.name}</b>
+            <div><b>{s.name}</b><div className="sub">基本の営業時間 {s.defaultOpen}〜{s.defaultClose}</div></div>
             {editable && (
               <div className="actions">
                 <button className="ghost" style={{ color: "var(--ink)" }} disabled={i === 0} onClick={() => run({ action: "up", storeId: s.id })} aria-label="上へ">↑</button>
                 <button className="ghost" style={{ color: "var(--ink)" }} disabled={i === active.length - 1} onClick={() => run({ action: "down", storeId: s.id })} aria-label="下へ">↓</button>
                 <button className="ghost" style={{ color: "var(--blue)" }} onClick={() => { const n = prompt("新しいお店の名前", s.name); if (n && n !== s.name) run({ action: "rename", storeId: s.id, name: n }); }}>名前を変える</button>
+                <button className="ghost" style={{ color: "var(--blue)" }} onClick={() => { const v = prompt("基本の営業時間（例 10:00-19:00）。シフトの一括入力で使います", `${s.defaultOpen}-${s.defaultClose}`); const m = v?.match(/^\s*(\d{1,2}:\d{2})\s*[-〜~ー]\s*(\d{1,2}:\d{2})\s*$/); if (v && !m) setMsg("「10:00-19:00」の形で入力してください"); else if (m) run({ action: "hours", storeId: s.id, open: m[1].padStart(5, "0"), close: m[2].padStart(5, "0") }); }}>営業時間</button>
                 <button className="ghost" onClick={() => confirm(`${s.name} を閉店にしますか？（過去のデータは残ります）`) && run({ action: "close", storeId: s.id })}>閉店</button>
               </div>
             )}

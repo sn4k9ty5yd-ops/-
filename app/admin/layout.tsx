@@ -6,6 +6,7 @@ import { LEVEL_NAMES } from "@/lib/permissions";
 
 const TABS = [
   { href: "/home", label: "ホーム" },
+  { href: "/admin/shifts", label: "シフト作成" },
   { href: "/admin/requests", label: "希望休" },
   { href: "/admin/staff", label: "スタッフ" },
   { href: "/admin/stores", label: "お店" },
@@ -24,7 +25,7 @@ function Shell({ children }: { children: React.ReactNode }) {
       <nav className="tabs">
         {TABS.map((t) => <Link key={t.href} href={t.href} className={path === t.href ? "on" : ""}>{t.label}</Link>)}
       </nav>
-      <main className="wide">{children}</main>
+      <main className={path.startsWith("/admin/shifts") || path.startsWith("/admin/requests") ? "xwide" : "wide"}>{children}</main>
     </div>
   );
 }

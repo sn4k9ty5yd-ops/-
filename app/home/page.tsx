@@ -6,6 +6,8 @@ import { LEVEL_NAMES } from "@/lib/permissions";
 function Cards() {
   const { me, logout } = useMe();
   const cards = [
+    { href: "/shifts", title: "シフトを見る", sub: "今日の出勤・月のシフト・みんなの休み", show: true },
+    { href: "/admin/shifts", title: "シフトを作る", sub: "日ごと・人ごと・一覧表で入力します", show: me.level >= 2 },
     { href: "/requests", title: "希望休を出す", sub: "休みたい日をえらびます", show: true },
     { href: "/admin/requests", title: "みんなの希望休", sub: "スタッフの希望休を一覧で見ます", show: me.level >= 2 },
     { href: "/admin/periods", title: "シフト期間", sub: "受付・締切・確定・提出", show: me.level >= 3 },

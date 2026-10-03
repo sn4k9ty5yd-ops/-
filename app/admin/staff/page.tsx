@@ -47,7 +47,7 @@ export default function StaffPage() {
           <li key={s.id} className={s.status === "disabled" ? "off" : ""}>
             <div>
               <b>{s.name}</b> <span className="sub">{storeName(s.storeId)}</span>
-              <div className="sub">社員番号 {s.employeeCode}{s.status === "disabled" && " ／ 退職（無効）"}</div>
+              <div className="sub">社員番号 {s.employeeCode}{s.status === "disabled" && " ／ 退職（無効）"}{s.status === "active" && (s.onShift ? " ／ シフトに入る" : " ／ シフトに入らない")}</div>
             </div>
             <div className="actions">
               {me.level === 4 && s.status === "active" && s.id !== me.id ? (
@@ -61,6 +61,9 @@ export default function StaffPage() {
                     onClick={() => confirm(`${s.name} さんのパスコードを新しくしますか？（今のパスコードは使えなくなります）`) &&
                       run(async () => setIssued({ name: s.name, passcode: (await api<{ passcode: string }>(`/api/staff/${s.id}/passcode`, {})).passcode }))}>
                     パスコード再発行
+                  </button>
+                  <button className="ghost" style={{ color: "var(--ink)" }} onClick={() => run(() => api(`/api/staff/${s.id}/onshift`, { onShift: !s.onShift }))}>
+                    {s.onShift ? "シフトから外す" : "シフトに入れる"}
                   </button>
                   <button className="ghost" onClick={() => confirm(`${s.name} さんを退職（無効）にしますか？`) && run(() => api(`/api/staff/${s.id}/disable`, {}))}>
                     退職にする
