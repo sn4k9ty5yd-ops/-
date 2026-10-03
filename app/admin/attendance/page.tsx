@@ -7,7 +7,7 @@ import { daysOf, dow, hoursOn, md, WEEKDAYS } from "@/lib/labels";
 import { PeriodNav, periodFor, todayJst, tintStyle } from "@/lib/period-nav";
 import type { Period } from "@/lib/periods";
 import { attDetail, attKindText, totalsOf } from "@/lib/attendance-ui";
-import { ATTENDANCE_LABEL, type AttendanceRow, type AttendanceStatus, type LeaveBalance, type PeriodRow, type StoreRow } from "@/lib/service";
+import { ATTENDANCE_LABEL, type AttendanceRow, type AttendanceStatus, type PeriodRow, type StoreRow } from "@/lib/service";
 import { kindClass } from "@/lib/shift-ui";
 import { AttendanceSheet } from "./AttendanceSheet";
 
@@ -25,7 +25,6 @@ export default function AttendancePage() {
   const [roster, setRoster] = useState<Person[]>([]);
   const [rows, setRows] = useState<AttendanceRow[]>([]);
   const [editable, setEditable] = useState(false);
-  const [leave, setLeave] = useState<Map<string, LeaveBalance>>(new Map());
   const [day, setDay] = useState("");
   const [target, setTarget] = useState<{ person: Person; day: string } | null>(null);
   const [bulk, setBulk] = useState({ from: "", to: "", start: "10:00", end: "19:00", overwrite: false });
@@ -47,8 +46,6 @@ export default function AttendancePage() {
     const p = await api<PeriodRow[]>("/api/periods"); setPeriods(p);
     const db = p.find((x) => x.start === view.start);
     const key = `${storeId}|${view.start}`;
-    const lv = await api<LeaveBalance[]>(`/api/leave?storeId=${storeId}`).catch(() => []);
-    setLeave(new Map(lv.map((b) => [b.membershipId, b])));
     if (!db) { setRows([]); setRoster([]); setEditable(false); setLoadedKey(key); return; }
     const a = await api<{ rows: AttendanceRow[]; editable: boolean; roster: Person[] }>(`/api/attendance?periodId=${db.id}&storeId=${storeId}`);
     setRows(a.rows); setEditable(a.editable); setRoster(a.roster); setLoadedKey(key);
@@ -65,12 +62,6 @@ export default function AttendancePage() {
   };
   const canSubmit = me.level === 4 || (me.level === 3 && storeId === me.storeId);
   const reason = loading ? "" : !dbp ? "この期間は、まだ作成されていません。" : editable ? "" : attStatus !== "open" ? "提出済み・確認済みのため、変更できません。" : me.level === 3 && storeId !== me.storeId ? "他のお店の出勤簿です（見るだけ）。" : "いまは変更できません。";
-  const grant = async (p: Person) => {
-    const d = prompt(`${p.name} さんの有給日数を、増やす（例 10）または 減らす（例 -1）。0.5日きざみで入れてください`);
-    if (!d) return;
-    const n = prompt("メモ（例：入社時の付与、10月の付与）", "") ?? "";
-    try { await api("/api/leave", { membershipId: p.id, days: Number(d), note: n }); await load(); } catch (e) { setMsg((e as Error).message); }
-  };
 
   return (
     <>
@@ -175,20 +166,18 @@ export default function AttendancePage() {
         {mode === "total" && (
           <ul className="list">
             {roster.map((p) => {
-              const t = totalsOf(rows, p.id); const lv = leave.get(p.id);
+              const t = totalsOf(rows, p.id);
               return (
                 <li key={p.id}>
                   <div><b>{p.name}</b>
-                    <div className="sub">出勤 {t.workDays}日　実働合計 <b style={{ color: "var(--ink)" }}>{fmt(t.workMin)}</b>　有給 {t.paid}日　休み {t.off}日　公休 {t.holiday}日</div>
-                    <div className="sub">有給の残り <b style={{ color: "var(--ink)" }}>{lv ? lv.remaining : "—"}日</b>{lv ? `（付与 ${lv.granted} − 取得 ${lv.used}）` : ""}</div></div>
-                  {(me.level === 4 || (me.level === 3 && storeId === me.storeId)) && <button className="ghost" style={{ color: "var(--blue)" }} onClick={() => grant(p)}>有給を付与・調整</button>}
+                    <div className="sub">出勤 {t.workDays}日　実働合計 <b style={{ color: "var(--ink)" }}>{fmt(t.workMin)}</b>　有給 {t.paid}日　休み {t.off}日　公休 {t.holiday}日</div></div>
                 </li>
               );
             })}
           </ul>
         )}
       </div>
-      <p className="hint">「個別」「青い点」＝一人ずつ直した日です（一括入力では上書きされません）。有給の残りは「付与した日数 − 出勤簿で有給にした日数」です。</p>
+      <p className="hint">「個別」「青い点」＝一人ずつ直した日です（一括入力では上書きされません）。</p>
 
       {target && (
         <AttendanceSheet

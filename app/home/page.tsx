@@ -10,14 +10,12 @@ function Cards() {
   const router = useRouter();
   useEffect(() => { if (me.displayOnly) router.replace("/shifts"); }, [me.displayOnly, router]);   // お店のiPadは、すぐシフトの画面へ
   const [low, setLow] = useState(0);
-  const [leave, setLeave] = useState<{ remaining: number } | null>(null);
-  useEffect(() => { api<{ remaining: number } | null>("/api/leave?me=1").then(setLeave).catch(() => {}); }, []);
   useEffect(() => { if (me.level >= 2) api<{ count: number }>(`/api/stock?storeId=${me.storeId}&low=1`).then((r) => setLow(r.count)).catch(() => {}); }, [me.level, me.storeId]);
   if (me.displayOnly) return null;
   const cards = [
     { href: "/manual", title: "マニュアル", sub: "教育・営業マニュアル、技術動画、技術評価", show: true },
     { href: "/shifts", title: "シフトを見る", sub: "今日の出勤・月のシフト・みんなの休み", show: true },
-    { href: "/admin/attendance", title: "出勤簿", sub: "出勤・退勤・休憩・実働、有給の残り", show: me.level >= 3 },
+    { href: "/admin/attendance", title: "出勤簿", sub: "出勤・退勤・休憩・実働", show: me.level >= 3 },
     { href: "/admin/stock", title: "在庫", sub: low ? `少なくなっている商品が ${low} 件あります` : "いまの在庫・入庫と出庫・発注の目安", show: me.level >= 2 },
     { href: "/admin/stocktake", title: "棚卸し", sub: "店販・業務の棚卸し（印刷・コピーもできます）", show: me.level >= 2 },
     { href: "/admin/products", title: "商品一覧", sub: "店販・業務の商品と仕入値", show: me.level >= 3 },
@@ -34,7 +32,6 @@ function Cards() {
       <p className="sub">株式会社ALBUM</p>
       <h1>{me.name} さん</h1>
       <p className="hint" style={{ marginTop: -16 }}>{LEVEL_NAMES[me.level]}</p>
-      {leave && <div className="card"><span className="sub">有給の残り日数</span><div className="big">{leave.remaining}<span style={{ fontSize: 16 }}> 日</span></div></div>}
       {cards.map((c) => (
         <Link key={c.href} href={c.href} className="card-link"><b>{c.title}</b><span className="sub">{c.sub}</span></Link>
       ))}
