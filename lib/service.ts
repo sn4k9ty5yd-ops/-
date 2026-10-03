@@ -1570,3 +1570,23 @@ export async function materialSummaryData(db: Database, userId: string, from: st
     return { orders, lines };
   });
 }
+
+
+let lastImagePurge = 0;
+export const MATERIAL_IMAGE_GRACE_DAYS = 7;
+/**
+ * 発注画面のスクリーンショットは、月が終わって7日たったら自動で消す（金額・明細などの数字は残る）。
+ * 例: 10月の発注の画像は、11月8日になると消える。API呼び出しのついでに1時間に1回だけ確認する。
+ */
+export async function purgeOldMaterialImages(db: Database, force = false, today?: string): Promise<number> {
+  if (!force && Date.now() - lastImagePurge < 3_600_000) return 0;
+  lastImagePurge = Date.now();
+  const { rows } = await db.query<{ n: number }>(
+    `with cutoff as (
+       select date_trunc('month', (coalesce($1::date, (now() at time zone 'Asia/Tokyo')::date) - $2::int))::date as d
+     ), gone as (
+       delete from material_order_images i using material_orders o, cutoff c
+        where o.id = i.order_id and o.ordered_on < c.d returning i.id
+     ) select count(*)::int as n from gone`, [today ?? null, MATERIAL_IMAGE_GRACE_DAYS]);
+  return rows[0]?.n ?? 0;
+}

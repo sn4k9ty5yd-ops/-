@@ -288,4 +288,16 @@ describe("材料費（発注額）", () => {
     expect(await svc.listMaterialOrders(db, id.staff2, store.a1, "2026-10-01", "2026-10-31")).toHaveLength(0);
     await expect(svc.materialSummaryData(db, id.staff2, "2026-01-01", "2026-12-31")).rejects.toThrow(svc.ForbiddenError);
   });
+  it("画像は月が終わって7日たつと消え、金額や明細の数字は残る", async () => {
+    const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", "base64");
+    const oid = await svc.addMaterialOrder(db, id.staff, store.a1, { ...inp, orderedOn: "2026-09-20", amount: 777, lines: [{ name: "古い商品", qty: 1, amount: 777 }] });
+    const iid = await svc.addMaterialImage(db, id.staff, oid, "image/png", png);
+    expect(await svc.purgeOldMaterialImages(db, true, "2026-10-07")).toBeGreaterThanOrEqual(0);   // 10/7はまだ9月分を消さない（10/8から）
+    expect(await svc.getMaterialImage(db, id.staff, iid)).not.toBeNull();
+    expect(await svc.purgeOldMaterialImages(db, true, "2026-10-08")).toBeGreaterThanOrEqual(1);
+    expect(await svc.getMaterialImage(db, id.staff, iid)).toBeNull();
+    const o = (await svc.listMaterialOrders(db, id.staff, store.a1, "2026-09-01", "2026-09-30")).find((x) => x.id === oid)!;
+    expect(o.amount).toBe(777);
+    expect(o.lines).toHaveLength(1);
+  });
 });

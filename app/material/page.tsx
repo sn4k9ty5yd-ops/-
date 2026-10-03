@@ -160,6 +160,7 @@ function Page() {
             </li>
           ))}
         </ul>)}
+      <p className="hint">スクリーンショットは、月が終わって7日たつと自動で消えます（金額・明細などの数字は残ります）。</p>
       <p className="hint">発注画面が税込表示のときは「税込」を選んでください。保存と合計は、いつも<b>税抜</b>になります。記録は消えません（直す・取り消すと、だれがいつ変えたかが残ります）。</p>
 
       {form && (
@@ -192,7 +193,7 @@ function Page() {
                   <button className="ghost" style={{ position: "absolute", top: -6, right: -6 }} onClick={() => setForm({ ...form, pics: form.pics.filter((_, j) => j !== i) })}>×</button>
                   <button className="ghost" style={{ color: "var(--blue)", display: "block" }} disabled={!!reading} onClick={() => readPic(p)}>文字を読み取る</button></span>))}</div>
               {reading && <p className="sub">{reading}</p>}
-              {form.id && (data?.images ?? []).some((i) => i.orderId === form.id) && <p className="sub">すでに付いている画像は、一覧に出ています（あとから消せません）。</p>}
+              {form.id && (data?.images ?? []).some((i) => i.orderId === form.id) && <p className="sub">すでに付いている画像は、一覧に出ています（手では消せません）。</p>}
             </div>
             {form.lines !== null && (form.lines.length > 0 || form.pics.length > 0) && (
               <div>
