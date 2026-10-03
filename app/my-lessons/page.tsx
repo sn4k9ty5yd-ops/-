@@ -53,7 +53,7 @@ function Page() {
             <div key={d} role="button" tabIndex={0} onClick={() => list.length && setPick(pick === d ? null : d)}
               className={`mday ${d === today ? "today" : ""} ${holidayName(d) ? "hol" : ""} ${dow(d) === 0 ? "sun" : dow(d) === 6 ? "sat" : ""}`} style={{ cursor: list.length ? "pointer" : "default" }}>
               <div className="num"><span>{i + 1}</span></div>
-              {list.slice(0, 4).map((r) => <div key={r.id} className="lcal" style={{ ["--h" as string]: hueOf(r.category) }}>{r.category.slice(0, 2)}{r.ordinal}</div>)}
+              {list.slice(0, 4).map((r) => <div key={r.id} className="lcal" style={{ ["--h" as string]: hueOf(r.category) }}>{r.leaf.slice(0, 2)}{r.ordinal}</div>)}
               {list.length > 4 && <div className="sub">ほか{list.length - 4}</div>}
             </div>
           );

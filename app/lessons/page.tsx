@@ -15,7 +15,20 @@ async function copyText(text: string) {
   try { await navigator.clipboard.writeText(text); return true; } catch { const t = document.createElement("textarea"); t.value = text; document.body.appendChild(t); t.select(); const ok = document.execCommand("copy"); t.remove(); return ok; }
 }
 const hue = (i: number) => (i * 47 + 12) % 360;
+const leafCats = (cs: LessonCategory[]) => cs.filter((c) => c.parentId || !cs.some((x) => x.parentId === c.id));
+const labelIn = (cs: LessonCategory[], c: LessonCategory) => { const p = c.parentId ? cs.find((x) => x.id === c.parentId) : null; return p ? `${p.name}・${c.name}` : c.name; };
 interface Meta { categories: LessonCategory[]; assistants: LessonAssistant[]; counts: Record<string, number> }
+
+function CatRow({ c, cat }: { c: LessonCategory; cat: (x: { id?: string; name?: string; active?: boolean; move?: "up" | "down" }) => void }) {
+  return (
+    <div className="toolbar" style={{ margin: "4px 0", opacity: c.active ? 1 : 0.5 }}>
+      <input defaultValue={c.name} aria-label="ボタンの名前" style={{ flex: 1 }} onBlur={(e) => { if (e.target.value.trim() && e.target.value.trim() !== c.name) cat({ id: c.id, name: e.target.value }); }} />
+      <button className="ghost" onClick={() => cat({ id: c.id, move: "up" })} aria-label="上へ">↑</button>
+      <button className="ghost" onClick={() => cat({ id: c.id, move: "down" })} aria-label="下へ">↓</button>
+      <button className="ghost" onClick={() => cat({ id: c.id, active: !c.active })}>{c.active ? "しまう" : "もどす"}</button>
+    </div>
+  );
+}
 
 function Page() {
   const { me } = useMe();
@@ -30,6 +43,7 @@ function Page() {
   const [sheet, setSheet] = useState<{ a: LessonAssistant; c: LessonCategory } | null>(null);
   const [minutes, setMinutes] = useState<number | null>(null); const [custom, setCustom] = useState(""); const [note, setNote] = useState("");
   const [edit, setEdit] = useState(false); const [all, setAll] = useState<LessonCategory[]>([]); const [newName, setNewName] = useState("");
+  const [subName, setSubName] = useState<Record<string, string>>({});
   const [msg, setMsg] = useState(""); const [okMsg, setOkMsg] = useState("");
   const [report, setReport] = useState<{ store: StoreRow; meta: Meta; rows: LessonRow[] }[]>([]);
 
@@ -60,19 +74,23 @@ function Page() {
   }, [storeId, stores, ym]);
   useEffect(() => { if (tab === "report" && stores.length) loadReport(); }, [tab, loadReport, stores.length]);
 
+  const tops = useMemo(() => (meta?.categories ?? []).filter((c) => !c.parentId), [meta]);
+  const kidsOf = useCallback((pid: string) => (meta?.categories ?? []).filter((c) => c.parentId === pid), [meta]);
+  const topIndex = useCallback((id: string) => Math.max(0, tops.findIndex((t) => t.id === id)), [tops]);
   const people = useMemo(() => {
     const a = meta?.assistants ?? [];
     const asst = a.filter((x) => x.rank === "assistant");
     return showAll || asst.length === 0 ? a : asst;
   }, [meta, showAll]);
 
+  const labelOf = (c: LessonCategory) => { const p = c.parentId ? (meta?.categories ?? []).find((x) => x.id === c.parentId) : null; return p ? `${p.name}・${c.name}` : c.name; };
   const open = (a: LessonAssistant, c: LessonCategory) => { setSheet({ a, c }); setMinutes(null); setCustom(""); setNote(""); setMsg(""); };
   const record = async () => {
     if (!sheet) return;
     const mins = custom ? Number(custom) : minutes;
     try {
       const r = await api<{ ordinal: number }>("/api/lessons", { action: "add", storeId, assistantId: sheet.a.id, categoryId: sheet.c.id, day, minutes: mins, note });
-      setOkMsg(`${sheet.a.name} さん：${sheet.c.name} ${r.ordinal}人目（回目）を記録しました`); setSheet(null); await load();
+      setOkMsg(`${sheet.a.name} さん：${labelOf(sheet.c)} ${r.ordinal}人目（回目）を記録しました`); setSheet(null); await load();
     } catch (e) { setMsg((e as Error).message); }
   };
   const del = async (r: LessonRow) => {
@@ -80,12 +98,12 @@ function Page() {
     try { await api("/api/lessons", { action: "delete", id: r.id }); await load(); } catch (e) { setMsg((e as Error).message); }
   };
   const openEdit = async () => { setAll(((await api<Meta>(`/api/lessons?meta=1&storeId=${storeId}&all=1`)).categories)); setEdit(true); setMsg(""); };
-  const cat = async (category: { id?: string; name?: string; active?: boolean; move?: "up" | "down" }) => {
+  const cat = async (category: { id?: string; name?: string; active?: boolean; move?: "up" | "down"; parentId?: string }) => {
     try { await api("/api/lessons", { action: "category", storeId, category }); setAll((await api<Meta>(`/api/lessons?meta=1&storeId=${storeId}&all=1`)).categories); setNewName(""); setMsg(""); } catch (e) { setMsg((e as Error).message); }
   };
 
-  const reportTsv = () => report.flatMap((r) => [`${r.store.name}　${ym}`, ["名前", ...r.meta.categories.map((c) => c.name)].join("\t"),
-    ...r.meta.assistants.filter((a) => r.rows.some((x) => x.assistantId === a.id)).map((a) => [a.name, ...r.meta.categories.map((c) => { const l = r.rows.filter((x) => x.assistantId === a.id && x.categoryId === c.id); return l.length || ""; })].join("\t")),
+  const reportTsv = () => report.flatMap((r) => [`${r.store.name}　${ym}`, ["名前", ...leafCats(r.meta.categories).map((c) => labelIn(r.meta.categories, c))].join("\t"),
+    ...r.meta.assistants.filter((a) => r.rows.some((x) => x.assistantId === a.id)).map((a) => [a.name, ...leafCats(r.meta.categories).map((c) => { const l = r.rows.filter((x) => x.assistantId === a.id && x.categoryId === c.id); return l.length || ""; })].join("\t")),
     "", ["日付", "名前", "内容", "何人目", "時間(分)", "メモ"].join("\t"), ...[...r.rows].reverse().map((x) => [x.day, x.assistantName, x.category, x.ordinal, x.minutes ?? "", x.note].join("\t")), ""]).join("\n");
 
   if (!canEdit && me.level < 4) {
@@ -124,8 +142,11 @@ function Page() {
                 <div style={{ display: "flex", gap: 8, alignItems: "baseline", flexWrap: "wrap" }}><b style={{ fontSize: 18 }}>{a.name}</b>{a.rank === "assistant" && <span className="chip">アシスタント</span>}</div>
                 {mine.length > 0 && <div className="lessonchips">{mine.map((r) => (
                   <span key={r.id} className="lchip done">{r.category} <b>{r.ordinal}人目</b>{r.minutes ? ` ${r.minutes}分` : ""}{canEdit && <button aria-label="取り消す" onClick={() => del(r)}>×</button>}</span>))}</div>}
-                {canEdit && <div className="lessonchips">{(meta?.categories ?? []).map((c, i) => (
-                  <button key={c.id} className="lbtn" style={{ ["--h" as string]: hue(i) }} onClick={() => open(a, c)}>{c.name}</button>))}</div>}
+                {canEdit && <div className="lessonchips">{tops.filter((t) => !kidsOf(t.id).length).map((c) => (
+                  <button key={c.id} className="lbtn" style={{ ["--h" as string]: hue(topIndex(c.id)) }} onClick={() => open(a, c)}>{c.name}</button>))}</div>}
+                {canEdit && tops.filter((t) => kidsOf(t.id).length > 0).map((g) => (
+                  <div key={g.id} className="lessongroup"><span className="gname" style={{ ["--h" as string]: hue(topIndex(g.id)) }}>{g.name}</span>
+                    {kidsOf(g.id).map((c) => <button key={c.id} className="lbtn sm" style={{ ["--h" as string]: hue(topIndex(g.id)) }} onClick={() => open(a, c)}>{c.name}</button>)}</div>))}
               </div>
             );
           })}
@@ -146,10 +167,10 @@ function Page() {
           {report.map((r) => (
             <div key={r.store.id}>
               <h2>{r.store.name}</h2>
-              <div className="scroll card"><table className="sttable"><thead><tr><th>名前</th>{r.meta.categories.map((c) => <th key={c.id} className="r">{c.name}</th>)}<th className="r">計</th></tr></thead>
+              <div className="scroll card"><table className="sttable"><thead><tr><th>名前</th>{leafCats(r.meta.categories).map((c) => <th key={c.id} className="r">{labelIn(r.meta.categories, c)}</th>)}<th className="r">計</th></tr></thead>
                 <tbody>{r.meta.assistants.filter((a) => r.rows.some((x) => x.assistantId === a.id)).map((a) => {
                   const mine = r.rows.filter((x) => x.assistantId === a.id);
-                  return <tr key={a.id}><td>{a.name}</td>{r.meta.categories.map((c) => { const n = mine.filter((x) => x.categoryId === c.id).length; return <td key={c.id} className="r">{n || "－"}</td>; })}<td className="r"><b>{mine.length}</b></td></tr>;
+                  return <tr key={a.id}><td>{a.name}</td>{leafCats(r.meta.categories).map((c) => { const n = mine.filter((x) => x.categoryId === c.id).length; return <td key={c.id} className="r">{n || "－"}</td>; })}<td className="r"><b>{mine.length}</b></td></tr>;
                 })}</tbody></table>
                 {r.rows.length === 0 && <p className="hint">この月の記録はまだありません。</p>}</div>
               {r.rows.length > 0 && <ul className="list">{r.rows.map((x) => (
@@ -162,7 +183,7 @@ function Page() {
       {sheet && (
         <div className="sheet-bg" onClick={() => setSheet(null)}>
           <div className="sheet" onClick={(e) => e.stopPropagation()} role="dialog" aria-label="レッスンを記録">
-            <h3>{sheet.a.name} さん ／ {sheet.c.name}</h3>
+            <h3>{sheet.a.name} さん ／ {labelOf(sheet.c)}</h3>
             <p className="sub">{md(day)}（{WEEKDAYS[dow(day)]}）　これまで {meta?.counts[`${sheet.a.id}|${sheet.c.id}`] ?? 0} 回 → <b>今回で {(meta?.counts[`${sheet.a.id}|${sheet.c.id}`] ?? 0) + 1} 人目（回目）</b></p>
             <label>かかった時間（わかれば）</label>
             <div className="lessonchips">
@@ -182,12 +203,14 @@ function Page() {
           <div className="sheet" onClick={(e) => e.stopPropagation()} role="dialog" aria-label="ボタンを編集">
             <h3>ボタンを編集（このお店）</h3>
             <p className="sub">お店ごとに、ボタンを足したり、名前を変えたり、しまったりできます。しまっても、過去の記録は残ります。</p>
-            {all.map((c) => (
-              <div key={c.id} className="toolbar" style={{ margin: "6px 0", opacity: c.active ? 1 : 0.5 }}>
-                <input defaultValue={c.name} aria-label="ボタンの名前" style={{ flex: 1 }} onBlur={(e) => { if (e.target.value.trim() && e.target.value.trim() !== c.name) cat({ id: c.id, name: e.target.value }); }} />
-                <button className="ghost" onClick={() => cat({ id: c.id, move: "up" })} aria-label="上へ">↑</button>
-                <button className="ghost" onClick={() => cat({ id: c.id, move: "down" })} aria-label="下へ">↓</button>
-                <button className="ghost" onClick={() => cat({ id: c.id, active: !c.active })}>{c.active ? "しまう" : "もどす"}</button>
+            {all.filter((c) => !c.parentId).map((c) => (
+              <div key={c.id} style={{ borderTop: "1px solid var(--hair)", paddingTop: 6, marginTop: 6 }}>
+                <CatRow c={c} cat={cat} />
+                {all.filter((k) => k.parentId === c.id).map((k) => <div key={k.id} style={{ marginLeft: 22 }}><CatRow c={k} cat={cat} /></div>)}
+                <div className="toolbar" style={{ marginLeft: 22, margin: "4px 0 0 22px" }}>
+                  <input placeholder={`${c.name} の中に小さなボタンを足す`} style={{ flex: 1, fontSize: 14, padding: 10 }} value={subName[c.id] ?? ""} onChange={(e) => setSubName({ ...subName, [c.id]: e.target.value })} />
+                  <button className="ghost" onClick={() => { if ((subName[c.id] ?? "").trim()) { cat({ name: subName[c.id], parentId: c.id }); setSubName({ ...subName, [c.id]: "" }); } }}>足す</button>
+                </div>
               </div>
             ))}
             <div className="toolbar"><input placeholder="新しいボタン（例: ヘアセット）" value={newName} onChange={(e) => setNewName(e.target.value)} style={{ flex: 1 }} /><button onClick={() => newName.trim() && cat({ name: newName })}>追加</button></div>

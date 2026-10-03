@@ -1688,13 +1688,16 @@ export async function notifyShiftPublished(db: Database, periodId: string, store
 
 
 // ------------------------------------------------------------------ レッスン記録（教育担当が毎日「だれが何をしたか」を記録）
-export interface LessonCategory { id: string; name: string; sortOrder: number; active: boolean }
+export interface LessonCategory { id: string; name: string; sortOrder: number; active: boolean; parentId: string | null }
 export interface LessonAssistant { id: string; name: string; shortName: string | null; rank: "assistant" | "stylist" | null }
 export interface LessonRow {
-  id: string; storeId: string; assistantId: string; assistantName: string; categoryId: string; category: string;
+  id: string; storeId: string; assistantId: string; assistantName: string; categoryId: string; category: string; leaf: string;
   day: string; minutes: number | null; note: string; ordinal: number; byName: string | null; createdAt: string;
 }
-const DEFAULT_LESSONS = ["カットモデル", "ウィッグカット", "カラー", "パーマ", "髪質改善", "シャンプー"];
+const DEFAULT_LESSONS: [string, string[]][] = [
+  ["カットモデル", []], ["ウィッグカット", ["ワンレングス", "グラデーション", "レイヤー"]], ["カラー", ["ファッションカラー", "グレイカラー（リタッチ）"]],
+  ["パーマ", []], ["髪質改善", []], ["シャンプー", []],
+];
 
 /** ボタン（カテゴリ）。まだ無いお店には、初期のボタンを自動で作る */
 export async function listLessonCategories(db: Database, userId: string, storeId: string, includeHidden = false): Promise<LessonCategory[]> {
@@ -1703,14 +1706,16 @@ export async function listLessonCategories(db: Database, userId: string, storeId
   const have = (await db.query<{ n: number }>("select count(*)::int as n from lesson_categories where store_id = $1", [storeId])).rows[0].n;
   if (have === 0) {
     const co = (await db.query<{ company_id: string }>("select company_id from stores where id = $1", [storeId])).rows[0];
-    if (co && co.company_id === me.companyId) for (const [i, n] of DEFAULT_LESSONS.entries())
-      await db.query("insert into lesson_categories (company_id, store_id, name, sort_order) values ($1,$2,$3,$4) on conflict do nothing", [co.company_id, storeId, n, i + 1]);
+    if (co && co.company_id === me.companyId) for (const [i, [n, kids]] of DEFAULT_LESSONS.entries()) {
+      const pid = (await db.query<{ id: string }>("insert into lesson_categories (company_id, store_id, name, sort_order) values ($1,$2,$3,$4) returning id", [co.company_id, storeId, n, i + 1])).rows[0].id;
+      for (const [j, k] of kids.entries()) await db.query("insert into lesson_categories (company_id, store_id, name, sort_order, parent_id) values ($1,$2,$3,$4,$5)", [co.company_id, storeId, k, j + 1, pid]);
+    }
   }
   return (await asUser(db, userId, (q) => q.query<LessonCategory>(
-    `select id, name, sort_order as "sortOrder", active from lesson_categories where store_id = $1 ${includeHidden ? "" : "and active"} order by sort_order, name`, [storeId]))).rows;
+    `select id, name, sort_order as "sortOrder", active, parent_id as "parentId" from lesson_categories where store_id = $1 ${includeHidden ? "" : "and active"} order by sort_order, name`, [storeId]))).rows;
 }
 
-export async function saveLessonCategory(db: Database, userId: string, storeId: string, c: { id?: string; name?: string; active?: boolean; move?: "up" | "down" }): Promise<void> {
+export async function saveLessonCategory(db: Database, userId: string, storeId: string, c: { id?: string; name?: string; active?: boolean; move?: "up" | "down"; parentId?: string }): Promise<void> {
   const me = await getMe(db, userId);
   if (!me) throw new ForbiddenError();
   const name = c.name?.trim();
@@ -1719,12 +1724,19 @@ export async function saveLessonCategory(db: Database, userId: string, storeId: 
     await asUser(db, userId, async (q) => {
       if (!c.id) {
         if (!name) throw new Error("ボタンの名前を入れてください");
-        const max = Number((await q.query<{ m: number }>("select coalesce(max(sort_order),0)::int as m from lesson_categories where store_id = $1", [storeId])).rows[0].m);
-        await q.query("insert into lesson_categories (company_id, store_id, name, sort_order) values ($1,$2,$3,$4)", [me.companyId, storeId, name, max + 1]);
+        if (c.parentId) {
+          const par = (await q.query<{ parent_id: string | null }>("select parent_id from lesson_categories where id = $1 and store_id = $2", [c.parentId, storeId])).rows[0];
+          if (!par) throw new ForbiddenError();
+          if (par.parent_id) throw new Error("ボタンの中のボタンは、1段までです");
+        }
+        const max = Number((await q.query<{ m: number }>("select coalesce(max(sort_order),0)::int as m from lesson_categories where store_id = $1 and parent_id is not distinct from $2::uuid", [storeId, c.parentId ?? null])).rows[0].m);
+        await q.query("insert into lesson_categories (company_id, store_id, name, sort_order, parent_id) values ($1,$2,$3,$4,$5)", [me.companyId, storeId, name, max + 1, c.parentId ?? null]);
         return;
       }
       if (c.move) {
-        const list = (await q.query<{ id: string }>("select id from lesson_categories where store_id = $1 order by sort_order, name", [storeId])).rows.map((r) => r.id);
+        const me0 = (await q.query<{ parent_id: string | null }>("select parent_id from lesson_categories where id = $1 and store_id = $2", [c.id, storeId])).rows[0];
+        if (!me0) throw new ForbiddenError();
+        const list = (await q.query<{ id: string }>("select id from lesson_categories where store_id = $1 and parent_id is not distinct from $2::uuid order by sort_order, name", [storeId, me0.parent_id])).rows.map((r) => r.id);
         const i = list.indexOf(c.id), j = c.move === "up" ? i - 1 : i + 1;
         if (i < 0 || j < 0 || j >= list.length) return;
         [list[i], list[j]] = [list[j], list[i]];
@@ -1735,7 +1747,7 @@ export async function saveLessonCategory(db: Database, userId: string, storeId: 
       if (r.rows.length === 0) throw new ForbiddenError();
     });
   } catch (e) {
-    if (e instanceof Error && (e.message.includes("ボタン") )) throw e;
+    if (e instanceof Error && e.message.includes("ボタン")) throw e;
     if (/unique|duplicate/i.test((e as Error).message ?? "")) throw new Error("同じ名前のボタンがあります");
     throw new ForbiddenError();
   }
@@ -1797,11 +1809,11 @@ export async function listLessons(db: Database, userId: string, q0: { storeId?: 
   if (!/^\d{4}-\d{2}-\d{2}$/.test(q0.from) || !/^\d{4}-\d{2}-\d{2}$/.test(q0.to)) throw new Error("期間が正しくありません");
   return (await asUser(db, userId, (q) => q.query<LessonRow>(
     `select t.* from (
-       select l.id, l.store_id as "storeId", l.assistant_id as "assistantId", a.name as "assistantName", l.category_id as "categoryId", c.name as category,
+       select l.id, l.store_id as "storeId", l.assistant_id as "assistantId", a.name as "assistantName", l.category_id as "categoryId", case when pc.name is null then c.name else pc.name || '・' || c.name end as category, c.name as leaf,
               l.day::text as day, l.minutes, l.note,
               row_number() over (partition by l.assistant_id, l.category_id order by l.day, l.created_at) as ordinal,
               u.name as "byName", l.created_at as "createdAt"
-         from lesson_logs l join memberships a on a.id = l.assistant_id join lesson_categories c on c.id = l.category_id left join memberships u on u.id = l.created_by
+         from lesson_logs l join memberships a on a.id = l.assistant_id join lesson_categories c on c.id = l.category_id left join lesson_categories pc on pc.id = c.parent_id left join memberships u on u.id = l.created_by
         where l.deleted_at is null and ($1::uuid is null or l.store_id = $1) and ($2::uuid is null or l.assistant_id = $2)
      ) t where t.day between $3 and $4 order by t.day desc, t."createdAt" desc`,
     [q0.storeId ?? null, q0.assistantId ?? null, q0.from, q0.to]))).rows.map((r) => ({ ...r, ordinal: Number(r.ordinal) }));

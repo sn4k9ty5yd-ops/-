@@ -21,7 +21,7 @@ export const GET = authed(async (userId, req) => {
 export const POST = authed(async (userId, req) => {
   const b = (await req.json()) as {
     action?: string; storeId?: string; id?: string; assistantId?: string; categoryId?: string; day?: string; minutes?: number | null; note?: string;
-    category?: { id?: string; name?: string; active?: boolean; move?: "up" | "down" };
+    category?: { id?: string; name?: string; active?: boolean; move?: "up" | "down"; parentId?: string };
   };
   const db = await getDb();
   switch (b.action) {
