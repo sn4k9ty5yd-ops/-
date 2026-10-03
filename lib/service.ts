@@ -1834,3 +1834,166 @@ export async function lessonCounts(db: Database, userId: string, storeId: string
     "select assistant_id as a, category_id as c, count(*)::int as n from lesson_logs where store_id = $1 and deleted_at is null group by 1, 2", [storeId]))).rows;
   return Object.fromEntries(rows.map((r) => [`${r.a}|${r.c}`, Number(r.n)]));
 }
+
+
+// ------------------------------------------------------------------ 有給の年2回の提出と、変更の申請
+export interface LeaveWindow { id: string; label: string; rangeStart: string; rangeEnd: string; status: "open" | "closed" }
+export type LeaveStatus = "pending_manager" | "pending_office" | "approved" | "rejected" | "cancelled";
+export const LEAVE_STATUS_LABEL: Record<LeaveStatus, string> = {
+  pending_manager: "店長の確認待ち", pending_office: "事務員さんの許可待ち", approved: "許可されました", rejected: "却下されました", cancelled: "取り消しました",
+};
+export interface LeaveChange {
+  id: string; windowId: string; label: string; storeId: string; storeName: string; membershipId: string; name: string; fromDay: string | null; toDay: string | null;
+  reason: string; status: LeaveStatus; managerName: string | null; managerComment: string | null; officeName: string | null; officeComment: string | null; createdAt: string;
+}
+const CHANGE_SQL = `select c.id, c.window_id as "windowId", w.label, c.store_id as "storeId", s.name as "storeName", c.membership_id as "membershipId", m.name,
+       c.from_day::text as "fromDay", c.to_day::text as "toDay", c.reason, c.status, mm.name as "managerName", c.manager_comment as "managerComment",
+       om.name as "officeName", c.office_comment as "officeComment", c.created_at as "createdAt"
+  from leave_changes c join leave_windows w on w.id = c.window_id join stores s on s.id = c.store_id join memberships m on m.id = c.membership_id
+       left join memberships mm on mm.id = c.manager_id left join memberships om on om.id = c.office_id`;
+
+function mapLeaveError(e: unknown): never {
+  const m = (e as Error).message ?? "";
+  const map: [RegExp, string][] = [
+    [/window open/, "受付中のあいだは、画面の「有給の日」を直接直せます（申請は、締切のあとに使います）"],
+    [/no such plan/, "その日は、あなたの有給の日にありません"], [/out of range/, "その日は、有給を取れる範囲の外です"],
+    [/already planned/, "その日は、すでに有給の日です"], [/duplicate/, "同じ内容の申請が、すでに出ています"], [/already decided/, "この申請は、すでに結果が出ています"],
+    [/own request/, "自分の申請は、自分では許可できません"], [/empty/, "変更の内容を入れてください"],
+  ];
+  for (const [re, t] of map) if (re.test(m)) throw new Error(t);
+  throw new ForbiddenError();
+}
+
+export async function listLeaveWindows(db: Database, userId: string): Promise<LeaveWindow[]> {
+  return (await asUser(db, userId, (q) => q.query<LeaveWindow>(
+    `select id, label, range_start::text as "rangeStart", range_end::text as "rangeEnd", status from leave_windows order by created_at desc limit 12`))).rows;
+}
+/** 提出の受付を開く（事務員さん＝管理者） */
+export async function openLeaveWindow(db: Database, userId: string, w: { label: string; start: string; end: string }): Promise<string> {
+  const me = await getMe(db, userId);
+  if (!me || me.level < 4) throw new ForbiddenError();
+  if (!w.label.trim() || w.label.length > 40) throw new Error("名前（例: 2026年 下期）を入れてください");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(w.start) || !/^\d{4}-\d{2}-\d{2}$/.test(w.end) || w.end < w.start) throw new Error("有給を取れる日の範囲が正しくありません");
+  let id = "";
+  try { id = (await asUser(db, userId, (q) => q.query<{ id: string }>("insert into leave_windows (company_id, label, range_start, range_end, created_by) values ($1,$2,$3,$4,$5) returning id", [me.companyId, w.label.trim(), w.start, w.end, userId]))).rows[0].id; }
+  catch { throw new Error("範囲は、400日以内にしてください"); }
+  const staff = (await db.query<{ id: string }>("select id from memberships where company_id = $1 and status = 'active' and not display_only", [me.companyId])).rows.map((r) => r.id);
+  await leaveNotify(db, me.companyId, staff, `有給の提出を受け付けています（${w.label.trim()}）`, `${md(w.start)}〜${md(w.end)} の間で、有給を取りたい日を選んで「提出する」を押してください。`, "/leave");
+  return id;
+}
+export async function setLeaveWindowStatus(db: Database, userId: string, id: string, status: "open" | "closed"): Promise<void> {
+  const r = await asUser(db, userId, (q) => q.query("update leave_windows set status = $2 where id = $1 returning id", [id, status])).catch(() => ({ rows: [] }));
+  if (r.rows.length === 0) throw new ForbiddenError();
+}
+
+async function leaveNotify(db: Database, companyId: string, userIds: string[], title: string, body: string, link: string): Promise<void> {
+  const ids = [...new Set(userIds)];
+  for (const uid of ids) await db.query("insert into notifications (company_id, user_id, kind, title, body, link) values ($1,$2,'leave',$3,$4,$5)", [companyId, uid, title, body, link]);
+  await pushToUsers(db, ids, { title, body, url: link, tag: `leave-${link}` }).catch(() => 0);
+}
+async function managersOf(db: Database, storeId: string, companyId: string): Promise<string[]> {
+  const m = (await db.query<{ id: string }>("select id from memberships where store_id = $1 and level = 3 and status = 'active'", [storeId])).rows.map((r) => r.id);
+  return m.length ? m : await officeIds(db, companyId);
+}
+const officeIds = async (db: Database, companyId: string) => (await db.query<{ id: string }>("select id from memberships where company_id = $1 and level = 4 and status = 'active'", [companyId])).rows.map((r) => r.id);
+
+export async function getMyLeavePlan(db: Database, userId: string, windowId: string): Promise<{ days: string[]; submitted: boolean; changes: LeaveChange[] }> {
+  return asUser(db, userId, async (q) => {
+    const days = (await q.query<{ day: string }>("select day::text as day from leave_plans where window_id = $1 and membership_id = $2 order by day", [windowId, userId])).rows.map((r) => r.day);
+    const submitted = (await q.query("select 1 from leave_submissions where window_id = $1 and membership_id = $2", [windowId, userId])).rows.length > 0;
+    const changes = (await q.query<LeaveChange>(`${CHANGE_SQL} where c.window_id = $1 and c.membership_id = $2 order by c.created_at desc`, [windowId, userId])).rows;
+    return { days, submitted, changes };
+  });
+}
+
+/** 受付中のあいだ、自分の有給の日を、まとめて入れ直す */
+export async function setMyLeaveDays(db: Database, userId: string, windowId: string, days: string[]): Promise<void> {
+  const me = await getMe(db, userId);
+  if (!me) throw new ForbiddenError();
+  if (days.length > 60 || days.some((d) => !/^\d{4}-\d{2}-\d{2}$/.test(d))) throw new Error("日付が正しくありません");
+  const want = [...new Set(days)];
+  try {
+    await asUser(db, userId, async (q) => {
+      const w = (await q.query<{ status: string; range_start: string; range_end: string }>("select status, range_start::text, range_end::text from leave_windows where id = $1", [windowId])).rows[0];
+      if (!w || w.status !== "open") throw new Error("closed");
+      if (want.some((d) => d < w.range_start || d > w.range_end)) throw new Error("range");
+      await q.query("delete from leave_plans where window_id = $1 and membership_id = $2 and not (day = any($3::date[]))", [windowId, userId, want]);
+      for (const d of want) await q.query("insert into leave_plans (company_id, window_id, store_id, membership_id, day) values ($1,$2,$3,$4,$5) on conflict do nothing", [me.companyId, windowId, me.storeId, userId, d]);
+      await q.query("delete from leave_submissions where window_id = $1 and membership_id = $2", [windowId, userId]);      // 直したら、もう一度「提出する」
+    });
+  } catch (e) {
+    if ((e as Error).message === "closed") throw new Error("受付中ではありません（日を直すときは、変更を申請してください）");
+    throw new Error("有給を取れる範囲の外の日があります");
+  }
+}
+export async function submitMyLeave(db: Database, userId: string, windowId: string, on: boolean): Promise<void> {
+  const me = await getMe(db, userId);
+  if (!me) throw new ForbiddenError();
+  try {
+    await asUser(db, userId, async (q) => {
+      await q.query("delete from leave_submissions where window_id = $1 and membership_id = $2", [windowId, userId]);
+      if (on) await q.query("insert into leave_submissions (window_id, membership_id, company_id, store_id) values ($1,$2,$3,$4)", [windowId, userId, me.companyId, me.storeId]);
+    });
+  } catch { throw new ForbiddenError("受付中ではありません"); }
+}
+
+export async function requestLeaveChange(db: Database, userId: string, windowId: string, fromDay: string | null, toDay: string | null, reason: string): Promise<string> {
+  const me = await getMe(db, userId);
+  if (!me) throw new ForbiddenError();
+  let id = "";
+  try { id = (await asUser(db, userId, (q) => q.query<{ id: string }>("select public.leave_request($1, $2::date, $3::date, $4) as id", [windowId, fromDay, toDay, reason.slice(0, 300)]))).rows[0].id; }
+  catch (e) { mapLeaveError(e); }
+  const what = fromDay && toDay ? `${md(fromDay)} → ${md(toDay)} に変更` : fromDay ? `${md(fromDay)} をやめる` : `${md(toDay as string)} を追加`;
+  const status = me.level >= 3 ? "pending_office" : "pending_manager";
+  const to = status === "pending_office" ? await officeIds(db, me.companyId) : await managersOf(db, me.storeId, me.companyId);
+  await leaveNotify(db, me.companyId, to.filter((x) => x !== userId), `有給の変更の申請（${me.name} さん）`, `${what}${reason ? `　理由：${reason.slice(0, 60)}` : ""}。${status === "pending_office" ? "許可してください。" : "確認してください。"}`, "/leave/review");
+  return id;
+}
+
+export async function decideLeaveChange(db: Database, userId: string, id: string, approve: boolean, comment: string): Promise<LeaveStatus> {
+  const me = await getMe(db, userId);
+  if (!me) throw new ForbiddenError();
+  let st: LeaveStatus;
+  try { st = (await asUser(db, userId, (q) => q.query<{ s: LeaveStatus }>("select public.leave_decide($1, $2, $3) as s", [id, approve, comment.slice(0, 300)]))).rows[0].s; }
+  catch (e) { mapLeaveError(e); }
+  const c = (await db.query<{ membership_id: string; store_id: string; company_id: string; from_day: string | null; to_day: string | null; name: string }>(
+    "select c.membership_id, c.store_id, c.company_id, c.from_day::text as from_day, c.to_day::text as to_day, m.name from leave_changes c join memberships m on m.id = c.membership_id where c.id = $1", [id])).rows[0];
+  if (c) {
+    const what = c.from_day && c.to_day ? `${md(c.from_day)} → ${md(c.to_day)}` : c.from_day ? `${md(c.from_day)} をやめる` : `${md(c.to_day as string)} を追加`;
+    if (st === "rejected" && me.level === 3) await leaveNotify(db, c.company_id, [c.membership_id], "有給の変更が、店長の確認で却下されました", `${what}${comment ? `　コメント：${comment.slice(0, 80)}` : ""}`, "/leave");
+    else if (st === "pending_office") await leaveNotify(db, c.company_id, await officeIds(db, c.company_id), `有給の変更：店長が確認しました（${c.name} さん）`, `${what}。許可してください。`, "/leave/review");
+    else if (st === "approved" || st === "rejected") {
+      await leaveNotify(db, c.company_id, [c.membership_id], st === "approved" ? "有給の変更が許可されました" : "有給の変更が却下されました", `${what}${comment ? `　コメント：${comment.slice(0, 80)}` : ""}`, "/leave");
+      await leaveNotify(db, c.company_id, (await managersOf(db, c.store_id, c.company_id)).filter((x) => x !== c.membership_id), `有給の変更が${st === "approved" ? "許可" : "却下"}されました（${c.name} さん）`, what, "/leave/review");
+    }
+  }
+  return st;
+}
+export async function cancelLeaveChange(db: Database, userId: string, id: string): Promise<void> {
+  const ok = (await asUser(db, userId, (q) => q.query<{ ok: boolean }>("select public.leave_cancel($1) as ok", [id]))).rows[0].ok;
+  if (!ok) throw new ForbiddenError();
+}
+
+/** 確認が必要な申請（店長=自店の「店長の確認待ち」／事務員さん=「許可待ち」と、確認待ちの店長分）と、最近の結果 */
+export async function listLeaveReview(db: Database, userId: string): Promise<{ todo: LeaveChange[]; recent: LeaveChange[] }> {
+  const me = await getMe(db, userId);
+  if (!me || me.level < 3) throw new ForbiddenError();
+  const rows = (await asUser(db, userId, (q) => q.query<LeaveChange>(`${CHANGE_SQL} order by c.created_at desc limit 80`))).rows;
+  const mine = (c: LeaveChange) => c.membershipId === userId;
+  const todo = rows.filter((c) => !mine(c) && ((c.status === "pending_manager" && (me.level === 4 || c.storeId === me.storeId)) || (c.status === "pending_office" && me.level === 4)));
+  const recent = rows.filter((c) => !todo.includes(c)).slice(0, 30);
+  return { todo, recent };
+}
+
+export interface LeaveOverviewStore { storeId: string; storeName: string; people: { id: string; name: string; submitted: boolean; days: string[] }[] }
+export async function leaveOverview(db: Database, userId: string, windowId: string): Promise<LeaveOverviewStore[]> {
+  const me = await getMe(db, userId);
+  if (!me || me.level < 3) throw new ForbiddenError();
+  return asUser(db, userId, async (q) => {
+    const stores = (await q.query<{ id: string; name: string }>("select id, name from stores where status = 'active' order by sort_order, name")).rows.filter((s) => me.level === 4 || s.id === me.storeId);
+    const people = (await q.query<{ id: string; name: string; store_id: string }>("select id, name, store_id from memberships where status = 'active' and not display_only and level < 4 order by employee_code")).rows;
+    const plans = (await q.query<{ membership_id: string; day: string }>("select membership_id, day::text as day from leave_plans where window_id = $1 order by day", [windowId])).rows;
+    const subs = new Set((await q.query<{ membership_id: string }>("select membership_id from leave_submissions where window_id = $1", [windowId])).rows.map((r) => r.membership_id));
+    return stores.map((s) => ({ storeId: s.id, storeName: s.name, people: people.filter((p) => p.store_id === s.id).map((p) => ({ id: p.id, name: p.name, submitted: subs.has(p.id), days: plans.filter((x) => x.membership_id === p.id).map((x) => x.day) })) }));
+  });
+}

@@ -458,3 +458,12 @@ button:not(.ghost):not(.mvbtn):not(.linkcell):not(.logout):not(.monthrow):not(.d
 .lessongroup{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:12px;padding:10px 12px;border-radius:18px;background:color-mix(in srgb,var(--ink) 4%,transparent)}
 .lessongroup .gname{font-size:14px;font-weight:700;margin-right:4px;color:hsl(var(--h) 60% 38%)}
 .lbtn.sm{padding:8px 14px;font-size:14px}
+
+/* 有給の申請 */
+.leaveday{display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:1px;min-height:54px;margin:0;padding:6px 2px;border-radius:12px;font-size:14px;font-weight:600;
+  background:var(--card) !important;color:var(--ink) !important;border:1px solid var(--hair);box-shadow:none !important}
+.leaveday.hol>span{color:#d70015}.leaveday.sun>span{color:#d70015}.leaveday.sat>span{color:#0071e3}
+.leaveday:disabled{opacity:.35}
+.leaveday.on{background:linear-gradient(135deg,var(--ok),#2fb5a0) !important;color:#fff !important;border-color:transparent}
+.leaveday.on>span,.leaveday.on .holname{color:#fff !important}
+.leaveday .lv{font-size:10px;font-weight:700}
