@@ -2,9 +2,9 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, MeProvider, useAutoRefresh, useMe } from "@/lib/client";
-import { parseOrderText, type OrderLine } from "@/lib/material-ocr";
+import { applyMemory, findSupplier, parseOrderText, type OrderLine } from "@/lib/material-ocr";
 import { todayJst } from "@/lib/period-nav";
-import { MATERIAL_KIND_LABEL, type MaterialImage, type MaterialKind, type MaterialLogRow, type MaterialOrder, type StoreRow } from "@/lib/service";
+import { MATERIAL_KIND_LABEL, toExTax, type MaterialImage, type MaterialMemory, type MaterialKind, type MaterialLogRow, type MaterialOrder, type StoreRow } from "@/lib/service";
 
 const yen = (n: number) => `${n.toLocaleString("ja-JP")}円`;
 const toInt = (raw: string) => raw.replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0)).replace(/[^\d]/g, "").replace(/^0+(?=\d)/, "");
@@ -24,7 +24,7 @@ async function shrink(file: File): Promise<{ mime: string; base64: string; previ
   return { mime: "image/jpeg", base64: url.split(",")[1], preview: url };
 }
 interface Pic { mime: string; base64: string; preview: string }
-interface Form { id?: string; orderedOn: string; supplier: string; item: string; kind: MaterialKind; amount: string; note: string; pics: Pic[]; lines: OrderLine[] | null }
+interface Form { id?: string; orderedOn: string; supplier: string; item: string; kind: MaterialKind; amount: string; note: string; pics: Pic[]; lines: OrderLine[] | null; tax: "ex" | "in" }
 
 function Page() {
   const { me } = useMe();
@@ -59,7 +59,7 @@ function Page() {
 
   const save = async () => {
     if (!form) return;
-    const input = { orderedOn: form.orderedOn, supplier: form.supplier, item: form.item, kind: form.kind, amount: Number(form.amount || "x"), note: form.note, ...(form.lines ? { lines: form.lines } : {}) };
+    const input = { taxMode: form.tax, orderedOn: form.orderedOn, supplier: form.supplier, item: form.item, kind: form.kind, amount: Number(form.amount || "x"), note: form.note, ...(form.lines ? { lines: form.lines } : {}) };
     try {
       const r = await api<{ id?: string }>("/api/material", form.id ? { action: "update", id: form.id, input } : { action: "add", storeId, input });
       const oid = form.id ?? r.id;
@@ -76,6 +76,8 @@ function Page() {
     } catch { setMsg("画像を読みこめませんでした"); }
   };
   const [reading, setReading] = useState("");
+  const [memory, setMemory] = useState<MaterialMemory>({ suppliers: [], items: [], aliases: [], supplierTax: {} });
+  useEffect(() => { api<MaterialMemory>(`/api/material?storeId=${storeId}&memory=1`).then(setMemory).catch(() => {}); }, [storeId, data]);
   /** 画像の文字を読み取って、明細の下書きにする（スマホ・パソコンの中で読む。お金はかからない） */
   const readPic = async (p: Pic) => {
     setMsg(""); setReading("読み取っています…（初回は少し時間がかかります）");
@@ -85,8 +87,10 @@ function Page() {
       const { data } = await w.recognize(p.preview);
       await w.terminate();
       const r = parseOrderText(data.text);
+      r.lines = applyMemory(r.lines, memory);                  // 今までに入れた商品名・直し方に合わせる（学習）
+      const sup = findSupplier(data.text, memory.suppliers);   // 知っている発注先なら、自動で入れる
       if (r.lines.length === 0) setMsg("商品の行を読み取れませんでした。画像を大きく・まっすぐ撮り直すか、下の「＋行を足す」で入れてください。");
-      setForm((cur) => (cur ? { ...cur, lines: [...(cur.lines ?? []), ...r.lines], amount: cur.amount === "" && (r.total ?? 0) > 0 ? String(r.total) : cur.amount } : cur));
+      setForm((cur) => (cur ? { ...cur, supplier: cur.supplier || sup || "", tax: !cur.supplier && sup && memory.supplierTax[sup] ? memory.supplierTax[sup] : cur.tax, lines: [...(cur.lines ?? []), ...r.lines], amount: cur.amount === "" && (r.total ?? 0) > 0 ? String(r.total) : cur.amount } : cur));
     } catch { setMsg("読み取りに失敗しました（通信を確認してください）"); }
     setReading("");
   };
@@ -126,7 +130,7 @@ function Page() {
       </div>
 
       <div className="toolbar">
-        {canEdit && <button onClick={() => { setMsg(""); setForm({ orderedOn: todayJst(), supplier: "", item: "", kind: "supply", amount: "", note: "", pics: [], lines: [] }); }}>＋ 発注を記録する</button>}
+        {canEdit && <button onClick={() => { setMsg(""); setForm({ orderedOn: todayJst(), supplier: "", item: "", kind: "supply", amount: "", note: "", pics: [], lines: [], tax: "ex" }); }}>＋ 発注を記録する</button>}
         <button className="ghost" style={{ color: "var(--blue)" }} onClick={async () => setNote((await copyText(tsv())) ? "表をコピーしました（Excelやメールに貼れます）" : "コピーできませんでした")}>表をコピー</button>
         <button className="ghost" style={{ color: "var(--blue)" }} onClick={() => window.print()}>印刷</button>
         {me.level >= 3 && <button className="ghost" style={{ color: "var(--blue)" }} onClick={async () => setLog(await api<MaterialLogRow[]>(`/api/material?storeId=${storeId}&log=1`))}>変更の記録</button>}
@@ -138,10 +142,10 @@ function Page() {
         : <ul className="list">
           {data.orders.map((o) => (
             <li key={o.id} style={{ opacity: o.deleted ? 0.5 : 1, textDecoration: o.deleted ? "line-through" : "none", cursor: canEdit && !o.deleted ? "pointer" : "default" }}
-              onClick={() => { if (canEdit && !o.deleted) { setMsg(""); setForm({ id: o.id, orderedOn: o.orderedOn, supplier: o.supplier, item: o.item, kind: o.kind, amount: String(o.amount), note: o.note, pics: [], lines: o.lines ?? [] }); } }}>
+              onClick={() => { if (canEdit && !o.deleted) { setMsg(""); setForm({ id: o.id, orderedOn: o.orderedOn, supplier: o.supplier, item: o.item, kind: o.kind, amount: String(o.amount), note: o.note, pics: [], lines: o.lines ?? [], tax: "ex" }); } }}>
               <div style={{ minWidth: 0, flex: 1 }}>
                 <b>{md(o.orderedOn)}　{o.supplier}</b><span className="chip">{MATERIAL_KIND_LABEL[o.kind]}</span>{o.edited && !o.deleted && <span className="chip">直した</span>}{o.deleted && <span className="chip warn">取り消し</span>}
-                <div className="sub">{[o.item, o.note, o.by && `記入: ${o.by}`].filter(Boolean).join("　")}</div>
+                <div className="sub">{[o.item, o.note, o.by && `記入: ${o.by}`, o.taxMode === "in" && o.entered ? `入力は税込 ${yen(o.entered)}` : ""].filter(Boolean).join("　")}</div>
                 {(o.lines ?? []).length > 0 && <details onClick={(e) => e.stopPropagation()}><summary className="sub">明細 {o.lines.length}件</summary>{o.lines.map((l, i) => <div key={i} className="sub">{l.name} ×{l.qty}　{yen(l.amount)}</div>)}</details>}
                 {(data.images ?? []).filter((i) => i.orderId === o.id).map((i) => (
                   <a key={i.id} href={`/api/material/image/${i.id}`} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} style={{ display: "inline-block", marginRight: 8 }}>
@@ -154,20 +158,26 @@ function Page() {
             </li>
           ))}
         </ul>)}
-      <p className="hint">金額は<b>税抜</b>で入れてください。記録は消えません（直す・取り消すと、だれがいつ変えたかが残ります）。</p>
+      <p className="hint">発注画面が税込表示のときは「税込」を選んでください。保存と合計は、いつも<b>税抜</b>になります。記録は消えません（直す・取り消すと、だれがいつ変えたかが残ります）。</p>
 
       {form && (
         <div className="sheet-bg" onClick={() => setForm(null)}>
           <div className="sheet" onClick={(e) => e.stopPropagation()} role="dialog" aria-label="発注の記録">
             <h3>{form.id ? "発注を直す" : "発注を記録する"}</h3>
             <label>発注した日<input type="date" value={form.orderedOn} onChange={(e) => setForm({ ...form, orderedOn: e.target.value })} /></label>
-            <label>発注先（業者）<input list="suppliers" value={form.supplier} onChange={(e) => setForm({ ...form, supplier: e.target.value })} placeholder="例: ○○商事" /></label>
-            <datalist id="suppliers">{(data?.suppliers ?? []).map((s) => <option key={s} value={s} />)}</datalist>
+            <label>発注先（業者）<input list="suppliers" value={form.supplier} onChange={(e) => setForm({ ...form, supplier: e.target.value, tax: memory.supplierTax[e.target.value] ?? form.tax })} placeholder="例: ○○商事" /></label>
+            <datalist id="suppliers">{[...new Set([...(data?.suppliers ?? []), ...memory.suppliers])].map((s) => <option key={s} value={s} />)}</datalist>
+            <datalist id="itemnames">{memory.items.map((s) => <option key={s} value={s} />)}</datalist>
             <label>種類
               <select value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value as MaterialKind })}>
                 {(Object.keys(MATERIAL_KIND_LABEL) as MaterialKind[]).map((k) => <option key={k} value={k}>{MATERIAL_KIND_LABEL[k]}</option>)}
               </select></label>
-            <label>金額（円・税抜）<input inputMode="numeric" value={form.amount} onChange={(e) => setForm({ ...form, amount: toInt(e.target.value) })} placeholder="例: 12800" /></label>
+            <label>この画面の金額は
+              <div className="seg" style={{ margin: "4px 0 0" }}>
+                <button type="button" className={form.tax === "ex" ? "on" : ""} onClick={() => setForm({ ...form, tax: "ex" })}>税抜</button>
+                <button type="button" className={form.tax === "in" ? "on" : ""} onClick={() => setForm({ ...form, tax: "in" })}>税込</button>
+              </div></label>
+            <label>金額（円・{form.tax === "in" ? "税込で入れる" : "税抜"}）<input inputMode="numeric" value={form.amount} onChange={(e) => setForm({ ...form, amount: toInt(e.target.value) })} placeholder="例: 12800" />{form.tax === "in" && form.amount !== "" && <span className="sub">→ 税抜に直して保存します：{yen(toExTax(Number(form.amount), "in"))}（税10%）</span>}</label>
             <label>内容<input value={form.item} onChange={(e) => setForm({ ...form, item: e.target.value })} placeholder="例: カラー剤・シャンプー" /></label>
             <label>メモ<input value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} /></label>
             <div onPaste={(e) => { const fs = Array.from(e.clipboardData.files); if (fs.length) { e.preventDefault(); addPics(fs); } }}>
@@ -184,17 +194,17 @@ function Page() {
             </div>
             {form.lines !== null && (form.lines.length > 0 || form.pics.length > 0) && (
               <div>
-                <b>明細（読み取った結果。まちがいは直してください）</b>
+                <b>明細（読み取った結果。まちがいは直してください。直した名前は次から自動で覚えます）</b>
                 {form.lines.map((l, i) => (
                   <div key={i} className="toolbar" style={{ margin: "4px 0" }}>
-                    <input aria-label="商品名" style={{ flex: 3, minWidth: 120 }} value={l.name} onChange={(e) => setForm({ ...form, lines: form.lines!.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)) })} />
+                    <input aria-label="商品名" list="itemnames" style={{ flex: 3, minWidth: 120 }} value={l.name} onChange={(e) => setForm({ ...form, lines: form.lines!.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)) })} />
                     <input aria-label="数量" inputMode="numeric" style={{ width: 56 }} value={String(l.qty)} onChange={(e) => setForm({ ...form, lines: form.lines!.map((x, j) => (j === i ? { ...x, qty: Number(toInt(e.target.value)) || 1 } : x)) })} />
                     <input aria-label="金額" inputMode="numeric" style={{ width: 90 }} value={String(l.amount)} onChange={(e) => setForm({ ...form, lines: form.lines!.map((x, j) => (j === i ? { ...x, amount: Number(toInt(e.target.value)) || 0 } : x)) })} />
                     <button className="ghost" onClick={() => setForm({ ...form, lines: form.lines!.filter((_, j) => j !== i) })}>×</button>
                   </div>))}
                 <div className="toolbar">
                   <button className="ghost" style={{ color: "var(--blue)" }} onClick={() => setForm({ ...form, lines: [...form.lines!, { name: "", qty: 1, amount: 0 }] })}>＋行を足す</button>
-                  {form.lines.length > 0 && <button className="ghost" style={{ color: "var(--blue)" }} onClick={() => setForm({ ...form, amount: String(form.lines!.reduce((s, l) => s + l.amount, 0)) })}>明細の合計（{yen(form.lines.reduce((s, l) => s + l.amount, 0))}）を金額に入れる</button>}
+                  {form.lines.length > 0 && <button className="ghost" style={{ color: "var(--blue)" }} onClick={() => setForm({ ...form, amount: String(form.lines!.reduce((s, l) => s + l.amount, 0)) })}>明細の合計（{form.tax === "in" ? "税込 " : "税抜 "}{yen(form.lines.reduce((s, l) => s + l.amount, 0))}）を金額に入れる</button>}
                 </div>
               </div>)}
             {msg && <p className="err">{msg}</p>}

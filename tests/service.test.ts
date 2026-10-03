@@ -17,7 +17,7 @@ async function person(co: string, code: string, name: string, level: number, st:
 
 beforeAll(async () => {
   db = await newDb();
-  expect(await migrate(db)).toEqual(["0001_tenant_core.sql", "0002_periods_requests.sql", "0003_store_changes.sql", "0004_shifts.sql", "0005_break_rule.sql", "0006_attendance.sql", "0007_products_stocktake.sql", "0008_stock.sql", "0009_display_accounts.sql", "0010_presence.sql", "0011_saturday_hours.sql", "0012_scheduled_retirement.sql", "0013_manual.sql", "0014_ranks.sql", "0015_short_name.sql", "0016_day_limits.sql", "0017_material_orders.sql"]);
+  expect(await migrate(db)).toEqual(["0001_tenant_core.sql", "0002_periods_requests.sql", "0003_store_changes.sql", "0004_shifts.sql", "0005_break_rule.sql", "0006_attendance.sql", "0007_products_stocktake.sql", "0008_stock.sql", "0009_display_accounts.sql", "0010_presence.sql", "0011_saturday_hours.sql", "0012_scheduled_retirement.sql", "0013_manual.sql", "0014_ranks.sql", "0015_short_name.sql", "0016_day_limits.sql", "0017_material_orders.sql", "0018_material_tax.sql"]);
   expect(await migrate(db)).toEqual([]); // 2回目は何もしない
   const a = (await db.query<{ id: string }>("insert into companies (code, name) values ('co-a','A社') returning id")).rows[0].id;
   const b = (await db.query<{ id: string }>("insert into companies (code, name) values ('co-b','B社') returning id")).rows[0].id;
@@ -254,5 +254,18 @@ describe("材料費（発注額）", () => {
     const log = await svc.listMaterialLog(db, id.mgr, store.a1);
     expect(log.some((l) => l.orderId === oid && l.action === "変更")).toBe(true);
     await expect(svc.addMaterialOrder(db, id.staff, store.a1, { ...inp, lines: [{ name: "", qty: 1, amount: 1 }] })).rejects.toThrow("明細");
+  });
+  it("税込で入れると税抜に直して保存され、入力した金額も残る。税の入れ方・商品名・読み間違いの直しは覚えられる", async () => {
+    const oid = await svc.addMaterialOrder(db, id.staff, store.a1, { ...inp, supplier: "学習商事", amount: 11000, taxMode: "in",
+      lines: [{ name: "シャンプー", qty: 1, amount: 5500, raw: "シャンプ一" }, { name: "カラー剤", qty: 1, amount: 5500, raw: "カラー剤" }] });
+    const o = (await svc.listMaterialOrders(db, id.staff, store.a1, "2026-10-01", "2026-10-31")).find((x) => x.id === oid)!;
+    expect(o).toMatchObject({ amount: 10000, taxMode: "in", entered: 11000 });
+    expect(o.lines).toEqual([{ name: "シャンプー", qty: 1, amount: 5000, raw: "シャンプ一" }, { name: "カラー剤", qty: 1, amount: 5000 }]);
+    const mem = await svc.getMaterialMemory(db, id.staff, store.a1);
+    expect(mem.supplierTax["学習商事"]).toBe("in");
+    expect(mem.suppliers).toContain("学習商事");
+    expect(mem.items).toEqual(expect.arrayContaining(["シャンプー", "カラー剤"]));
+    expect(mem.aliases).toContainEqual({ raw: "シャンプ一", name: "シャンプー" });
+    expect((await svc.getMaterialMemory(db, id.staff2, store.a1)).items).toEqual([]);   // 他店の人には見えない
   });
 });

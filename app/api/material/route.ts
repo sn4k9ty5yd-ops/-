@@ -1,7 +1,7 @@
 import { getDb } from "@/lib/db";
 import { authed, json } from "@/lib/http";
 import {
-  addMaterialImage, addMaterialOrder, listMaterialImages, cancelMaterialOrder, getMaterialBudget, listMaterialLog, listMaterialOrders, listMaterialSuppliers,
+  addMaterialImage, getMaterialMemory, addMaterialOrder, listMaterialImages, cancelMaterialOrder, getMaterialBudget, listMaterialLog, listMaterialOrders, listMaterialSuppliers,
   setMaterialBudget, updateMaterialOrder, type MaterialInput,
 } from "@/lib/service";
 
@@ -10,6 +10,7 @@ export const GET = authed(async (userId, req) => {
   const u = new URL(req.url); const storeId = u.searchParams.get("storeId");
   if (!storeId) throw new Error("お店を指定してください");
   const db = await getDb();
+  if (u.searchParams.get("memory")) return json(await getMaterialMemory(db, userId, storeId));
   if (u.searchParams.get("log")) return json(await listMaterialLog(db, userId, storeId));
   const from = u.searchParams.get("from") ?? "", to = u.searchParams.get("to") ?? "", month = u.searchParams.get("month");
   if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) throw new Error("期間が正しくありません");

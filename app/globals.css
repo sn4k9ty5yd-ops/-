@@ -237,7 +237,7 @@ input[type=checkbox],input[type=radio]{accent-color:var(--blue)}
 
 /* ボタン: カプセル型 */
 button{font-family:inherit;border-radius:980px;padding:14px 22px;font-size:17px;font-weight:500;letter-spacing:-.01em;cursor:pointer;transition:background .15s,transform .1s,opacity .15s}
-button:not(.ghost):not(.mvbtn):not(.linkcell):hover{background:var(--blue-d)}
+@media (hover:hover){button:not(.ghost):not(.mvbtn):not(.linkcell):hover{background:var(--blue-d)}}
 button:active{transform:scale(.98)}
 button.ghost{border:0;background:color-mix(in srgb,var(--ink) 6%,transparent);color:var(--blue);font-weight:500;padding:9px 16px;font-size:14px}
 button.ghost:hover{background:color-mix(in srgb,var(--ink) 10%,transparent)}
@@ -245,7 +245,7 @@ button:disabled{opacity:.4;cursor:default}
 .seg{background:color-mix(in srgb,var(--ink) 7%,transparent);border-radius:12px;padding:3px;gap:2px;display:flex}
 .seg button{border:0;background:transparent;color:var(--ink);border-radius:10px;padding:9px 10px;font-size:14px;font-weight:500}
 .seg button.on{background:var(--card);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.14)}
-.seg button:hover{background:transparent}.seg button.on:hover{background:var(--card)}
+.seg button:hover{background:transparent !important}.seg button.on,.seg button.on:hover{background:var(--card) !important;color:var(--ink) !important}
 
 /* 上のバー: すりガラス */
 .shell .demo{position:sticky;top:0;z-index:30;background:var(--glass);-webkit-backdrop-filter:saturate(180%) blur(20px);backdrop-filter:saturate(180%) blur(20px);color:var(--ink);border-bottom:1px solid var(--hair);padding:12px 20px;font-size:13px;justify-content:space-between}
@@ -321,3 +321,12 @@ main.login button[type=submit]{margin-top:28px;width:100%;padding:15px;font-size
 .sheet-bg .sheet h3{font-size:19px;font-weight:700;margin:0 0 6px}
 
 @media print{.card,.list li,.scroll{box-shadow:none}.shell .demo{position:static}}
+
+/* スマホ: 見出しを少し小さく、祝日名は別の行に */
+@media (max-width:520px){
+  h1{font-size:30px}
+  main.home h1{font-size:30px}
+  main.home{padding-top:40px}
+}
+.mday .holname{display:block;font-size:9px;margin-top:1px}
+.mday .num .holname{display:block}

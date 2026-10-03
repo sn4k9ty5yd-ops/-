@@ -1374,11 +1374,20 @@ export async function markNotificationsRead(db: Database, userId: string, ids?: 
 export type MaterialKind = "supply" | "retail" | "other";
 export const MATERIAL_KIND_LABEL: Record<MaterialKind, string> = { supply: "材料（業務）", retail: "店販", other: "その他" };
 export interface MaterialOrder {
-  id: string; storeId: string; orderedOn: string; supplier: string; item: string; kind: MaterialKind; amount: number; note: string; lines: { name: string; qty: number; amount: number }[];
+  id: string; storeId: string; orderedOn: string; supplier: string; item: string; kind: MaterialKind; amount: number; note: string; lines: MaterialLine[]; taxMode: "ex" | "in"; entered: number | null;
   by: string | null; at: string; deleted: boolean; edited: boolean;
 }
 export interface MaterialLogRow { id: number; orderId: string; action: string; by: string | null; at: string; before: Record<string, unknown> | null; after: Record<string, unknown> | null }
-export interface MaterialInput { orderedOn: string; supplier: string; item: string; kind: MaterialKind; amount: number; note?: string; lines?: { name: string; qty: number; amount: number }[] }
+export interface MaterialLine { name: string; qty: number; amount: number; raw?: string }
+/** taxMode: 入れた金額が「税抜(ex)」か「税込(in)」か。保存する金額は、いつも税抜（税込は税率10%で割り戻す） */
+export interface MaterialInput { orderedOn: string; supplier: string; item: string; kind: MaterialKind; amount: number; note?: string; lines?: MaterialLine[]; taxMode?: "ex" | "in" }
+export const MATERIAL_TAX_RATE = 0.1;
+export const toExTax = (v: number, mode: "ex" | "in" | undefined) => (mode === "in" ? Math.round(v / (1 + MATERIAL_TAX_RATE)) : v);
+function materialValues(i: MaterialInput) {
+  const mode = i.taxMode === "in" ? "in" : "ex";
+  const lines = i.lines === undefined ? null : JSON.stringify(i.lines.map((l) => ({ name: l.name.trim(), qty: l.qty, amount: toExTax(l.amount, mode), ...(l.raw && l.raw.trim() && l.raw.trim() !== l.name.trim() ? { raw: l.raw.trim().slice(0, 120) } : {}) })));
+  return { mode, amountEx: toExTax(i.amount, mode), entered: mode === "in" ? i.amount : null, lines };
+}
 
 function checkMaterial(i: MaterialInput) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(i.orderedOn ?? "")) throw new Error("発注した日が正しくありません");
@@ -1395,7 +1404,7 @@ function checkMaterial(i: MaterialInput) {
 /** 期間（from〜to）の発注を、新しい順に。取り消したものは、店長以上だけに「取り消し」として見える */
 export async function listMaterialOrders(db: Database, userId: string, storeId: string, from: string, to: string): Promise<MaterialOrder[]> {
   return (await asUser(db, userId, (q) => q.query<MaterialOrder>(
-    `select o.id, o.store_id as "storeId", o.ordered_on::text as "orderedOn", o.supplier, o.item, o.kind, o.amount, o.note, o.lines,
+    `select o.id, o.store_id as "storeId", o.ordered_on::text as "orderedOn", o.supplier, o.item, o.kind, o.amount, o.note, o.lines, o.tax_mode as "taxMode", o.entered_amount as entered,
             m.name as by, o.created_at as at, (o.deleted_at is not null) as deleted, (o.updated_at is not null) as edited
        from material_orders o left join memberships m on m.id = o.created_by
       where o.store_id = $1 and o.ordered_on between $2 and $3
@@ -1404,24 +1413,26 @@ export async function listMaterialOrders(db: Database, userId: string, storeId: 
 
 export async function addMaterialOrder(db: Database, userId: string, storeId: string, i: MaterialInput): Promise<string> {
   checkMaterial(i);
+  const v = materialValues(i);
   const me = await getMe(db, userId);
   if (!me) throw new ForbiddenError();
   try {
     return await asUser(db, userId, async (q) => (await q.query<{ id: string }>(
-      `insert into material_orders (company_id, store_id, ordered_on, supplier, item, kind, amount, note, lines, created_by)
-       values ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10) returning id`,
-      [me.companyId, storeId, i.orderedOn, i.supplier.trim(), (i.item ?? "").trim(), i.kind, i.amount, (i.note ?? "").trim(), JSON.stringify((i.lines ?? []).map((l) => ({ name: l.name.trim(), qty: l.qty, amount: l.amount }))), userId])).rows[0].id);
+      `insert into material_orders (company_id, store_id, ordered_on, supplier, item, kind, amount, note, lines, created_by, tax_mode, entered_amount)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,coalesce($9::jsonb,'[]'::jsonb),$10,$11,$12) returning id`,
+      [me.companyId, storeId, i.orderedOn, i.supplier.trim(), (i.item ?? "").trim(), i.kind, v.amountEx, (i.note ?? "").trim(), v.lines, userId, v.mode, v.entered])).rows[0].id);
   } catch { throw new ForbiddenError(); }
 }
 
 export async function updateMaterialOrder(db: Database, userId: string, id: string, i: MaterialInput): Promise<void> {
   checkMaterial(i);
+  const v = materialValues(i);
   let n = 0;
   try {
     n = await asUser(db, userId, async (q) => (await q.query(
-      `update material_orders set ordered_on=$2, supplier=$3, item=$4, kind=$5, amount=$6, note=$7, lines=coalesce($9::jsonb, lines), updated_at=now(), updated_by=$8
+      `update material_orders set ordered_on=$2, supplier=$3, item=$4, kind=$5, amount=$6, note=$7, lines=coalesce($9::jsonb, lines), tax_mode=$10, entered_amount=$11, updated_at=now(), updated_by=$8
         where id = $1 and deleted_at is null returning id`,
-      [id, i.orderedOn, i.supplier.trim(), (i.item ?? "").trim(), i.kind, i.amount, (i.note ?? "").trim(), userId, i.lines === undefined ? null : JSON.stringify(i.lines.map((l) => ({ name: l.name.trim(), qty: l.qty, amount: l.amount })))])).rows.length);
+      [id, i.orderedOn, i.supplier.trim(), (i.item ?? "").trim(), i.kind, v.amountEx, (i.note ?? "").trim(), userId, v.lines, v.mode, v.entered])).rows.length);
   } catch { throw new ForbiddenError(); }
   if (n === 0) throw new ForbiddenError();
 }
@@ -1499,4 +1510,32 @@ export async function listMaterialImages(db: Database, userId: string, storeId: 
 export async function getMaterialImage(db: Database, userId: string, id: string): Promise<{ mime: string; data: Buffer } | null> {
   const r = (await asUser(db, userId, (q) => q.query<{ mime: string; data: Uint8Array }>("select mime, data from material_order_images where id = $1", [id]))).rows[0];
   return r ? { mime: r.mime, data: Buffer.from(r.data) } : null;
+}
+
+export interface MaterialMemory {
+  suppliers: string[];
+  /** 今まで入れた商品名（よく使う順） */
+  items: string[];
+  /** 読み取った文字 → 直した商品名（学習） */
+  aliases: { raw: string; name: string }[];
+  /** 発注先ごとの、最後に使った税の入れ方 */
+  supplierTax: Record<string, "ex" | "in">;
+}
+
+/** 今までの記録から、業者・商品名・読み取りの直し方・税の入れ方を覚えておく（新しく覚えさせる作業は不要） */
+export async function getMaterialMemory(db: Database, userId: string, storeId: string): Promise<MaterialMemory> {
+  return asUser(db, userId, async (q) => {
+    const suppliers = (await q.query<{ supplier: string }>(
+      `select supplier from material_orders where store_id = $1 and deleted_at is null and supplier <> '' group by supplier order by count(*) desc, max(created_at) desc limit 100`, [storeId])).rows.map((r) => r.supplier);
+    const lines = (await q.query<{ name: string; raw: string | null; n: number }>(
+      `select l->>'name' as name, l->>'raw' as raw, count(*)::int as n
+         from material_orders o, jsonb_array_elements(o.lines) l
+        where o.store_id = $1 and o.deleted_at is null and coalesce(l->>'name','') <> ''
+        group by 1, 2 order by n desc limit 1500`, [storeId])).rows;
+    const items = [...new Set(lines.map((l) => l.name))].slice(0, 500);
+    const aliases = lines.filter((l) => l.raw && l.raw !== l.name).map((l) => ({ raw: l.raw as string, name: l.name }));
+    const st = (await q.query<{ supplier: string; tax_mode: "ex" | "in" }>(
+      `select distinct on (supplier) supplier, tax_mode from material_orders where store_id = $1 and deleted_at is null and supplier <> '' order by supplier, created_at desc`, [storeId])).rows;
+    return { suppliers, items, aliases, supplierTax: Object.fromEntries(st.map((r) => [r.supplier, r.tax_mode])) };
+  });
 }
