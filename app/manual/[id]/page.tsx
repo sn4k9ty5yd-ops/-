@@ -7,6 +7,7 @@ import { BlockView } from "@/lib/manual/BlockView";
 import type { ManualPage, StaffRow } from "@/lib/service";
 
 type Store = { id: string; name: string; status: string };
+const RANKS = [["assistant", "アシスタント"], ["stylist", "スタイリスト"]] as const;
 const LV = [[1, "レベル1 スタッフ以上"], [2, "レベル2 シフト担当以上"], [3, "レベル3 店長以上"], [4, "レベル4 管理者だけ"]] as const;
 
 function Settings({ p, reload }: { p: ManualPage; reload: () => Promise<void> }) {
@@ -38,13 +39,43 @@ function Settings({ p, reload }: { p: ManualPage; reload: () => Promise<void> })
           <option value="">なし</option>{staff.filter((s) => s.status === "active").map((s) => <option key={s.id} value={s.id}>{s.name}（{s.employeeCode}）</option>)}
         </select>
       </label>
-      <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
-        <input type="checkbox" style={{ width: 20, height: 20 }} checked={p.evaluatorsEdit} onChange={(e) => save({ evaluatorsEdit: e.target.checked })} />
-        「評価をつけられる人」（スタッフ画面で決めます）も、このページに書き込める
-      </label>
+      <fieldset style={{ border: "1px solid var(--line)", borderRadius: 10, margin: "10px 0", padding: "8px 12px" }}>
+        <legend>ランクで決める（スタッフ画面で、ランクを決めます）</legend>
+        <div className="sub">レベルに関係なく、このランクの人も…</div>
+        {(["viewRanks", "editRanks"] as const).map((k) => (
+          <div key={k} style={{ display: "flex", gap: 14, flexWrap: "wrap", alignItems: "center", margin: "4px 0" }}>
+            <b style={{ minWidth: 72 }}>{k === "viewRanks" ? "見られる" : "書き込める"}</b>
+            {RANKS.map(([v, t]) => (
+              <label key={v} style={{ display: "flex", gap: 6, alignItems: "center", margin: 0 }}>
+                <input type="checkbox" style={{ width: 20, height: 20 }} checked={p[k].includes(v)} onChange={(e) => save({ [k]: e.target.checked ? [...p[k], v] : p[k].filter((x) => x !== v) })} />{t}
+              </label>
+            ))}
+          </div>
+        ))}
+        <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <input type="checkbox" style={{ width: 20, height: 20 }} checked={p.evaluatorsEdit} onChange={(e) => save({ evaluatorsEdit: e.target.checked })} />
+          「評価をつけられる人」（スタイリスト、または管理者が名前で指定した人）も書き込める
+        </label>
+      </fieldset>
+      <fieldset style={{ border: "1px solid var(--line)", borderRadius: 10, margin: "10px 0", padding: "8px 12px" }}>
+        <legend>名前で決める（個別に追加）</legend>
+        <ul className="list">
+          {(p.grants ?? []).map((g) => (
+            <li key={g.membershipId}><span>{g.name}　<span className="chip">{g.canEdit ? "見られる＋書き込める" : "見られる"}</span></span>
+              <span className="actions">
+                <button className="ghost" style={{ color: "var(--blue)" }} onClick={() => run(() => api(`/api/manual/${p.id}`, { action: "grant", membershipId: g.membershipId, mode: g.canEdit ? "view" : "edit" }))}>{g.canEdit ? "書き込みを外す" : "書き込みも許す"}</button>
+                <button className="ghost" onClick={() => run(() => api(`/api/manual/${p.id}`, { action: "grant", membershipId: g.membershipId, mode: "remove" }))}>外す</button>
+              </span></li>
+          ))}
+        </ul>
+        <select value="" onChange={(e) => e.target.value && run(() => api(`/api/manual/${p.id}`, { action: "grant", membershipId: e.target.value, mode: "view" }))}>
+          <option value="">＋ 名前を選んで追加（見られる）</option>
+          {staff.filter((s) => s.status === "active" && !(p.grants ?? []).some((g) => g.membershipId === s.id)).map((s) => <option key={s.id} value={s.id}>{s.name}（{s.employeeCode}）</option>)}
+        </select>
+      </fieldset>
       <div className="actions">
         <button className="ghost" style={{ color: "var(--blue)" }} onClick={() => confirm(`このページと、その下のページ全部に、同じ「見られる人・書き込める人・お店・評価者」の設定をします。よろしいですか？`) &&
-          run(async () => { const r = await api<{ count: number }>(`/api/manual/${p.id}`, { action: "settingsDeep", minLevel: p.minLevel, editLevel: p.editLevel, evaluatorsEdit: p.evaluatorsEdit, storeId: p.storeId }); setMsg(`${r.count}ページに設定しました`); })}>
+          run(async () => { const r = await api<{ count: number }>(`/api/manual/${p.id}`, { action: "settingsDeep", minLevel: p.minLevel, editLevel: p.editLevel, evaluatorsEdit: p.evaluatorsEdit, storeId: p.storeId, viewRanks: p.viewRanks, editRanks: p.editRanks }); setMsg(`${r.count}ページに設定しました`); })}>
           下のページ全部にも、同じ設定をする
         </button>
         <button className="ghost" onClick={() => confirm(`「${p.title}」と、その下のページを削除しますか？（元に戻せません）`) && run(async () => { await api(`/api/manual/${p.id}`, { action: "delete" }); router.push("/manual"); })}>このページを削除</button>

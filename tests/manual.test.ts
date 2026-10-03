@@ -90,9 +90,46 @@ describe("書き込み（技術評価）", () => {
   });
   it("設定（見られる・書ける人）は管理者だけが変えられ、下のページにもまとめて変えられる", async () => {
     await expect(svc.updateManualPage(db, id.mgrA, page.all, { minLevel: 3 })).rejects.toThrow(svc.ForbiddenError);
-    expect(await svc.setManualLevelDeep(db, id.admin, page.all, { minLevel: 2, editLevel: 3, evaluatorsEdit: false, storeId: null })).toBe(2);
+    expect(await svc.setManualLevelDeep(db, id.admin, page.all, { minLevel: 2, editLevel: 3, evaluatorsEdit: false, storeId: null, viewRanks: [], editRanks: [] })).toBe(2);
     expect((await svc.listManualPages(db, id.assistB)).map((p) => p.title)).not.toContain("子ページ");
     await expect(svc.deleteManualPage(db, id.mgrA, page.child)).rejects.toThrow(svc.ForbiddenError);
+  });
+});
+
+describe("ランクと名前での権限", () => {
+  it("ランクを決められるのは管理者だけ。スタイリストは、評価ページに書ける（アシスタントは書けない）", async () => {
+    const stylist = await person("21", "スタイリストC", 1, storeA);
+    const assistant = await person("22", "アシスタントC", 1, storeA);
+    await expect(svc.setRank(db, id.mgrA, stylist, "stylist")).rejects.toThrow(svc.ForbiddenError);
+    await svc.setRank(db, id.admin, stylist, "stylist"); await svc.setRank(db, id.admin, assistant, "assistant");
+    await expect(svc.setRank(db, id.admin, stylist, "boss")).rejects.toThrow("ランク");
+    const sheet: Block[] = [{ t: "table", id: "t2", header: true, rows: [["項目", "1回目"], ["流れ", ""]] }];
+    await addPage("rank", { title: "評価ページ", body: sheet, evaluatorsEdit: true });
+    await svc.editManualBlock(db, stylist, page.rank, { op: "cell", id: "t2", r: 1, c: 1, text: "3" });
+    await expect(svc.editManualBlock(db, assistant, page.rank, { op: "cell", id: "t2", r: 1, c: 1, text: "5" })).rejects.toThrow(svc.ForbiddenError);
+    expect((await svc.getManualPage(db, assistant, page.rank)).canEdit).toBe(false);
+    // ランクで書き込みを許す
+    await svc.updateManualPage(db, id.admin, page.rank, { evaluatorsEdit: false, editRanks: ["assistant"] });
+    await expect(svc.editManualBlock(db, stylist, page.rank, { op: "cell", id: "t2", r: 1, c: 1, text: "4" })).rejects.toThrow(svc.ForbiddenError);
+    await svc.editManualBlock(db, assistant, page.rank, { op: "cell", id: "t2", r: 1, c: 1, text: "5" });
+  });
+  it("ランクで見られる／名前で見られる・書ける。外せば元に戻る", async () => {
+    const stylist = (await db.query<{ id: string }>("select id from memberships where employee_code = '21'")).rows[0].id;
+    const named = (await db.query<{ id: string }>("select id from memberships where employee_code = '22'")).rows[0].id;
+    await addPage("secret", { title: "議事録", minLevel: 4 });
+    await expect(svc.getManualPage(db, stylist, page.secret)).rejects.toThrow();
+    await svc.updateManualPage(db, id.admin, page.secret, { viewRanks: ["stylist"] });
+    expect((await svc.getManualPage(db, stylist, page.secret)).canEdit).toBe(false);
+    await expect(svc.getManualPage(db, named, page.secret)).rejects.toThrow();
+    await expect(svc.setManualGrant(db, id.mgrA, page.secret, named, "view")).rejects.toThrow(svc.ForbiddenError);
+    await svc.setManualGrant(db, id.admin, page.secret, named, "view");
+    expect((await svc.getManualPage(db, named, page.secret)).canEdit).toBe(false);
+    await svc.setManualGrant(db, id.admin, page.secret, named, "edit");
+    expect((await svc.getManualPage(db, named, page.secret)).canEdit).toBe(true);
+    expect((await svc.getManualPage(db, id.admin, page.secret)).grants).toEqual([{ membershipId: named, name: "アシスタントC", canEdit: true }]);
+    expect((await svc.getManualPage(db, named, page.secret)).grants).toBeUndefined();
+    await svc.setManualGrant(db, id.admin, page.secret, named, "remove");
+    await expect(svc.getManualPage(db, named, page.secret)).rejects.toThrow();
   });
 });
 

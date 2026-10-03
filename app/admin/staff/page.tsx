@@ -77,6 +77,7 @@ export default function StaffPage() {
             <div>
               <b>{s.name}</b> <span className="sub">{storeName(s.storeId)}</span>{s.displayOnly && <span className="chip warn">表示専用（お店の端末）</span>}
               <div className="sub">社員番号 {s.employeeCode}{s.status === "disabled" && " ／ 退職（無効）"}{s.status === "active" && !s.displayOnly && (s.onShift ? " ／ シフトに入る" : " ／ シフトに入らない")}</div>
+              {s.status === "active" && s.rank && <div className="sub" style={{ marginTop: 2 }}>ランク：{s.rank === "stylist" ? "スタイリスト" : "アシスタント"}</div>}
               {s.status === "active" && s.canEvaluate && <div className="sub" style={{ marginTop: 2 }}>✔ 技術評価をつけられる人</div>}
               {s.status === "active" && s.retireOn && <div className="sub" style={{ marginTop: 2, color: "#b45309" }}>退職予定日：{reiwa(s.retireOn)}（この日になると自動で退職になります）</div>}
               {s.status === "active" && <PresenceBadge s={s} />}
@@ -88,6 +89,11 @@ export default function StaffPage() {
                   const code = prompt("社員番号（変えないときはそのまま）", s.employeeCode); if (code === null) return;
                   run(() => api(`/api/staff/${s.id}/profile`, { name, employeeCode: code }));
                 }}>名前・番号を変える</button>
+              )}
+              {me.level === 4 && s.status === "active" && !s.displayOnly && (
+                <select aria-label="ランク" value={s.rank ?? ""} onChange={(e) => run(() => api(`/api/staff/${s.id}/rank`, { rank: e.target.value || null }))}>
+                  <option value="">ランク未設定</option><option value="assistant">アシスタント</option><option value="stylist">スタイリスト</option>
+                </select>
               )}
               {me.level === 4 && s.status === "active" && !s.displayOnly && (
                 <button className="ghost" style={{ color: "var(--blue)" }} onClick={() => run(() => api(`/api/staff/${s.id}/evaluate`, { on: !s.canEvaluate }))}>

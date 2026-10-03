@@ -15,7 +15,7 @@ export type Presence = "online" | "idle" | "loggedout" | "never";
 export const ONLINE_SECONDS = 120; // これ以内に開いていれば「オンライン」
 export interface StaffRow {
   presence?: Presence; seenAgoSec?: number | null; retireOn?: string | null;
-  id: string; name: string; employeeCode: string; storeId: string; level: Level; status: "active" | "disabled"; manageable: boolean; onShift: boolean; displayOnly: boolean; canEvaluate?: boolean;
+  id: string; name: string; employeeCode: string; storeId: string; level: Level; status: "active" | "disabled"; manageable: boolean; onShift: boolean; displayOnly: boolean; canEvaluate?: boolean; rank?: "assistant" | "stylist" | null;
 }
 
 export class ForbiddenError extends Error {
@@ -113,7 +113,7 @@ export async function listStaff(db: Database, userId: string): Promise<StaffRow[
   if (!me) return [];
   const { rows } = await asUser(db, userId, (q) =>
     q.query<StaffRow>(
-      `select id, name, employee_code as "employeeCode", store_id as "storeId", level, status, on_shift as "onShift", display_only as "displayOnly", can_evaluate as "canEvaluate" from memberships order by store_id, level desc, name`));
+      `select id, name, employee_code as "employeeCode", store_id as "storeId", level, status, on_shift as "onShift", display_only as "displayOnly", can_evaluate as "canEvaluate", rank from memberships order by store_id, level desc, name`));
   // ログインの状況は管理者(Lv4)だけに見せる（管理用接続で読む）
   const pres = new Map<string, { presence: Presence; seenAgoSec: number | null; retireOn: string | null }>();
   if (me.level === 4 && rows.length > 0) {
@@ -1093,10 +1093,11 @@ export async function addStaffBulk(db: Database, userId: string, rows: BulkStaff
 
 // ------------------------------------------------------------------ マニュアル
 import type { Block } from "./manual/blocks";
-export interface ManualPageRow { id: string; parentId: string | null; title: string; icon: string; sortOrder: number; minLevel: number; editLevel: number; storeId: string | null; ownerId: string | null; evaluatorsEdit: boolean; }
-export interface ManualPage extends ManualPageRow { canEdit: boolean; log: { at: string; by: string | null; summary: string }[]; body: Block[]; refs: Record<string, { id: string; title: string; icon: string }>; trail: { id: string; title: string }[]; children: ManualPageRow[]; }
+export interface ManualPageRow { id: string; parentId: string | null; title: string; icon: string; sortOrder: number; minLevel: number; editLevel: number; storeId: string | null; ownerId: string | null; evaluatorsEdit: boolean; viewRanks: string[]; editRanks: string[]; }
+export interface ManualGrant { membershipId: string; name: string; canEdit: boolean; }
+export interface ManualPage extends ManualPageRow { canEdit: boolean; grants?: ManualGrant[]; log: { at: string; by: string | null; summary: string }[]; body: Block[]; refs: Record<string, { id: string; title: string; icon: string }>; trail: { id: string; title: string }[]; children: ManualPageRow[]; }
 
-const MANUAL_COLS = `id, parent_id as "parentId", title, icon, sort_order as "sortOrder", min_level as "minLevel", edit_level as "editLevel", store_id as "storeId", owner_id as "ownerId", evaluators_edit as "evaluatorsEdit"`;
+const MANUAL_COLS = `id, parent_id as "parentId", title, icon, sort_order as "sortOrder", min_level as "minLevel", edit_level as "editLevel", store_id as "storeId", owner_id as "ownerId", evaluators_edit as "evaluatorsEdit", view_ranks as "viewRanks", edit_ranks as "editRanks"`;
 
 /** 見られるページの一覧（中身は含まない）。キーワードがあれば、題名と本文から探す */
 export async function listManualPages(db: Database, userId: string, q?: string): Promise<ManualPageRow[]> {
@@ -1129,15 +1130,21 @@ export async function getManualPage(db: Database, userId: string, id: string): P
           `select to_char(l.at at time zone 'Asia/Tokyo', 'YYYY-MM-DD HH24:MI') as at, (select m.name from memberships m where m.id = l.user_id) as by, l.summary
              from manual_edit_log l where l.page_id = $1 order by l.at desc, l.id desc limit 30`, [id])).rows
       : [];
-    return { ...r, refs, trail, children, canEdit, log };
+    const me = (await c.query<{ level: number }>("select level from memberships where id = app.uid()")).rows[0];
+    const grants = me && me.level >= 4
+      ? (await c.query<ManualGrant>(`select g.membership_id as "membershipId", m.name, g.can_edit as "canEdit" from manual_page_grants g join memberships m on m.id = g.membership_id where g.page_id = $1 order by m.name`, [id])).rows
+      : undefined;
+    return { ...r, refs, trail, children, canEdit, log, grants };
   });
 }
 
-export interface ManualSettings { title?: string; icon?: string; minLevel?: number; editLevel?: number; sortOrder?: number; storeId?: string | null; ownerId?: string | null; evaluatorsEdit?: boolean; }
+export interface ManualSettings { title?: string; icon?: string; minLevel?: number; editLevel?: number; sortOrder?: number; storeId?: string | null; ownerId?: string | null; evaluatorsEdit?: boolean; viewRanks?: string[]; editRanks?: string[]; }
+const RANKS = ["assistant", "stylist"];
 export async function updateManualPage(db: Database, userId: string, id: string, input: ManualSettings): Promise<void> {
   if (input.minLevel !== undefined && ![1, 2, 3, 4].includes(input.minLevel)) throw new Error("レベルが正しくありません");
   if (input.editLevel !== undefined && ![1, 2, 3, 4].includes(input.editLevel)) throw new Error("レベルが正しくありません");
   if (input.title !== undefined && !input.title.trim()) throw new Error("題名を入れてください");
+  for (const rs of [input.viewRanks, input.editRanks]) if (rs && rs.some((r) => !RANKS.includes(r))) throw new Error("ランクが正しくありません");
   let n = 0;
   try {
     n = (await asUser(db, userId, (c) => c.query(
@@ -1145,20 +1152,21 @@ export async function updateManualPage(db: Database, userId: string, id: string,
          edit_level = coalesce($6, edit_level),
          store_id = case when $7::boolean then $8::uuid else store_id end,
          owner_id = case when $9::boolean then $10::uuid else owner_id end,
-         evaluators_edit = coalesce($11, evaluators_edit), updated_at = now() where id = $1 returning id`,
+         evaluators_edit = coalesce($11, evaluators_edit), view_ranks = coalesce($12::text[], view_ranks), edit_ranks = coalesce($13::text[], edit_ranks), updated_at = now() where id = $1 returning id`,
       [id, input.title?.trim() ?? null, input.icon ?? null, input.minLevel ?? null, input.sortOrder ?? null, input.editLevel ?? null,
-       input.storeId !== undefined, input.storeId ?? null, input.ownerId !== undefined, input.ownerId ?? null, input.evaluatorsEdit ?? null]))).rows.length;
+       input.storeId !== undefined, input.storeId ?? null, input.ownerId !== undefined, input.ownerId ?? null, input.evaluatorsEdit ?? null, input.viewRanks ?? null, input.editRanks ?? null]))).rows.length;
   } catch { throw new ForbiddenError(); }
   if (n === 0) throw new ForbiddenError();
 }
 
 /** ページの「見られる・書き込める人」の設定を、その下のページ全部にもまとめて設定する */
-export async function setManualLevelDeep(db: Database, userId: string, id: string, s: { minLevel: number; editLevel: number; evaluatorsEdit: boolean; storeId: string | null }): Promise<number> {
+export async function setManualLevelDeep(db: Database, userId: string, id: string, s: { minLevel: number; editLevel: number; evaluatorsEdit: boolean; storeId: string | null; viewRanks: string[]; editRanks: string[] }): Promise<number> {
+  if ([...s.viewRanks, ...s.editRanks].some((r) => !RANKS.includes(r))) throw new Error("ランクが正しくありません");
   if (![1, 2, 3, 4].includes(s.minLevel) || ![1, 2, 3, 4].includes(s.editLevel)) throw new Error("レベルが正しくありません");
   const r = await asUser(db, userId, (c) => c.query(
     `with recursive down as (select id from manual_pages where id = $1 union all select p.id from manual_pages p join down on p.parent_id = down.id)
-     update manual_pages set min_level = $2, edit_level = $3, evaluators_edit = $4, store_id = $5, updated_at = now() where id in (select id from down) returning id`,
-    [id, s.minLevel, s.editLevel, s.evaluatorsEdit, s.storeId]));
+     update manual_pages set min_level = $2, edit_level = $3, evaluators_edit = $4, store_id = $5, view_ranks = $6::text[], edit_ranks = $7::text[], updated_at = now() where id in (select id from down) returning id`,
+    [id, s.minLevel, s.editLevel, s.evaluatorsEdit, s.storeId, s.viewRanks, s.editRanks]));
   if (r.rows.length === 0) throw new ForbiddenError();
   return r.rows.length;
 }
@@ -1196,4 +1204,26 @@ export async function setCanEvaluate(db: Database, userId: string, targetId: str
   const ok = await asUser(db, userId, (q) => q.query("select 1 from memberships where id = $1 and status = 'active'", [targetId]));
   if (ok.rows.length === 0) throw new ForbiddenError();
   await db.query("update memberships set can_evaluate = $2 where id = $1", [targetId, on]);
+}
+
+/** 名前で、見られる人（と書き込める人）を追加／変更／外す（管理者のみ） */
+export async function setManualGrant(db: Database, userId: string, pageId: string, membershipId: string, mode: "view" | "edit" | "remove"): Promise<void> {
+  try {
+    await asUser(db, userId, async (c) => {
+      if (mode === "remove") { await c.query("delete from manual_page_grants where page_id = $1 and membership_id = $2", [pageId, membershipId]); return; }
+      await c.query(
+        `insert into manual_page_grants (page_id, membership_id, can_edit) values ($1,$2,$3)
+         on conflict (page_id, membership_id) do update set can_edit = excluded.can_edit`, [pageId, membershipId, mode === "edit"]);
+    });
+  } catch { throw new ForbiddenError(); }
+}
+
+/** ランク（アシスタント／スタイリスト）を決める（管理者のみ）。空にもできる */
+export async function setRank(db: Database, userId: string, targetId: string, rank: string | null): Promise<void> {
+  const me = await getMe(db, userId);
+  if (!me || me.level < 4) throw new ForbiddenError();
+  if (rank !== null && !RANKS.includes(rank)) throw new Error("ランクが正しくありません");
+  const ok = await asUser(db, userId, (q) => q.query("select 1 from memberships where id = $1 and status = 'active'", [targetId]));
+  if (ok.rows.length === 0) throw new ForbiddenError();
+  await db.query("update memberships set rank = $2 where id = $1", [targetId, rank]);
 }
