@@ -10,8 +10,9 @@ export default function LoginPage() {
   const [busy, setBusy] = useState(false);
   return (
     <main className="login">
-      <p className="sub" style={{ marginBottom: 4 }}>業務システム</p>
-      <h1>株式会社ALBUM</h1>
+      <div className="aurora" aria-hidden />
+      <p className="eyebrow">株式会社</p>
+      <h1 className="hero wordmark">ALBUM</h1>
       <form onSubmit={async (e) => {
         e.preventDefault(); setBusy(true); setErr("");
         try { await api("/api/login", f); router.replace("/home"); }

@@ -339,3 +339,67 @@ main.login button[type=submit]{margin-top:28px;width:100%;padding:15px;font-size
 .bar i{display:block;height:100%;border-radius:999px;background:var(--blue)}
 .monthrow{display:flex;align-items:center;gap:12px;width:100%;margin:0;padding:10px 0;background:transparent;color:var(--ink);border-radius:0;border-bottom:1px solid var(--hair);font-size:14px;text-align:left}
 .monthrow:hover{background:transparent !important}.monthrow .ml{width:36px;color:var(--sub)}.monthrow .mv{min-width:170px;text-align:right}
+
+/* =====================================================================
+   「ステージ」デザイン: ログインとホームは、黒い舞台に大きな文字だけ。
+   余計なものを消して、いま必要なものだけを大きく見せる。
+   ===================================================================== */
+body:has(main.home),body:has(main.login){
+  --bg:#000;--card:#161618;--ink:#f5f5f7;--sub:#86868b;--line:#3a3a3c;--hair:rgba(255,255,255,.1);--blue:#2997ff;--blue-d:#4aa8ff;--shadow:none;--shadow-up:none;
+  background:#000;color:#f5f5f7;overflow-x:hidden;
+}
+main.home,main.login{position:relative;isolation:isolate}
+.aurora{position:fixed;inset:-20% -10% auto -10%;height:70vh;z-index:-1;pointer-events:none;filter:blur(70px);opacity:.9;
+  background:radial-gradient(40% 50% at 25% 40%,rgba(41,151,255,.55),transparent 70%),radial-gradient(35% 45% at 70% 30%,rgba(191,90,242,.45),transparent 70%),radial-gradient(30% 40% at 55% 70%,rgba(255,159,10,.28),transparent 70%);
+  animation:drift 18s ease-in-out infinite alternate}
+@keyframes drift{to{transform:translate3d(4%,6%,0) scale(1.08)}}
+@media (prefers-reduced-motion:reduce){.aurora{animation:none}}
+.eyebrow{font-size:17px;font-weight:500;color:#a1a1a6;margin:0 0 6px;letter-spacing:-.01em}
+h1.hero{font-size:clamp(44px,9vw,84px);font-weight:700;letter-spacing:-.045em;line-height:1.02;margin:0 0 10px;
+  background:linear-gradient(180deg,#fff 30%,#a1a1a6);-webkit-background-clip:text;background-clip:text;color:transparent}
+.role{color:#86868b;font-size:15px;margin:0 0 44px}
+
+main.home{max-width:1040px;padding:clamp(48px,12vh,120px) 24px 72px}
+.tiles{display:grid;grid-template-columns:1fr;gap:12px}
+@media (min-width:640px){.tiles{grid-template-columns:repeat(2,1fr)}}
+@media (min-width:960px){.tiles{grid-template-columns:repeat(3,1fr)}}
+.tile{display:flex;flex-direction:column;justify-content:flex-end;gap:6px;min-height:150px;padding:24px;border-radius:28px;text-decoration:none;color:#f5f5f7;
+  background:linear-gradient(160deg,rgba(255,255,255,.1),rgba(255,255,255,.03));border:1px solid rgba(255,255,255,.1);
+  -webkit-backdrop-filter:blur(30px);backdrop-filter:blur(30px);transition:transform .25s cubic-bezier(.2,.8,.2,1),background .25s}
+.tile b{font-size:24px;font-weight:600;letter-spacing:-.03em;line-height:1.15}
+.tile span{font-size:14px;color:#a1a1a6;line-height:1.4}
+@media (hover:hover){.tile:hover{transform:translateY(-4px) scale(1.01);background:linear-gradient(160deg,rgba(255,255,255,.16),rgba(255,255,255,.05))}}
+.tile:active{transform:scale(.98)}
+.grouphead{font-size:13px;font-weight:600;color:#86868b;letter-spacing:.08em;margin:56px 0 10px;text-transform:none}
+.rows{border-radius:22px;overflow:hidden;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08)}
+.row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 22px;text-decoration:none;color:#f5f5f7;border-top:1px solid rgba(255,255,255,.08);transition:background .15s}
+.row:first-child{border-top:0}
+.row b{display:block;font-size:17px;font-weight:500;letter-spacing:-.02em}
+.row small{display:block;color:#86868b;font-size:13px;margin-top:2px}
+.row i{font-style:normal;color:#636366;font-size:24px;font-weight:300}
+@media (hover:hover){.row:hover{background:rgba(255,255,255,.07)}}
+button.logout{display:block;margin:48px auto 0;width:auto;padding:12px 28px;background:transparent;color:#86868b;border:1px solid rgba(255,255,255,.14);font-size:14px}
+button.logout:hover{background:rgba(255,255,255,.08) !important;color:#f5f5f7}
+
+/* ログイン */
+main.login{max-width:420px;padding:clamp(80px,22vh,200px) 28px 56px;text-align:center}
+h1.wordmark{font-size:clamp(64px,18vw,104px);letter-spacing:-.06em;margin-bottom:40px}
+main.login .eyebrow{letter-spacing:.3em;font-size:13px;text-transform:none}
+main.login label{color:#86868b;font-size:12px;letter-spacing:.04em;margin:20px 0 4px}
+main.login input{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);color:#f5f5f7;border-radius:16px;text-align:left;padding:16px 18px;font-size:18px}
+main.login input:focus{border-color:#2997ff;background:rgba(255,255,255,.1)}
+main.login button[type=submit]{background:#f5f5f7;color:#000;margin-top:32px;padding:17px;font-weight:600;font-size:17px}
+main.login button[type=submit]:hover{background:#fff !important}
+main.login .hint,main.login .sub{color:#86868b}
+main.login .err{color:#ff6961}
+
+/* 仕事の画面: 余白をさらに広く・見出しをはっきり */
+main.wide h1,main.xwide h1{font-size:clamp(34px,5vw,48px);letter-spacing:-.04em;margin-bottom:24px}
+.card,.list li{border-radius:22px}
+.card{box-shadow:none}
+.shell .demo{background:rgba(0,0,0,.72);color:#f5f5f7;border-bottom:1px solid rgba(255,255,255,.08)}
+.shell .demo .storelink{background:rgba(255,255,255,.12);color:#f5f5f7}
+.shell .demo button.ghost{background:rgba(255,255,255,.12);color:#f5f5f7}
+@media (prefers-color-scheme: dark){.shell .demo{background:rgba(0,0,0,.72)}}
+@media (max-width:639px){.tile{min-height:96px;padding:20px 22px;border-radius:24px}.tile b{font-size:21px}}
+.sttable th.r{text-align:right}
