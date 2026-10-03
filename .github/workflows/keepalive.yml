@@ -1,0 +1,13 @@
+# Render（無料）は、15分使われないと「寝て」しまい、次のアクセスが遅くなる。
+# 5分ごとに生存確認をして、寝にくくする（無料。止めたいときは、このファイルを消すか、Actions画面で無効にする）。
+name: keepalive
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+permissions: {}
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - run: curl -fsS --max-time 60 --retry 2 https://album-system.onrender.com/api/health

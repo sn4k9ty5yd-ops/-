@@ -66,3 +66,6 @@ Lv1 スタッフ / Lv2 シフト担当（自店のシフト作成のみ）/ Lv3 
 - **本物のPostgreSQL 16（Neonと同じ非スーパーユーザー）でも検証済み**: `TEST_DATABASE_URL=... npx vitest run --fileParallelism=false tests/service*.test.ts tests/bootstrap.test.ts`（82項目合格）。本番モード(next start)＋実PostgreSQLで、画面の通しテストも確認。ローカルのPostgreSQL起動例: `su postgres -c "/usr/lib/postgresql/16/bin/initdb ..."`。
 - 次の作業: ユーザーが Neon と Render のアカウントを作る手順を案内（`docs/DEPLOY.md`）→ 公開後の動作確認 → 通知（メール/Web）→ 出退勤ボタン（将来）。
 - **次のセッションの最初の仕事: 公開作業。`docs/HANDOFF_DEPLOY.md` を読んで、そのとおりに進める**（ユーザーは Neon/Render のカギ `NEON_API_KEY`/`RENDER_API_KEY` と接続許可を設定済みのはず。カギはチャットに貼らせない）。
+- **公開済み（2026-10）**: https://album-system.onrender.com （Render無料・シンガポール・サービスID `srv-db080uc9v7es73aa62h0`・**autoDeploy=オフ**＝確認してから手動で公開）。DB: Neon プロジェクト `album`（`small-leaf-13808839`・無料・PG16・シンガポール）。初期設定済み（会社ID `album`・管理者 社員番号 `9000`）。Neon上で db/migrations 8本と権限(RLS)を、確認用ブランチで検証済み。公開版の通しAPI確認も合格。keepalive: `.github/workflows/keepalive.yml`（5分ごとに /api/health）。
+- 公開の更新手順: コードを直す → テスト → push → Render API `POST /v1/services/srv-db080uc9v7es73aa62h0/deploys` で手動公開 → `/api/health` と主要API確認。資格情報は環境の「API認証情報」（Neon/Render。値は見えない・チャットに出さない）。
+- 次の作業: 公開版の実運用の確認（ユーザーがスタッフ登録・商品登録を始める）→ 通知（メール/Web）→ 出退勤ボタン（将来）。
