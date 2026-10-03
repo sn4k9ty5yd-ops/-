@@ -1,0 +1,90 @@
+"use client";
+import Link from "next/link";
+import { useParams, useRouter } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
+import { api, MeProvider, useAutoRefresh, useMe } from "@/lib/client";
+import { BlockView } from "@/lib/manual/BlockView";
+import type { ManualPage, StaffRow } from "@/lib/service";
+
+type Store = { id: string; name: string; status: string };
+const LV = [[1, "レベル1 スタッフ以上"], [2, "レベル2 シフト担当以上"], [3, "レベル3 店長以上"], [4, "レベル4 管理者だけ"]] as const;
+
+function Settings({ p, reload }: { p: ManualPage; reload: () => Promise<void> }) {
+  const router = useRouter();
+  const [stores, setStores] = useState<Store[]>([]);
+  const [staff, setStaff] = useState<StaffRow[]>([]);
+  const [msg, setMsg] = useState("");
+  useEffect(() => { api<Store[]>("/api/stores").then(setStores).catch(() => {}); api<StaffRow[]>("/api/staff").then(setStaff).catch(() => {}); }, []);
+  const run = async (fn: () => Promise<unknown>, ok = "") => { try { await fn(); setMsg(ok); await reload(); } catch (e) { setMsg((e as Error).message); } };
+  const save = (patch: object) => run(() => api(`/api/manual/${p.id}`, patch));
+  return (
+    <details className="card" style={{ marginTop: 24 }}>
+      <summary style={{ cursor: "pointer", fontWeight: 700 }}>⚙ このページの設定（管理者だけ）</summary>
+      <label>題名<input defaultValue={p.title} onBlur={(e) => e.target.value.trim() && e.target.value !== p.title && save({ title: e.target.value })} /></label>
+      <label>アイコン（絵文字）<input defaultValue={p.icon} maxLength={4} onBlur={(e) => e.target.value !== p.icon && save({ icon: e.target.value })} /></label>
+      <label>見られる人
+        <select value={p.minLevel} onChange={(e) => save({ minLevel: Number(e.target.value) })}>{LV.map(([v, t]) => <option key={v} value={v}>{t}</option>)}</select>
+      </label>
+      <label>書き込める人
+        <select value={p.editLevel} onChange={(e) => save({ editLevel: Number(e.target.value) })}>{LV.map(([v, t]) => <option key={v} value={v}>{t}</option>)}</select>
+      </label>
+      <label>お店で分ける（入れると、そのお店の人と店長以上だけ）
+        <select value={p.storeId ?? ""} onChange={(e) => save({ storeId: e.target.value || null })}>
+          <option value="">全店</option>{stores.filter((s) => s.status === "active").map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+        </select>
+      </label>
+      <label>このページの本人（本人は、レベルに関係なく見られます）
+        <select value={p.ownerId ?? ""} onChange={(e) => save({ ownerId: e.target.value || null })}>
+          <option value="">なし</option>{staff.filter((s) => s.status === "active").map((s) => <option key={s.id} value={s.id}>{s.name}（{s.employeeCode}）</option>)}
+        </select>
+      </label>
+      <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <input type="checkbox" style={{ width: 20, height: 20 }} checked={p.evaluatorsEdit} onChange={(e) => save({ evaluatorsEdit: e.target.checked })} />
+        「評価をつけられる人」（スタッフ画面で決めます）も、このページに書き込める
+      </label>
+      <div className="actions">
+        <button className="ghost" style={{ color: "var(--blue)" }} onClick={() => confirm(`このページと、その下のページ全部に、同じ「見られる人・書き込める人・お店・評価者」の設定をします。よろしいですか？`) &&
+          run(async () => { const r = await api<{ count: number }>(`/api/manual/${p.id}`, { action: "settingsDeep", minLevel: p.minLevel, editLevel: p.editLevel, evaluatorsEdit: p.evaluatorsEdit, storeId: p.storeId }); setMsg(`${r.count}ページに設定しました`); })}>
+          下のページ全部にも、同じ設定をする
+        </button>
+        <button className="ghost" onClick={() => confirm(`「${p.title}」と、その下のページを削除しますか？（元に戻せません）`) && run(async () => { await api(`/api/manual/${p.id}`, { action: "delete" }); router.push("/manual"); })}>このページを削除</button>
+      </div>
+      {msg && <p className="sub">{msg}</p>}
+    </details>
+  );
+}
+
+function Page() {
+  const { me } = useMe();
+  const { id } = useParams<{ id: string }>();
+  const [p, setP] = useState<ManualPage | null>(null);
+  const [err, setErr] = useState("");
+  const load = useCallback(async () => { try { setP(await api<ManualPage>(`/api/manual/${id}`)); setErr(""); } catch (e) { setErr((e as Error).message); } }, [id]);
+  useEffect(() => { load(); }, [load]);
+  // 書き込み中に画面が入れ替わらないよう、自動の更新は、書き込める人には行わない
+  useAutoRefresh(() => { if (p && !p.canEdit) load(); }, 60);
+  if (err) return <main><Link href="/manual" className="back">← マニュアル</Link><p className="err">{err}</p></main>;
+  if (!p) return null;
+  return (
+    <main style={{ maxWidth: 900 }}>
+      <Link href="/manual" className="back">← マニュアル</Link>
+      <p className="mn-crumbs">{p.trail.map((t) => <span key={t.id}><Link href={`/manual/${t.id}`}>{t.title}</Link> ／ </span>)}</p>
+      <h1>{p.icon} {p.title}</h1>
+      {p.canEdit && !me.displayOnly && <p className="hint" style={{ marginTop: -12 }}>このページには書き込めます（チェックや表のマスは、そのまま入力できます。自動で保存されます）。</p>}
+      <BlockView blocks={p.body} ctx={{ refs: p.refs, canEdit: p.canEdit, onEdit: async (edit) => { await api(`/api/manual/${p.id}`, { action: "edit", edit }); } }} />
+      {p.children.length > 0 && (
+        <>
+          <h2>このページの中</h2>
+          <ul className="list">{p.children.map((c) => <li key={c.id}><Link href={`/manual/${c.id}`}><b>{c.icon || "📄"} {c.title}</b></Link></li>)}</ul>
+        </>
+      )}
+      {p.log.length > 0 && (
+        <details style={{ marginTop: 24 }}><summary className="sub" style={{ cursor: "pointer" }}>書き込みの記録（新しい順）</summary>
+          <ul className="list">{p.log.map((l, i) => <li key={i}><span className="sub">{l.at}　{l.by ?? ""}</span><span>{l.summary}</span></li>)}</ul>
+        </details>
+      )}
+      {me.level >= 4 && <Settings p={p} reload={load} />}
+    </main>
+  );
+}
+export default function ManualPageView() { return <MeProvider><Page /></MeProvider>; }

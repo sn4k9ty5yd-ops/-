@@ -170,3 +170,26 @@ main.xwide{max-width:1400px;margin:0 auto;padding:16px}
   body.printing-result .sheet{max-width:none;max-height:none;border-radius:0;padding:0;background:#fff;color:#000}
   body.printing-result .sheet .scroll{max-height:none !important;overflow:visible !important}
 }
+
+/* ---- マニュアル ---- */
+.mn-h{margin:18px 0 6px}.mn-p{margin:6px 0;line-height:1.7}.mn-indent{margin-left:14px}
+.mn-list{margin:6px 0 6px 22px;padding:0;line-height:1.7}
+.mn-quote{border-left:4px solid var(--line);margin:8px 0;padding:2px 12px;color:var(--sub)}
+.mn-code{background:#f3f3f6;padding:10px;border-radius:8px;overflow:auto;font-size:13px}
+.mn-callout{display:flex;gap:10px;border-radius:10px;padding:10px 12px;margin:10px 0}
+.mn-icon{font-size:20px;line-height:1.4}
+.mn-toggle{margin:6px 0}
+.mn-toggle>summary{cursor:pointer;font-weight:600;padding:6px 0;list-style:revert}
+.mn-cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}
+.mn-tablewrap{overflow:auto;margin:10px 0;-webkit-overflow-scrolling:touch}
+.mn-table{border-collapse:collapse;font-size:14px;min-width:100%}
+.mn-table th,.mn-table td{border:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top;background:var(--card)}
+.mn-table th{background:#f0f0f3;font-weight:700;white-space:nowrap}
+.mn-cell{width:100%;min-width:56px;border:1px solid var(--line);border-radius:6px;padding:6px;font-size:14px;background:#fffdf2;margin:0}
+.mn-fig{margin:10px 0}.mn-fig img{max-width:100%;height:auto;border-radius:8px;border:1px solid var(--line)}
+.mn-fig figcaption{color:var(--sub);font-size:13px}
+.mn-video{position:relative;padding-top:56.25%;margin:10px 0}.mn-video iframe{position:absolute;inset:0;width:100%;height:100%;border:0;border-radius:10px}
+.mn-todo{display:flex;gap:8px;align-items:center;margin:4px 0;font-size:16px}
+.mn-todo input{width:22px;height:22px;margin:0}
+.mn-file,.mn-childlink{display:inline-block;padding:8px 12px;background:var(--card);border-radius:10px;border:1px solid var(--line);text-decoration:none}
+.mn-crumbs{font-size:13px;color:var(--sub);margin:0 0 8px}

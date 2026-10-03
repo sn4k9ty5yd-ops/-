@@ -15,6 +15,7 @@ function Cards() {
   useEffect(() => { if (me.level >= 2) api<{ count: number }>(`/api/stock?storeId=${me.storeId}&low=1`).then((r) => setLow(r.count)).catch(() => {}); }, [me.level, me.storeId]);
   if (me.displayOnly) return null;
   const cards = [
+    { href: "/manual", title: "マニュアル", sub: "教育・営業マニュアル、技術動画、技術評価", show: true },
     { href: "/shifts", title: "シフトを見る", sub: "今日の出勤・月のシフト・みんなの休み", show: true },
     { href: "/admin/attendance", title: "出勤簿", sub: "出勤・退勤・休憩・実働、有給の残り", show: me.level >= 3 },
     { href: "/admin/stock", title: "在庫", sub: low ? `少なくなっている商品が ${low} 件あります` : "いまの在庫・入庫と出庫・発注の目安", show: me.level >= 2 },
