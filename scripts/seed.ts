@@ -1,5 +1,6 @@
 // お試し用データ作成: npm run seed （本番では実行しない）
 import { getDb } from "../lib/db";
+import { bootstrapCompany } from "../lib/bootstrap";
 import { setPasscode } from "../lib/auth/login";
 
 async function main() {
@@ -9,18 +10,16 @@ async function main() {
   const exists = (await db.query("select 1 from companies where code = 'atena'")).rows.length > 0;
   if (exists) { console.log("すでに作成済みです。"); await db.close(); return; }
 
-  const co = (await db.query<{ id: string }>("insert into companies (code, name) values ('atena', 'ATENA（お試し）') returning id")).rows[0].id;
-  const names = ["ATENA", "ATENA六本松", "ATENA福津", "Organ", "ATENA AVEDA SAKURAMACHI"];
-  const stores: string[] = [];
-  for (const [i, n] of names.entries())
-    stores.push((await db.query<{ id: string }>("insert into stores (company_id, name, sort_order) values ($1,$2,$3) returning id", [co, n, i])).rows[0].id);
+  const boot = await bootstrapCompany(db, { companyCode: "atena", companyName: "ATENA（お試し）", officeName: "事務員（オフィス）", officeCode: "9000" });
+  const co = boot.companyId; const stores = boot.storeIds;
+  console.log("会社ID: atena");
+  console.log(`  社員番号 9000  パスコード ${boot.office.passcode}  … 事務員（オフィス）（レベル4）`);
 
   const people: [string, string, number, string][] = [
-    ["9000", "事務員（オフィス）", 4, stores[0]], ["1001", "店長（ATENA）", 3, stores[0]],
+    ["1001", "店長（ATENA）", 3, stores[0]],
     ["1002", "シフト担当（ATENA）", 2, stores[0]], ["1003", "大坪", 1, stores[0]], ["1004", "永尾", 1, stores[0]],
     ["2001", "店長（六本松）", 3, stores[1]], ["2002", "山田", 1, stores[1]],
   ];
-  console.log("会社ID: atena");
   for (const [code, name, level, store] of people) {
     const id = (await db.query<{ id: string }>(
       "insert into memberships (company_id, store_id, employee_code, name, level) values ($1,$2,$3,$4,$5) returning id", [co, store, code, name, level])).rows[0].id;

@@ -21,6 +21,10 @@
 3. `npm run dev` → http://localhost:3000/login を開き、表示された社員番号・パスコードでログイン
    （データは `.data/` に保存される。消すと初期化）
 
+## 最初の設定（本番・お試し共通）
+- `npm run setup` — 会社・お店（ATENA／ATENA六本松／ATENA福津／Organ／ATENA AVEDA SAKURAMACHI）・管理者アカウントを作る。管理者のパスコードは、ここで1度だけ表示される。
+- お店の追加・名前の変更・閉店は、ログイン後の「⚙ 店舗の編集」（管理者のみ）でいつでもできる。
+
 ## 本番（Neon など）
 - 環境変数 `DATABASE_URL` に PostgreSQL の接続文字列を設定すると、起動時に自動でテーブルが作られる。
 - `npm run backup` で全データを `backups/` にJSONで書き出し（個人情報を含むため Git には入らない）。

@@ -153,3 +153,9 @@ main.xwide{max-width:1400px;margin:0 auto;padding:16px}
   .stepper input{width:44px;height:36px;font-size:16px;padding:0 2px}
   .sttable th,.sttable td{padding:6px 3px;font-size:13px}
 }
+.stockrow{gap:10px;flex-wrap:nowrap}
+.stockqty{text-align:center;min-width:48px}.stockqty b{font-size:24px;display:block;line-height:1}.stockqty small{color:var(--sub)}
+.mvbtn{width:auto;margin:0;padding:10px 12px;font-size:14px;border-radius:12px;white-space:nowrap}
+.mvbtn.out{background:#fdecec;color:#b00020}.mvbtn.in{background:#e6f4ea;color:#1e5e2e}
+@media (max-width:520px){.stockrow{flex-wrap:wrap}.stockrow .actions{width:100%}.stockrow .mvbtn{flex:1;padding:12px 8px}}
+.storelink{background:#fff;color:#1d1d1f;border-radius:999px;padding:8px 14px;text-decoration:none;font-size:14px;font-weight:600;border:1px solid var(--line)}

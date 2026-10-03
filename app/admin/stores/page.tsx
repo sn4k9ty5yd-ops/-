@@ -18,7 +18,8 @@ export default function StoresPage() {
 
   return (
     <>
-      <h1>お店</h1>
+      <h1>店舗の編集</h1>
+      <p className="hint" style={{ marginTop: 0 }}>新店舗の追加、名前の変更、並び順、営業時間、閉店ができます。この画面は管理者（レベル4）だけが見られます。</p>
       <ul className="list">
         {active.map((s, i) => (
           <li key={s.id}>

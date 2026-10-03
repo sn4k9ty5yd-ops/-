@@ -11,9 +11,10 @@ const TABS = [
   { href: "/admin/attendance", label: "出勤簿", min: 3 },
   { href: "/admin/requests", label: "希望休", min: 2 },
   { href: "/admin/staff", label: "スタッフ", min: 3 },
+  { href: "/admin/stock", label: "在庫", min: 2 },
   { href: "/admin/stocktake", label: "棚卸し", min: 2 },
   { href: "/admin/products", label: "商品", min: 3 },
-  { href: "/admin/stores", label: "お店", min: 3 },
+  { href: "/admin/stores", label: "店舗の編集", min: 4 },
   { href: "/admin/periods", label: "シフト期間", min: 3 },
   { href: "/admin/settings", label: "設定", min: 3 },
 ];
@@ -27,12 +28,15 @@ function Shell({ children }: { children: React.ReactNode }) {
     <div className="shell">
       <header className="demo">
         <span><b>株式会社ALBUM</b>　{me.name}（{LEVEL_NAMES[me.level]}）</span>
-        <button className="ghost" style={{ color: "var(--ink)" }} onClick={logout}>ログアウト</button>
+        <span className="actions">
+          {me.level === 4 && <Link href="/admin/stores" className="storelink">⚙ 店舗の編集</Link>}
+          <button className="ghost" style={{ color: "var(--ink)" }} onClick={logout}>ログアウト</button>
+        </span>
       </header>
       <nav className="tabs">
         {TABS.filter((t) => me.level >= t.min).map((t) => <Link key={t.href} href={t.href} className={path === t.href ? "on" : ""}>{t.label}</Link>)}
       </nav>
-      <main className={path.startsWith("/admin/shifts") || path.startsWith("/admin/attendance") || path.startsWith("/admin/stocktake") || path.startsWith("/admin/products") || path.startsWith("/admin/requests") ? "xwide" : "wide"}>{allowed ? children : <p className="hint">この画面を使う権限がありません。<Link href="/home">ホームへ戻る</Link></p>}</main>
+      <main className={path.startsWith("/admin/shifts") || path.startsWith("/admin/attendance") || path.startsWith("/admin/stocktake") || path.startsWith("/admin/stock") || path.startsWith("/admin/products") || path.startsWith("/admin/requests") ? "xwide" : "wide"}>{allowed ? children : <p className="hint">この画面を使う権限がありません。<Link href="/home">ホームへ戻る</Link></p>}</main>
     </div>
   );
 }
