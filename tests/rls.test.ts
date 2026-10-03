@@ -170,6 +170,16 @@ describe("操作レベルごとの見える範囲", () => {
   });
 });
 
+describe("自分より上のレベルの人には触れない", () => {
+  it("店長は同じ店のオフィス（Lv4）や店長（Lv3）を無効化・変更できない", async () => {
+    await as(U.managerA1, async () => {
+      expect(await fails(`update memberships set status='disabled' where auth_user_id='${U.officeA}'`)).toBe(true);
+      expect(await fails(`update memberships set name='改ざん' where auth_user_id='${U.officeA}'`)).toBe(true);
+      expect(await fails(`update memberships set status='disabled' where auth_user_id='${U.managerA1}'`)).toBe(true);
+    });
+  });
+});
+
 describe("レベルの割り当て（オフィスのみ）", () => {
   it("店長は自分や他人のレベルを変えられない（昇格できない）", async () => {
     await as(U.managerA1, async () => {

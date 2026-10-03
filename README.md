@@ -12,3 +12,4 @@
 - `supabase/migrations/` — DB定義とRow Level Security
 - `tests/rls.test.ts` — 「他社が見えない」「レベルごとの権限」のテスト
 - `app/` — Next.js（スマホ優先、PWA）
+- `app/admin/` — 管理画面（デモデータで動作。`/admin/staff` を開く）

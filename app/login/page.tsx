@@ -13,6 +13,7 @@ export default function LoginPage() {
         <button type="submit">ログイン</button>
       </form>
       <p className="hint">会社ID・メールアドレス・パスワードを入力してください。</p>
+      <p className="hint"><a href="/admin/staff">デモ画面を見る（ログイン不要）</a></p>
     </main>
   );
 }

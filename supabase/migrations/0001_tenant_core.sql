@@ -126,11 +126,15 @@ create policy memberships_select on public.memberships
   using (company_id = app.my_company_id() and (auth_user_id = auth.uid() or app.has_perm('staff.view', store_id)));
 create policy memberships_insert on public.memberships
   for insert to authenticated
-  with check (company_id = app.my_company_id() and app.has_perm('staff.manage', store_id));
+  with check (company_id = app.my_company_id() and app.has_perm('staff.manage', store_id)
+              and (app.my_level() = 4 or level < app.my_level()));
+-- 自分より上のレベルの人（同レベル含む。オフィスを除く）は変更・無効化できない
 create policy memberships_update on public.memberships
   for update to authenticated
-  using (company_id = app.my_company_id() and app.has_perm('staff.manage', store_id))
-  with check (company_id = app.my_company_id() and app.has_perm('staff.manage', store_id));
+  using (company_id = app.my_company_id() and app.has_perm('staff.manage', store_id)
+         and (app.my_level() = 4 or level < app.my_level()))
+  with check (company_id = app.my_company_id() and app.has_perm('staff.manage', store_id)
+              and (app.my_level() = 4 or level < app.my_level()));
 -- delete のポリシーは作らない（退職は status='disabled' で表す）
 
 create policy audit_logs_select on public.audit_logs
