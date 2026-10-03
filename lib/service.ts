@@ -10,14 +10,14 @@ import type { Level } from "./permissions";
 
 // 画面(API)から呼ばれる業務処理。権限の判定はすべてDB側(RLS)で行い、ここでは再実装しない。
 
-export interface Me { id: string; name: string; level: Level; storeId: string; companyId: string; companyName: string; closingStartDay: number; breakRule: BreakRule; displayOnly: boolean; materialManager?: boolean; }
+export interface Me { id: string; name: string; level: Level; storeId: string; companyId: string; companyName: string; closingStartDay: number; breakRule: BreakRule; displayOnly: boolean; materialManager?: boolean; rank?: "assistant" | "stylist" | null; eduLead?: boolean; }
 export interface StoreRow { id: string; name: string; status: "active" | "closed"; defaultOpen: string; defaultClose: string; satOpen: string | null; satClose: string | null; }
 /** 管理者だけが見られる、ログインの状況 */
 export type Presence = "online" | "idle" | "loggedout" | "never";
 export const ONLINE_SECONDS = 120; // これ以内に開いていれば「オンライン」
 export interface StaffRow {
   presence?: Presence; seenAgoSec?: number | null; retireOn?: string | null;
-  id: string; name: string; employeeCode: string; storeId: string; level: Level; status: "active" | "disabled"; manageable: boolean; onShift: boolean; displayOnly: boolean; canEvaluate?: boolean; materialManager?: boolean; rank?: "assistant" | "stylist" | null; shortName?: string | null;
+  id: string; name: string; employeeCode: string; storeId: string; level: Level; status: "active" | "disabled"; manageable: boolean; onShift: boolean; displayOnly: boolean; canEvaluate?: boolean; materialManager?: boolean; eduLead?: boolean; rank?: "assistant" | "stylist" | null; shortName?: string | null;
 }
 
 export class ForbiddenError extends Error {
@@ -28,7 +28,7 @@ export async function getMe(db: Database, userId: string): Promise<Me | null> {
   const { rows } = await asUser(db, userId, (q) =>
     q.query<Omit<Me, "breakRule"> & { cap: number | null; tiers: { overMinutes: number; breakMinutes: number }[] }>(
       `select m.id, m.name, m.level, m.store_id as "storeId", m.company_id as "companyId", c.name as "companyName", c.closing_start_day as "closingStartDay",
-              c.work_cap_minutes as cap, c.break_tiers as tiers, m.display_only as "displayOnly", m.material_manager as "materialManager"
+              c.work_cap_minutes as cap, c.break_tiers as tiers, m.display_only as "displayOnly", m.material_manager as "materialManager", m.rank as rank, m.edu_lead as "eduLead"
          from memberships m join companies c on c.id = m.company_id where m.id = $1`, [userId]),
   );
   const r = rows[0];
@@ -115,7 +115,7 @@ export async function listStaff(db: Database, userId: string): Promise<StaffRow[
   if (!me) return [];
   const { rows } = await asUser(db, userId, (q) =>
     q.query<StaffRow>(
-      `select id, name, employee_code as "employeeCode", store_id as "storeId", level, status, on_shift as "onShift", display_only as "displayOnly", can_evaluate as "canEvaluate", material_manager as "materialManager", rank, short_name as "shortName" from memberships order by store_id, level desc, name`));
+      `select id, name, employee_code as "employeeCode", store_id as "storeId", level, status, on_shift as "onShift", display_only as "displayOnly", can_evaluate as "canEvaluate", material_manager as "materialManager", edu_lead as "eduLead", rank, short_name as "shortName" from memberships order by store_id, level desc, name`));
   // ログインの状況は管理者(Lv4)だけに見せる（管理用接続で読む）
   const pres = new Map<string, { presence: Presence; seenAgoSec: number | null; retireOn: string | null }>();
   if (me.level === 4 && rows.length > 0) {
@@ -1684,4 +1684,141 @@ export async function notifyShiftPublished(db: Database, periodId: string, store
     await db.query("insert into notifications (company_id, user_id, kind, title, body, link) values ($1,$2,'shift',$3,$4,'/shifts')", [per.company_id, uid, title, body]);
   }
   return pushToUsers(db, people, { title, body, url: "/shifts", tag: `published-${storeId}` });
+}
+
+
+// ------------------------------------------------------------------ レッスン記録（教育担当が毎日「だれが何をしたか」を記録）
+export interface LessonCategory { id: string; name: string; sortOrder: number; active: boolean }
+export interface LessonAssistant { id: string; name: string; shortName: string | null; rank: "assistant" | "stylist" | null }
+export interface LessonRow {
+  id: string; storeId: string; assistantId: string; assistantName: string; categoryId: string; category: string;
+  day: string; minutes: number | null; note: string; ordinal: number; byName: string | null; createdAt: string;
+}
+const DEFAULT_LESSONS = ["カットモデル", "ウィッグカット", "カラー", "パーマ", "髪質改善", "シャンプー"];
+
+/** ボタン（カテゴリ）。まだ無いお店には、初期のボタンを自動で作る */
+export async function listLessonCategories(db: Database, userId: string, storeId: string, includeHidden = false): Promise<LessonCategory[]> {
+  const me = await getMe(db, userId);
+  if (!me) throw new ForbiddenError();
+  const have = (await db.query<{ n: number }>("select count(*)::int as n from lesson_categories where store_id = $1", [storeId])).rows[0].n;
+  if (have === 0) {
+    const co = (await db.query<{ company_id: string }>("select company_id from stores where id = $1", [storeId])).rows[0];
+    if (co && co.company_id === me.companyId) for (const [i, n] of DEFAULT_LESSONS.entries())
+      await db.query("insert into lesson_categories (company_id, store_id, name, sort_order) values ($1,$2,$3,$4) on conflict do nothing", [co.company_id, storeId, n, i + 1]);
+  }
+  return (await asUser(db, userId, (q) => q.query<LessonCategory>(
+    `select id, name, sort_order as "sortOrder", active from lesson_categories where store_id = $1 ${includeHidden ? "" : "and active"} order by sort_order, name`, [storeId]))).rows;
+}
+
+export async function saveLessonCategory(db: Database, userId: string, storeId: string, c: { id?: string; name?: string; active?: boolean; move?: "up" | "down" }): Promise<void> {
+  const me = await getMe(db, userId);
+  if (!me) throw new ForbiddenError();
+  const name = c.name?.trim();
+  if (name !== undefined && (name.length < 1 || name.length > 30)) throw new Error("ボタンの名前は、1〜30文字で入れてください");
+  try {
+    await asUser(db, userId, async (q) => {
+      if (!c.id) {
+        if (!name) throw new Error("ボタンの名前を入れてください");
+        const max = Number((await q.query<{ m: number }>("select coalesce(max(sort_order),0)::int as m from lesson_categories where store_id = $1", [storeId])).rows[0].m);
+        await q.query("insert into lesson_categories (company_id, store_id, name, sort_order) values ($1,$2,$3,$4)", [me.companyId, storeId, name, max + 1]);
+        return;
+      }
+      if (c.move) {
+        const list = (await q.query<{ id: string }>("select id from lesson_categories where store_id = $1 order by sort_order, name", [storeId])).rows.map((r) => r.id);
+        const i = list.indexOf(c.id), j = c.move === "up" ? i - 1 : i + 1;
+        if (i < 0 || j < 0 || j >= list.length) return;
+        [list[i], list[j]] = [list[j], list[i]];
+        for (const [k, id] of list.entries()) { const r = await q.query("update lesson_categories set sort_order = $2 where id = $1 and store_id = $3 returning id", [id, k + 1, storeId]); if (r.rows.length === 0) throw new ForbiddenError(); }
+        return;
+      }
+      const r = await q.query("update lesson_categories set name = coalesce($3, name), active = coalesce($4, active) where id = $1 and store_id = $2 returning id", [c.id, storeId, name ?? null, c.active ?? null]);
+      if (r.rows.length === 0) throw new ForbiddenError();
+    });
+  } catch (e) {
+    if (e instanceof Error && (e.message.includes("ボタン") )) throw e;
+    if (/unique|duplicate/i.test((e as Error).message ?? "")) throw new Error("同じ名前のボタンがあります");
+    throw new ForbiddenError();
+  }
+}
+
+/** 記録の対象になる人（そのお店の在籍スタッフ。アシスタントを先に） */
+export async function listLessonAssistants(db: Database, userId: string, storeId: string): Promise<LessonAssistant[]> {
+  const rows = (await asUser(db, userId, (q) => q.query<LessonAssistant>(
+    `select id, name, short_name as "shortName", rank from memberships where store_id = $1 and status = 'active' and not display_only and level < 4
+      order by (rank = 'assistant') desc nulls last, employee_code`, [storeId]))).rows;
+  return rows;
+}
+
+export interface LessonInput { assistantId: string; categoryId: string; day: string; minutes?: number | null; note?: string }
+function checkLesson(i: { day?: string; minutes?: number | null; note?: string }) {
+  if (i.day !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(i.day)) throw new Error("日付が正しくありません");
+  if (i.minutes !== undefined && i.minutes !== null && (!Number.isInteger(i.minutes) || i.minutes < 1 || i.minutes > 600)) throw new Error("時間は、1〜600分で入れてください");
+  if ((i.note ?? "").length > 300) throw new Error("メモが長すぎます");
+}
+
+export async function addLesson(db: Database, userId: string, storeId: string, i: LessonInput): Promise<{ id: string; ordinal: number }> {
+  checkLesson(i);
+  const me = await getMe(db, userId);
+  if (!me) throw new ForbiddenError();
+  try {
+    return await asUser(db, userId, async (q) => {
+      const id = (await q.query<{ id: string }>(
+        `insert into lesson_logs (company_id, store_id, assistant_id, category_id, day, minutes, note, created_by) values ($1,$2,$3,$4,$5,$6,$7,$8) returning id`,
+        [me.companyId, storeId, i.assistantId, i.categoryId, i.day, i.minutes ?? null, (i.note ?? "").trim(), userId])).rows[0].id;
+      const ordinal = Number((await q.query<{ n: number }>(
+        `select count(*)::int as n from lesson_logs where assistant_id = $1 and category_id = $2 and deleted_at is null
+            and (day, created_at) <= (select day, created_at from lesson_logs where id = $3)`, [i.assistantId, i.categoryId, id])).rows[0].n);
+      return { id, ordinal };
+    });
+  } catch { throw new ForbiddenError("この記録を入れる権限がないか、対象の人・ボタンが正しくありません"); }
+}
+
+export async function updateLesson(db: Database, userId: string, id: string, i: { categoryId?: string; day?: string; minutes?: number | null; note?: string }): Promise<void> {
+  checkLesson(i);
+  let n = 0;
+  try {
+    n = (await asUser(db, userId, (q) => q.query(
+      `update lesson_logs set category_id = coalesce($2, category_id), day = coalesce($3::date, day), minutes = case when $4::boolean then $5::int else minutes end,
+              note = coalesce($6, note) where id = $1 and deleted_at is null returning id`,
+      [id, i.categoryId ?? null, i.day ?? null, i.minutes !== undefined, i.minutes ?? null, i.note === undefined ? null : i.note.trim()]))).rows.length;
+  } catch { throw new ForbiddenError(); }
+  if (n === 0) throw new ForbiddenError();
+}
+
+/** 消さずに「取り消し」にする（まちがえて押したとき） */
+export async function deleteLesson(db: Database, userId: string, id: string): Promise<void> {
+  let n = 0;
+  try { n = (await asUser(db, userId, (q) => q.query("update lesson_logs set deleted_at = now(), deleted_by = $2 where id = $1 and deleted_at is null returning id", [id, userId]))).rows.length; } catch { throw new ForbiddenError(); }
+  if (n === 0) throw new ForbiddenError();
+}
+
+/** 期間の記録。ordinal = その人のそのカテゴリの「何人目（何回目）」（これまでの全部を数える） */
+export async function listLessons(db: Database, userId: string, q0: { storeId?: string; from: string; to: string; assistantId?: string }): Promise<LessonRow[]> {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(q0.from) || !/^\d{4}-\d{2}-\d{2}$/.test(q0.to)) throw new Error("期間が正しくありません");
+  return (await asUser(db, userId, (q) => q.query<LessonRow>(
+    `select t.* from (
+       select l.id, l.store_id as "storeId", l.assistant_id as "assistantId", a.name as "assistantName", l.category_id as "categoryId", c.name as category,
+              l.day::text as day, l.minutes, l.note,
+              row_number() over (partition by l.assistant_id, l.category_id order by l.day, l.created_at) as ordinal,
+              u.name as "byName", l.created_at as "createdAt"
+         from lesson_logs l join memberships a on a.id = l.assistant_id join lesson_categories c on c.id = l.category_id left join memberships u on u.id = l.created_by
+        where l.deleted_at is null and ($1::uuid is null or l.store_id = $1) and ($2::uuid is null or l.assistant_id = $2)
+     ) t where t.day between $3 and $4 order by t.day desc, t."createdAt" desc`,
+    [q0.storeId ?? null, q0.assistantId ?? null, q0.from, q0.to]))).rows.map((r) => ({ ...r, ordinal: Number(r.ordinal) }));
+}
+
+/** 教育担当にする／外す（店長=自店・管理者=全店） */
+export async function setEduLead(db: Database, userId: string, targetId: string, on: boolean): Promise<void> {
+  const me = await getMe(db, userId);
+  if (!me || me.level < 3) throw new ForbiddenError();
+  const t = (await asUser(db, userId, (q) => q.query<{ store_id: string; level: number }>("select store_id, level from memberships where id = $1 and status = 'active'", [targetId]))).rows[0];
+  if (!t || (me.level === 3 && t.store_id !== me.storeId)) throw new ForbiddenError();
+  await db.query("update memberships set edu_lead = $2 where id = $1", [targetId, on]);
+}
+
+/** これまでの合計（その人×カテゴリ）。記録の画面で「次は何人目」を出すのに使う */
+export async function lessonCounts(db: Database, userId: string, storeId: string): Promise<Record<string, number>> {
+  const rows = (await asUser(db, userId, (q) => q.query<{ a: string; c: string; n: number }>(
+    "select assistant_id as a, category_id as c, count(*)::int as n from lesson_logs where store_id = $1 and deleted_at is null group by 1, 2", [storeId]))).rows;
+  return Object.fromEntries(rows.map((r) => [`${r.a}|${r.c}`, Number(r.n)]));
 }

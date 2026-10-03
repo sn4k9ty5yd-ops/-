@@ -23,6 +23,8 @@ function Cards() {
     { big: true, href: "/shifts", title: "シフトを見る", sub: "今日の出勤・月のシフト・みんなの休み", show: true },
     { big: true, href: "/material", title: "材料費（発注額）", sub: "発注した額を記録・月ごとの合計", show: true },
     { href: "/material/summary", title: "材料費統括", sub: "月ごと・お店ごと・商品ごとの割合（管理者・材料担当）", show: me.level === 4 || !!me.materialManager },
+    { big: true, href: "/my-lessons", title: "自分のレッスン", sub: "何をしたか・何人目か・かかった時間をカレンダーで見る", show: me.rank === "assistant" },
+    { href: "/lessons", title: "レッスン記録", sub: "アシスタントが今日何をしたかを、ボタンで記録・報告", show: me.level >= 3 || !!me.eduLead },
     { href: "/admin/attendance", title: "出勤簿", sub: "出勤・退勤・休憩・実働", show: me.level >= 3 },
     { href: "/admin/stock", title: "在庫", sub: low ? `少なくなっている商品が ${low} 件あります` : "いまの在庫・入庫と出庫・発注の目安", show: me.level >= 2 },
     { href: "/admin/stocktake", title: "棚卸し", sub: "店販・業務の棚卸し（印刷・コピーもできます）", show: me.level >= 2 },
@@ -37,7 +39,7 @@ function Cards() {
   ].filter((c) => c.show);
   const ICON: Record<string, [string, number, string]> = {
     "/inbox": ["🔔", 8, ""], "/manual": ["📖", 265, ""], "/shifts": ["📅", 212, ""], "/requests": ["🌴", 168, ""], "/material": ["🧴", 28, ""],
-    "/material/summary": ["📊", 28, "材料・在庫"], "/admin/stock": ["📦", 150, "材料・在庫"], "/admin/stocktake": ["📋", 190, "材料・在庫"], "/admin/products": ["🏷️", 320, "材料・在庫"],
+    "/material/summary": ["📊", 28, "材料・在庫"], "/my-lessons": ["🎓", 262, ""], "/lessons": ["🎓", 262, "スタッフ・設定"], "/admin/stock": ["📦", 150, "材料・在庫"], "/admin/stocktake": ["📋", 190, "材料・在庫"], "/admin/products": ["🏷️", 320, "材料・在庫"],
     "/admin/attendance": ["⏱️", 250, "シフト・勤怠"], "/admin/shifts": ["✏️", 212, "シフト・勤怠"], "/admin/requests": ["👥", 168, "シフト・勤怠"], "/admin/periods": ["🗓️", 235, "シフト・勤怠"],
     "/admin/staff": ["🧑‍🤝‍🧑", 340, "スタッフ・設定"], "/admin/settings": ["⚙️", 220, "スタッフ・設定"], "/admin/stores": ["🏬", 280, "スタッフ・設定"],
   };
