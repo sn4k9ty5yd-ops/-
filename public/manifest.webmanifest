@@ -1,0 +1,9 @@
+{
+  "name": "シフト管理",
+  "short_name": "シフト",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f5f5f7",
+  "theme_color": "#0071e3",
+  "lang": "ja"
+}

@@ -1,0 +1,10 @@
+:root{--bg:#f5f5f7;--card:#fff;--ink:#1d1d1f;--sub:#6e6e73;--blue:#0071e3;--line:#e5e5ea}
+@media (prefers-color-scheme: dark){:root{--bg:#000;--card:#1c1c1e;--ink:#f5f5f7;--sub:#98989d;--line:#38383a}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,"Hiragino Sans",sans-serif}
+main{max-width:420px;margin:0 auto;padding:48px 16px}
+h1{font-size:28px;margin:0 0 24px}
+label{display:block;font-size:14px;color:var(--sub);margin:16px 0 6px}
+input{width:100%;font-size:17px;padding:14px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--ink)}
+button{width:100%;margin-top:24px;font-size:17px;font-weight:600;padding:16px;border:0;border-radius:14px;background:var(--blue);color:#fff}
+.hint{color:var(--sub);font-size:13px;margin-top:12px}
