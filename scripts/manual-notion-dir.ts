@@ -8,7 +8,7 @@ import { getDb } from "../lib/db";
 import type { Block } from "../lib/manual/blocks";
 import { importManualPages, type FetchedAsset, type ImportPage } from "../lib/manual/import";
 import { parseNotionHtml } from "../lib/manual/notion-html";
-import { neonHttp } from "./neon-http";
+import { loadEnvLocal, neonHttp } from "./neon-http";
 
 const MIME: Record<string, string> = { ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp", ".gif": "image/gif", ".pdf": "application/pdf" };
 
@@ -45,6 +45,7 @@ async function compress(a: FetchedAsset): Promise<FetchedAsset> {
 const SECRET_TITLES = [/^数字管理/, /売上/, /議事録/, /1on1|１on１|面談/];
 
 async function main() {
+  loadEnvLocal();
   const dir = process.argv[2];
   if (!dir) throw new Error("使い方: npx tsx scripts/manual-notion-dir.ts <フォルダ> [--prod]");
   const prod = process.argv.includes("--prod");

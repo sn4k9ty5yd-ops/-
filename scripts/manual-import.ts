@@ -7,7 +7,7 @@ import { getDb } from "../lib/db";
 import { parseEnhancedMarkdown } from "../lib/manual/enhanced-markdown";
 import type { Block } from "../lib/manual/blocks";
 import { importManualPages, type FetchedAsset, type ImportPage } from "../lib/manual/import";
-import { neonHttp } from "./neon-http";
+import { loadEnvLocal, neonHttp } from "./neon-http";
 
 interface Entry {
   sourceId: string; parentSourceId?: string | null; title: string; icon?: string;
@@ -30,6 +30,7 @@ async function compress(a: FetchedAsset): Promise<FetchedAsset> {
 }
 
 async function main() {
+  loadEnvLocal();
   const file = process.argv[2];
   if (!file) throw new Error("使い方: npx tsx scripts/manual-import.ts <書き出し.json> [--prod]");
   const prod = process.argv.includes("--prod");

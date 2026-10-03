@@ -18,3 +18,14 @@ export function neonHttp(connectionString: string): Database {
     close: async () => {},
   };
 }
+
+/** プロジェクトの .env.local（ファイルは git に入らない）から、MANUAL_DB_URL などを読む。すでにある環境変数は上書きしない */
+import { existsSync, readFileSync } from "node:fs";
+export function loadEnvLocal(file = ".env.local") {
+  if (!existsSync(file)) return;
+  for (const line of readFileSync(file, "utf8").split("\n")) {
+    const m = /^\s*([A-Z0-9_]+)\s*=\s*(.*?)\s*$/.exec(line);
+    if (!m || process.env[m[1]] !== undefined) continue;
+    process.env[m[1]] = m[2].replace(/^(['"])(.*)\1$/, "$2");
+  }
+}
