@@ -1,4 +1,5 @@
 "use client";
+import { SubTabs } from "@/app/SubTabs";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { api, MeProvider, useAutoRefresh, useMe } from "@/lib/client";
@@ -45,7 +46,8 @@ function Page() {
   return (
     <main>
       <Link href="/home" className="back">← ホーム</Link>
-      <h1>希望休</h1>
+      <h1>休み・有給</h1>
+      <SubTabs items={[{ href: "/requests", label: "希望休を出す" }, { href: "/leave", label: "有給の提出・変更" }]} />
       {me.level >= 2 && <p style={{ margin: "0 0 12px" }}><Link href="/admin/requests">みんなの希望休（一覧）を見る</Link></p>}
       <PeriodNav period={view} startDay={me.closingStartDay} onChange={setView} />
       <div className="tintbox" style={tintStyle(view.start)}>

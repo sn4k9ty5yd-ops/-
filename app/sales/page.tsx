@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { SubTabs } from "@/app/SubTabs";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, MeProvider, useAutoRefresh, useMe } from "@/lib/client";
 import { md } from "@/lib/labels";
@@ -68,14 +69,15 @@ function Page() {
 
   const canEdit = me.level === 4 || (me.level === 3 && storeId === me.storeId);
   const canCommission = me.level === 4 || (me.level >= 2 && storeId === me.storeId);
-  if (me.level < 2) return <main className="wide"><Link href="/home" className="back">← ホーム</Link><h1>売上</h1><p className="hint">この画面は、店長・シフト担当・管理者が使います。自分の売上は、ホームの「自分の売上」から見られます。</p></main>;
+  if (me.level < 2) return <main className="wide"><Link href="/home" className="back">← ホーム</Link><h1>売上</h1><p className="hint">この画面は、店長・シフト担当・管理者が使います。自分の売上は、ホームの「売上」から見られます。</p></main>;
   const tgt = data?.storeTarget ?? null;
   const ach = achievement(sum.total, tgt);
 
   return (
     <main className="xwide">
       <Link href="/home" className="back">← ホーム</Link>
-      <h1>売上（指名売上）</h1>
+      <h1>売上</h1>
+      <SubTabs items={[{ href: "/my-sales", label: "自分の売上", show: me.level < 4 }, { href: "/sales", label: "売上の確認・歩合（店長・事務員さん）", show: me.level >= 2 }]} />
       <div className="toolbar">
         <select aria-label="お店" value={storeId} onChange={(e) => setStoreId(e.target.value)}>
           {(me.level === 4 ? stores : stores.filter((s) => s.id === me.storeId)).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}

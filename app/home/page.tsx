@@ -10,14 +10,12 @@ function Cards() {
   const { me, logout } = useMe();
   const router = useRouter();
   useEffect(() => { if (me.displayOnly) router.replace("/shifts"); }, [me.displayOnly, router]);   // お店のiPadは、すぐシフトの画面へ
-  const [low, setLow] = useState(0);
   const [unread, setUnread] = useState(0);
   const [leaveTodo, setLeaveTodo] = useState(0);
   useEffect(() => { if (me.level >= 3) api<{ todo: unknown[] }>("/api/paid-leave?review=1").then((r) => setLeaveTodo(r.todo.length)).catch(() => {}); }, [me.level]);
   const [push, setPush] = useState<PushState | null>(null);
   useEffect(() => { pushState().then(setPush).catch(() => {}); }, []);
   useEffect(() => { if (!me.displayOnly) api<{ unread: number }>("/api/notifications").then((r) => setUnread(r.unread)).catch(() => {}); }, [me.displayOnly]);
-  useEffect(() => { if (me.level >= 2) api<{ count: number }>(`/api/stock?storeId=${me.storeId}&low=1`).then((r) => setLow(r.count)).catch(() => {}); }, [me.level, me.storeId]);
   if (me.displayOnly) return null;
   const cards = [
     { big: true, href: "/inbox", title: unread ? `お知らせ（${unread}件）` : "お知らせ", sub: unread ? "新しいお知らせがあります（休みのかぶりなど）" : "休みのかぶりや、話し合いの書き込み", show: true },
@@ -28,14 +26,11 @@ function Cards() {
     { big: true, href: "/my-lessons", title: "自分のレッスン", sub: "何をしたか・何人目か・かかった時間をカレンダーで見る", show: me.rank === "assistant" },
     { href: "/lessons", title: "レッスン記録", sub: "アシスタントが今日何をしたかを、ボタンで記録・報告", show: me.level >= 3 || !!me.eduLead },
     { big: true, href: "/admin/shift", title: "シフトまとめ", sub: "次のシフトを作る・いまの進み具合・出勤簿", show: me.level >= 2 },
-    { href: "/admin/stock", title: "在庫", sub: low ? `少なくなっている商品が ${low} 件あります` : "いまの在庫・入庫と出庫・発注の目安", show: me.level >= 2 },
     { href: "/admin/stocktake", title: "棚卸し", sub: "店販・業務の棚卸し（印刷・コピーもできます）", show: me.level >= 2 },
     { href: "/admin/products", title: "商品一覧", sub: "店販・業務の商品と仕入値", show: me.level >= 3 },
     { href: "/admin/shifts", title: "出勤簿", sub: "日ごと・人ごと・一覧表で入力します", show: false },
-    { big: true, href: "/my-sales", title: "自分の売上", sub: "売上・客単価・前年比・目標・店内ランキング", show: !me.displayOnly },
-    { href: "/sales", title: "売上（指名売上）", sub: "提出の確認・歩合をつける・目標・提出期限", show: me.level >= 2 },
-    { big: true, href: "/leave", title: leaveTodo ? `有給の申請（確認待ち${leaveTodo}件）` : "有給の申請", sub: leaveTodo ? "店長・事務員さんの確認が必要な申請があります" : "年2回の有給の提出と、変更の申請", show: true },
-    { big: true, href: "/requests", title: "希望休を出す", sub: "休みたい日をえらびます", show: true },
+    { big: true, href: me.level === 4 ? "/sales" : "/my-sales", title: "売上", sub: me.level >= 2 ? "自分の売上の提出・みんなの確認・歩合・目標" : "売上・客単価・前年比・目標・店内ランキング", show: !me.displayOnly },
+    { big: true, href: "/requests", title: leaveTodo ? `休み・有給（確認待ち${leaveTodo}件）` : "休み・有給", sub: leaveTodo ? "店長・事務員さんの確認が必要な有給の申請があります" : "希望休を出す・有給の提出と変更の申請", show: true },
     { href: "/admin/requests", title: "みんなの希望休", sub: "スタッフの希望休を一覧で見ます", show: false },
     { href: "/admin/periods", title: "シフト期間", sub: "受付・締切・確定・提出", show: false },
     { href: "/admin/staff", title: "スタッフ", sub: "登録・退職・パスコード", show: me.level >= 3 },

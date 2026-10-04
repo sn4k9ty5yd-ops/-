@@ -1,4 +1,5 @@
 "use client";
+import { SubTabs } from "@/app/SubTabs";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { api, MeProvider, useAutoRefresh, useMe } from "@/lib/client";
@@ -62,7 +63,8 @@ function Page() {
   return (
     <main className="wide">
       <Link href="/home" className="back">← ホーム</Link>
-      <h1>自分の売上</h1>
+      <h1>売上</h1>
+      <SubTabs items={[{ href: "/my-sales", label: "自分の売上", show: me.level < 4 }, { href: "/sales", label: "売上の確認・歩合（店長・事務員さん）", show: me.level >= 2 }]} />
       <div className="toolbar" style={{ justifyContent: "center" }}>
         <button className="ghost" onClick={() => setYm(addMonth(ym, -1))} aria-label="前の月">‹</button><b style={{ fontSize: 22 }}>{ym.slice(0, 4)}年{Number(ym.slice(5))}月</b><button className="ghost" onClick={() => setYm(addMonth(ym, 1))} aria-label="次の月">›</button>
       </div>
