@@ -51,6 +51,7 @@ export default function ShiftsPage() {
       const d = ["drafting", "closed", "collecting", "confirmed", "published"].map((st) => p.find((x) => x.stores.some((y) => y.storeId === me.storeId && y.status === st))).find(Boolean);
       // 「シフトを見る」の日にちから来たときは、その日・その期間・そのお店の「日ごと」を開く
       const q = new URLSearchParams(window.location.search);
+      if (!q.get("day") && window.innerWidth >= 900) setMode("table");
       const qd = q.get("day"), qs = q.get("storeId");
       const target = qd ? p.find((x) => x.start <= qd && qd <= x.end) : undefined;
       if (target && qd) {
@@ -96,7 +97,7 @@ export default function ShiftsPage() {
     <>
       <SubTabs items={[{ href: "/admin/periods", label: "やること" }, { href: "/admin/shifts", label: "出勤簿" }]} />
       <h1>出勤簿</h1>
-      <p className="hint">ここは「つくる」の出勤簿です。表の<b>日付を押す</b>と、その日の全員を、まとめて、または1人ずつ直せます。<b>名前を押す</b>と、その人の日をまとめて直せます。表のマスを押すと、1か所だけ直せます。</p>
+      <p className="hint">{mode === "day" ? "日ごと：日にちを選んで、その日の全員を、まとめて／1人ずつ直します。" : mode === "person" ? "人ごと：1人を選んで、その人の日を何日かまとめて直します。" : "一覧表：日付を押すとその日の「日ごと」へ、名前を押すとその人の「人ごと」へ。マスを押すと1か所だけ直せます。"}</p>
       <div className="toolbar">
         <select aria-label="お店" value={storeId} onChange={(e) => setStoreId(e.target.value)}>
           {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
@@ -108,12 +109,15 @@ export default function ShiftsPage() {
       <PeriodNav period={view} startDay={me.closingStartDay} onChange={setView} />
       <p className="sub" style={{ margin: "0 0 8px" }}>{store?.name}：{loading ? "読み込み中…" : pstatus ? STATUS_LABEL[pstatus] : "未作成"}　{readOnlyReason && <b style={{ color: "#b45309" }}>{readOnlyReason}</b>}</p>
       {editable && !loading && (
-        <div className="actions" style={{ marginBottom: 8 }}>
+        <details className="card" style={{ marginBottom: 8, padding: "8px 12px" }} open={shifts.length === 0}>
+          <summary style={{ cursor: "pointer", fontWeight: 700 }}>まとめて入れる・上限・貼り付け</summary>
+        <div className="actions" style={{ marginTop: 8 }}>
           <button className="ghost" style={{ color: "var(--blue)" }} onClick={async () => { const n = await post({ action: "autoDraft" }); setNote(`シフトカレンダー（休み・有給）の内容を、出勤簿に${n}件、反映しました（すでに入っているところは、そのままです）`); }}>シフトカレンダーから出勤簿に反映</button>
           {note && <span className="sub">{note}</span>}
           {dbPeriod && <LimitAll periodId={dbPeriod.id} storeId={storeId} days={daysOf(view.start, view.end)} onDone={() => {}} />}
           <PasteOff roster={roster} start={view.start} end={view.end} onApply={save} />
         </div>
+        </details>
       )}
       {msg && <p className="err">{msg}</p>}
 
@@ -129,7 +133,11 @@ export default function ShiftsPage() {
               ))}
             </div>
             <div className="card" style={{ marginTop: 10 }}>
-              <b style={{ fontSize: 18 }}>{md(day || days[0])}（{WEEKDAYS[dow(day || days[0])]}）</b>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                <button className="ghost" style={{ width: "auto", margin: 0 }} disabled={days.indexOf(day || days[0]) <= 0} onClick={() => setDay(days[days.indexOf(day || days[0]) - 1])}>‹ 前の日</button>
+                <b style={{ fontSize: 20 }}>{md(day || days[0])}（{WEEKDAYS[dow(day || days[0])]}）</b>
+                <button className="ghost" style={{ width: "auto", margin: 0 }} disabled={days.indexOf(day || days[0]) >= days.length - 1} onClick={() => setDay(days[days.indexOf(day || days[0]) + 1])}>次の日 ›</button>
+              </div>
               {editable && (() => {
                 const dd = day || days[0];
                 const t = fillTime && fillTime.day === dd ? fillTime : { day: dd, ...hoursOn(store, dd) };
@@ -207,10 +215,10 @@ export default function ShiftsPage() {
         {mode === "table" && (
           <div className="scroll">
             <table className="shifttable">
-              <thead><tr><th>名前</th>{days.map((d) => <th key={d} title="押すと、この日の全員を一括・個別で直せます" style={{ cursor: "pointer" }} onClick={() => { setDay(d); setMode("day"); window.scrollTo({ top: 0, behavior: "smooth" }); }} className={dow(d) === 0 || holidayName(d) ? "su" : dow(d) === 6 ? "sa" : ""}>{md(d)}<br /><small>{WEEKDAYS[dow(d)]}</small>{holidayName(d) && <><br /><small className="holname" style={{ fontSize: 9 }}>{holidayName(d)}</small></>}</th>)}</tr></thead>
+              <thead><tr><th style={{ position: "sticky", left: 0, background: "#fff", zIndex: 2 }}>名前</th>{days.map((d) => <th key={d} title="押すと、この日の全員を一括・個別で直せます" style={{ cursor: "pointer" }} onClick={() => { setDay(d); setMode("day"); window.scrollTo({ top: 0, behavior: "smooth" }); }} className={dow(d) === 0 || holidayName(d) ? "su" : dow(d) === 6 ? "sa" : ""}>{md(d)}<br /><small>{WEEKDAYS[dow(d)]}</small>{holidayName(d) && <><br /><small className="holname" style={{ fontSize: 9 }}>{holidayName(d)}</small></>}</th>)}</tr></thead>
               <tbody>
                 {roster.map((p) => (
-                  <tr key={p.id}><td className="name" style={{ cursor: "pointer" }} title="押すと、この人の日をまとめて直せます" onClick={() => { setPersonId(p.id); setPicked(new Set()); setMode("person"); window.scrollTo({ top: 0, behavior: "smooth" }); }}>{p.name}</td>
+                  <tr key={p.id}><td className="name" style={{ cursor: "pointer", position: "sticky", left: 0, background: "#fff", zIndex: 1 }} title="押すと、この人の日をまとめて直せます" onClick={() => { setPersonId(p.id); setPicked(new Set()); setMode("person"); window.scrollTo({ top: 0, behavior: "smooth" }); }}>{p.name}</td>
                     {days.map((d) => {
                       const s = byKey.get(`${p.id}|${d}`), r = reqKey.get(`${p.id}|${d}`);
                       return <td key={d} className={`${kindClass(s)} ${editable ? "click" : ""}`} onClick={() => editable && setTarget({ person: p, days: [d] })}>{cellText(s)}{r && !s && <i className="dot" />}</td>;
