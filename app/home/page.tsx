@@ -32,7 +32,6 @@ function Cards() {
     { href: "/admin/products", title: "商品一覧", sub: "店販・業務の商品と仕入値", show: me.level >= 3 },
     { href: "/admin/shifts", title: "出勤簿", sub: "日ごと・人ごと・一覧表で入力します", show: false },
     { big: true, href: me.level === 4 ? "/sales" : "/my-sales", title: "売上", sub: me.level >= 2 ? "自分の売上の提出・みんなの確認・歩合・目標" : "売上・客単価・前年比・目標・店内ランキング", show: !me.displayOnly },
-    { href: "/admin/requests", title: "シフト", sub: "みんなの休みをカレンダーで見る", show: false },
     { href: "/admin/periods", title: "シフト期間", sub: "受付・締切・確定・提出", show: false },
     { href: "/admin/staff", title: "スタッフ", sub: "登録・退職・パスコード", show: me.level >= 3 },
     { href: "/security", title: "セキュリティ", sub: "パスコードを変える・ログインの記録", show: true },

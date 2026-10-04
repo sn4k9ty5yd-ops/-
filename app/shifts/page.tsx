@@ -141,6 +141,11 @@ function Page() {
           <div className="sheet-bg" onClick={() => setDetail(null)}>
             <div className="sheet" onClick={(e) => e.stopPropagation()} role="dialog" aria-label={`${md(detail)}の詳細`} style={{ maxHeight: "85vh", overflow: "auto" }}>
               <b style={{ fontSize: 20 }}>{md(detail)}（{WEEKDAYS[dow(detail)]}）</b>{holidayName(detail) && <small className="holname"> {holidayName(detail)}</small>}
+              {me.level >= 2 && (
+                <Link href={`/admin/shifts?day=${detail}&storeId=${storeId}`} className="btn" style={{ display: "block", textAlign: "center", margin: "10px 0", padding: 12, borderRadius: 14, background: "var(--blue)", color: "#fff", fontWeight: 700, textDecoration: "none" }}>
+                  この日の出勤簿を開く（全員一括・ひとりずつ直せます）
+                </Link>
+              )}
               {me.level >= 2 && db && (
                 <div className="card" style={{ margin: "8px 0", padding: 10 }}>
                   <div className="sub">この日に休める人数の上限（出勤簿をつける人が決めます）</div>

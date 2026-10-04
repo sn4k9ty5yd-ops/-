@@ -48,6 +48,15 @@ export default function ShiftsPage() {
       setStores(s.filter((x) => x.status === "active")); setPeriods(p);
       // 作業中の期間を優先して開く（作成中 → 受付中 → 確定・公開済み の順）
       const d = ["drafting", "closed", "collecting", "confirmed", "published"].map((st) => p.find((x) => x.stores.some((y) => y.storeId === me.storeId && y.status === st))).find(Boolean);
+      // 「シフトを見る」の日にちから来たときは、その日・その期間・そのお店の「日ごと」を開く
+      const q = new URLSearchParams(window.location.search);
+      const qd = q.get("day"), qs = q.get("storeId");
+      const target = qd ? p.find((x) => x.start <= qd && qd <= x.end) : undefined;
+      if (target && qd) {
+        setView({ start: target.start, end: target.end, label: target.label }); setDay(qd); setMode("day");
+        if (qs && s.some((x) => x.id === qs)) setStoreId(qs);
+        return;
+      }
       if (d) setView({ start: d.start, end: d.end, label: d.label });
     });
   }, [me.storeId]);
