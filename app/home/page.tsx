@@ -5,6 +5,9 @@ import { useEffect, useState } from "react";
 import { api, MeProvider, useMe } from "@/lib/client";
 import { pushState, type PushState } from "@/lib/push-client";
 import { LEVEL_NAMES } from "@/lib/permissions";
+import { reiwa } from "@/lib/era";
+import { todayJst } from "@/lib/period-nav";
+import { WEEKDAYS } from "@/lib/labels";
 
 function Cards() {
   const { me, logout } = useMe();
@@ -51,12 +54,12 @@ function Cards() {
   const ic = (href: string) => ICON[href] ?? ["•", 210, ""];
   const big = cards.filter((c) => c.big), rest = cards.filter((c) => !c.big);
   const groups = ["シフト・勤怠", "材料・在庫", "スタッフ・設定"].map((g) => [g, rest.filter((c) => ic(c.href)[2] === g)] as const).filter(([, l]) => l.length > 0);
-  const hour = Number(new Date().toLocaleString("ja-JP", { hour: "numeric", hour12: false, timeZone: "Asia/Tokyo" }));
-  const hello = hour < 5 ? "おつかれさまです" : hour < 11 ? "おはようございます" : hour < 18 ? "こんにちは" : "こんばんは";
+  const today = todayJst();
+  const hello = `${reiwa(today)}（${WEEKDAYS[new Date(today + "T00:00:00Z").getUTCDay()]}）`;
   const Icon = ({ href }: { href: string }) => <span className="ic" style={{ ["--h" as string]: ic(href)[1] }} aria-hidden>{ic(href)[0]}</span>;
   return (
     <main className="home">
-      <p className="eyebrow">{hello} 👋</p>
+      <p className="eyebrow">{hello}</p>
       <h1 className="hero">{me.name}</h1>
       <p className="role">{LEVEL_NAMES[me.level]}{me.appOwner ? "・アプリ制作者" : ""}　·　株式会社ALBUM</p>
       {push && push !== "on" && push !== "unsupported" && !me.displayOnly && (
