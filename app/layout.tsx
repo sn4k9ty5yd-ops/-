@@ -7,7 +7,7 @@ export const metadata: Metadata = {
   icons: { icon: "/icon-192.png", apple: "/apple-touch-icon.png" },
   appleWebApp: { capable: true, title: "ALBUM" },
 };
-export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#0071e3" };
+export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#fff9f0" };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

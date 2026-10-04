@@ -10,9 +10,8 @@ export default function LoginPage() {
   const [busy, setBusy] = useState(false);
   return (
     <main className="login">
-      <div className="aurora" aria-hidden />
       <p className="eyebrow">株式会社</p>
-      <h1 className="hero wordmark">ALBUM</h1>
+      <h1 className="hero wordmark" aria-label="ALBUM">{"ALBUM".split("").map((c, i) => <span key={i} style={{ color: ["#ff6b6b", "#ffb703", "#06d6a0", "#4cc9f0", "#8b5cf6"][i], WebkitTextFillColor: ["#ff6b6b", "#ffb703", "#06d6a0", "#4cc9f0", "#8b5cf6"][i] }}>{c}</span>)}</h1>
       <form onSubmit={async (e) => {
         e.preventDefault(); setBusy(true); setErr("");
         try { await api("/api/login", f); router.replace("/home"); }

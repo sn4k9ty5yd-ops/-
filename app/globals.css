@@ -340,78 +340,9 @@ main.login button[type=submit]{margin-top:28px;width:100%;padding:15px;font-size
 .monthrow{display:flex;align-items:center;gap:12px;width:100%;margin:0;padding:10px 0;background:transparent;color:var(--ink);border-radius:0;border-bottom:1px solid var(--hair);font-size:14px;text-align:left}
 .monthrow:hover{background:transparent !important}.monthrow .ml{width:36px;color:var(--sub)}.monthrow .mv{min-width:170px;text-align:right}
 
-/* =====================================================================
-   「ステージ」デザイン: ログインとホームは、黒い舞台に大きな文字だけ。
-   余計なものを消して、いま必要なものだけを大きく見せる。
-   ===================================================================== */
-body:has(main.home),body:has(main.login){
-  --bg:#000;--card:#161618;--ink:#f5f5f7;--sub:#86868b;--line:#3a3a3c;--hair:rgba(255,255,255,.1);--blue:#2997ff;--blue-d:#4aa8ff;--shadow:none;--shadow-up:none;
-  background:#000;color:#f5f5f7;overflow-x:hidden;
-}
-main.home,main.login{position:relative;isolation:isolate}
-.aurora{position:fixed;inset:-20% -10% auto -10%;height:70vh;z-index:-1;pointer-events:none;filter:blur(70px);opacity:.9;
-  background:radial-gradient(40% 50% at 25% 40%,rgba(41,151,255,.55),transparent 70%),radial-gradient(35% 45% at 70% 30%,rgba(191,90,242,.45),transparent 70%),radial-gradient(30% 40% at 55% 70%,rgba(255,159,10,.28),transparent 70%);
-  animation:drift 18s ease-in-out infinite alternate}
-@keyframes drift{to{transform:translate3d(4%,6%,0) scale(1.08)}}
-@media (prefers-reduced-motion:reduce){.aurora{animation:none}}
-.eyebrow{font-size:17px;font-weight:500;color:#a1a1a6;margin:0 0 6px;letter-spacing:-.01em}
-h1.hero{font-size:clamp(44px,9vw,84px);font-weight:700;letter-spacing:-.045em;line-height:1.02;margin:0 0 10px;
-  background:linear-gradient(180deg,#fff 30%,#a1a1a6);-webkit-background-clip:text;background-clip:text;color:transparent}
-.role{color:#86868b;font-size:15px;margin:0 0 44px}
-
-main.home{max-width:1040px;padding:clamp(48px,12vh,120px) 24px 72px}
-.tiles{display:grid;grid-template-columns:1fr;gap:12px}
-@media (min-width:640px){.tiles{grid-template-columns:repeat(2,1fr)}}
-@media (min-width:960px){.tiles{grid-template-columns:repeat(3,1fr)}}
-.tile{display:flex;flex-direction:column;justify-content:flex-end;gap:6px;min-height:150px;padding:24px;border-radius:28px;text-decoration:none;color:#f5f5f7;
-  background:linear-gradient(160deg,rgba(255,255,255,.1),rgba(255,255,255,.03));border:1px solid rgba(255,255,255,.1);
-  -webkit-backdrop-filter:blur(30px);backdrop-filter:blur(30px);transition:transform .25s cubic-bezier(.2,.8,.2,1),background .25s}
-.tile b{font-size:24px;font-weight:600;letter-spacing:-.03em;line-height:1.15}
-.tile span{font-size:14px;color:#a1a1a6;line-height:1.4}
-@media (hover:hover){.tile:hover{transform:translateY(-4px) scale(1.01);background:linear-gradient(160deg,rgba(255,255,255,.16),rgba(255,255,255,.05))}}
-.tile:active{transform:scale(.98)}
-.grouphead{font-size:13px;font-weight:600;color:#86868b;letter-spacing:.08em;margin:56px 0 10px;text-transform:none}
-.rows{border-radius:22px;overflow:hidden;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08)}
-.row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 22px;text-decoration:none;color:#f5f5f7;border-top:1px solid rgba(255,255,255,.08);transition:background .15s}
-.row:first-child{border-top:0}
-.row b{display:block;font-size:17px;font-weight:500;letter-spacing:-.02em}
-.row small{display:block;color:#86868b;font-size:13px;margin-top:2px}
-.row i{font-style:normal;color:#636366;font-size:24px;font-weight:300}
-@media (hover:hover){.row:hover{background:rgba(255,255,255,.07)}}
-button.logout{display:block;margin:48px auto 0;width:auto;padding:12px 28px;background:transparent;color:#86868b;border:1px solid rgba(255,255,255,.14);font-size:14px}
-button.logout:hover{background:rgba(255,255,255,.08) !important;color:#f5f5f7}
-
-/* ログイン */
-main.login{max-width:420px;padding:clamp(80px,22vh,200px) 28px 56px;text-align:center}
-h1.wordmark{font-size:clamp(64px,18vw,104px);letter-spacing:-.06em;margin-bottom:40px}
-main.login .eyebrow{letter-spacing:.3em;font-size:13px;text-transform:none}
-main.login label{color:#86868b;font-size:12px;letter-spacing:.04em;margin:20px 0 4px}
-main.login input{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);color:#f5f5f7;border-radius:16px;text-align:left;padding:16px 18px;font-size:18px}
-main.login input:focus{border-color:#2997ff;background:rgba(255,255,255,.1)}
-main.login button[type=submit]{background:#f5f5f7;color:#000;margin-top:32px;padding:17px;font-weight:600;font-size:17px}
-main.login button[type=submit]:hover{background:#fff !important}
-main.login .hint,main.login .sub{color:#86868b}
-main.login .err{color:#ff6961}
-
-/* 仕事の画面: 余白をさらに広く・見出しをはっきり */
-main.wide h1,main.xwide h1{font-size:clamp(34px,5vw,48px);letter-spacing:-.04em;margin-bottom:24px}
-.card,.list li{border-radius:22px}
-.card{box-shadow:none}
-.shell .demo{background:rgba(0,0,0,.72);color:#f5f5f7;border-bottom:1px solid rgba(255,255,255,.08)}
-.shell .demo .storelink{background:rgba(255,255,255,.12);color:#f5f5f7}
-.shell .demo button.ghost{background:rgba(255,255,255,.12);color:#f5f5f7}
-@media (prefers-color-scheme: dark){.shell .demo{background:rgba(0,0,0,.72)}}
-@media (max-width:639px){.tile{min-height:96px;padding:20px 22px;border-radius:24px}.tile b{font-size:21px}}
-.sttable th.r{text-align:right}
-
 /* ---- 色: 機能ごとの色つきアイコン ---- */
 .ic{display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;width:44px;height:44px;border-radius:14px;font-size:22px;
   background:linear-gradient(145deg,hsl(var(--h) 90% 64%),hsl(calc(var(--h) + 28) 85% 50%));box-shadow:0 6px 16px hsl(var(--h) 90% 50% / .35),inset 0 1px 0 rgba(255,255,255,.35)}
-.tile .ic{margin-bottom:auto;width:48px;height:48px;border-radius:16px;font-size:24px}
-.tile{min-height:168px}
-.row{justify-content:flex-start}.row .rt{flex:1;min-width:0}.row .ic{width:38px;height:38px;border-radius:12px;font-size:19px;box-shadow:none}
-.grouphead{margin-top:44px}
-@media (max-width:639px){.tile{min-height:132px}}
 
 /* ---- 仕事の画面（明るい側）: やわらかい色づかい ---- */
 :root{--accent:#0a84ff;--accent2:#5e5ce6;--ok:#30a46c;--warn:#f5a623;--bad:#e5484d}
@@ -441,8 +372,7 @@ button:not(.ghost):not(.mvbtn):not(.linkcell):not(.logout):not(.monthrow):not(.d
 .gstep{display:flex;flex-direction:column;align-items:center;gap:10px;background:var(--card);border:1px solid var(--hair);border-radius:22px;padding:18px 14px;text-align:left}
 .gstep>div:last-child{width:100%}.gstep p{margin:6px 0 0}
 .gnum{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;font-size:13px;font-weight:700;margin-right:8px}
-.pushbanner{display:flex;align-items:center;gap:14px;padding:16px 20px;margin:0 0 16px;border-radius:24px;text-decoration:none;color:#f5f5f7;background:linear-gradient(135deg,rgba(255,69,58,.28),rgba(191,90,242,.22));border:1px solid rgba(255,255,255,.14)}
-.pushbanner b{display:block;font-size:17px;font-weight:600}.pushbanner small{display:block;color:#c7c7cc;font-size:13px;margin-top:2px}.pushbanner i{margin-left:auto;font-style:normal;font-size:24px;color:#a1a1a6}
+
 
 /* レッスン記録 */
 .lessonchips{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;align-items:center}
@@ -480,3 +410,98 @@ button:not(.ghost):not(.mvbtn):not(.linkcell):not(.logout):not(.monthrow):not(.d
 .stats3{grid-template-columns:repeat(3,1fr) !important}.stats3 .big{font-size:20px}.stats3 .card{padding:14px}
 .salesform{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:4px 12px;margin:8px 0}
 .salesform label{margin:8px 0 2px;font-size:12px}.salesform input{padding:12px;font-size:16px}
+
+
+/* =====================================================================
+   明るいポップなデザイン: 白〜クリーム色の背景に、あざやかな色・まるいかたち・ぷくっとしたボタン
+   ===================================================================== */
+:root{
+  --bg:#fff9f0;--card:#ffffff;--ink:#23223f;--sub:#6d6a8c;--line:#e7e1f5;--hair:rgba(70,50,140,.10);
+  --accent:#3b82f6;--accent2:#8b5cf6;--blue:#2f6bff;--blue-d:#4a7dff;--ok:#12b886;--warn:#ff9f1c;--bad:#ff4d6d;
+  --pop1:#ff6b6b;--pop2:#ffb703;--pop3:#06d6a0;--pop4:#4cc9f0;--pop5:#8b5cf6;--pop6:#ff8fab;
+  --shadow:0 4px 0 rgba(70,50,140,.06),0 10px 24px rgba(70,50,140,.08);--shadow-up:0 6px 0 rgba(70,50,140,.08),0 16px 32px rgba(70,50,140,.12);
+  --glass:rgba(255,249,240,.86);
+}
+@media (prefers-color-scheme: dark){:root{--bg:#fff9f0;--card:#fff;--ink:#23223f;--sub:#6d6a8c;--line:#e7e1f5;--hair:rgba(70,50,140,.10);--blue:#2f6bff;--blue-d:#4a7dff;--shadow:0 4px 0 rgba(70,50,140,.06),0 10px 24px rgba(70,50,140,.08);--shadow-up:0 6px 0 rgba(70,50,140,.08),0 16px 32px rgba(70,50,140,.12);--glass:rgba(255,249,240,.86)}}
+body,body:not(:has(main.home)):not(:has(main.login)),body:has(main.home),body:has(main.login){
+  --bg:#fff9f0;--card:#fff;--ink:#23223f;--sub:#6d6a8c;--line:#e7e1f5;--hair:rgba(70,50,140,.10);--blue:#2f6bff;--blue-d:#4a7dff;--shadow:0 4px 0 rgba(70,50,140,.06),0 10px 24px rgba(70,50,140,.08);--shadow-up:0 6px 0 rgba(70,50,140,.08),0 16px 32px rgba(70,50,140,.12);
+  color:#23223f;overflow-x:hidden;
+  font-family:"Hiragino Maru Gothic ProN","Hiragino Sans","Yu Gothic UI","Noto Sans JP",-apple-system,BlinkMacSystemFont,sans-serif;letter-spacing:0;
+  background:
+    radial-gradient(420px 320px at 8% -4%,rgba(255,183,3,.30),transparent 70%),
+    radial-gradient(460px 360px at 100% 2%,rgba(76,201,240,.32),transparent 70%),
+    radial-gradient(520px 380px at 50% 105%,rgba(255,143,171,.28),transparent 70%),
+    #fff9f0;
+  background-attachment:fixed;
+}
+h1,h2,h3,.plabel{letter-spacing:0;font-weight:800;color:#23223f}
+main.wide h1,main.xwide h1{font-size:clamp(28px,5vw,40px)}
+.aurora{display:none}
+
+/* ぷくっとしたボタン（下にふちがあって、押すと沈む） */
+button:not(.ghost):not(.mvbtn):not(.linkcell):not(.logout):not(.monthrow):not(.d):not(.on):not(.stepper button):not(.seg button):not(.pnav button):not(.daystrip button):not(.leaveday):not(.lbtn){
+  background:linear-gradient(180deg,#5b9bff,#3b6bff) !important;color:#fff;font-weight:800;border-radius:18px;box-shadow:0 5px 0 #2848c9,0 10px 18px rgba(59,107,255,.28) !important;transition:transform .08s,box-shadow .08s}
+button:not(.ghost):not(.mvbtn):not(.linkcell):not(.logout):not(.monthrow):not(.d):not(.on):not(.stepper button):not(.seg button):not(.pnav button):not(.daystrip button):not(.leaveday):not(.lbtn):active{transform:translateY(4px);box-shadow:0 1px 0 #2848c9 !important}
+button.ghost{background:#fff;border:2px solid var(--line);color:var(--ink);font-weight:700;border-radius:16px;padding:9px 16px}
+button.ghost:hover{background:#f6f2ff !important}
+.seg{background:#f0ebff;border-radius:18px;padding:4px}
+.seg button.on,.seg button.on:hover{background:#fff !important;color:#5b3ff0 !important;box-shadow:0 2px 0 rgba(70,50,140,.12) !important}
+.tabs a{background:#fff;border:2px solid var(--line);color:var(--ink);font-weight:700}
+.tabs a.on{background:linear-gradient(135deg,#ff6b6b,#ff8fab);border-color:transparent;color:#fff;box-shadow:0 3px 0 #d94b66}
+.shell .demo{background:var(--glass);color:var(--ink);border-bottom:2px solid var(--line)}
+.shell .demo .storelink,.shell .demo button.ghost{background:#fff;color:var(--ink);border:2px solid var(--line)}
+.card,.list li,.notice,.scroll{border:2px solid var(--hair);box-shadow:var(--shadow);background:#fff}
+.card{border-radius:24px}.list li{border-radius:20px}
+.chip{background:#f0ebff;color:#5b3ff0;font-weight:700}
+.chip.warn{background:#fff1cc;color:#9a5b00}
+input,select,textarea{border:2px solid var(--line);border-radius:16px;background:#fff;color:var(--ink)}
+input:focus,select:focus,textarea:focus{border-color:#5b9bff;box-shadow:0 0 0 4px rgba(91,155,255,.25)}
+.stats .big,.sttable th{color:inherit}
+.stats .big{background:linear-gradient(135deg,#3b82f6,#8b5cf6);-webkit-background-clip:text;background-clip:text;color:transparent;font-weight:900}
+.bar{height:12px;background:#f0ebff}.bar i{background:linear-gradient(90deg,#06d6a0,#4cc9f0,#8b5cf6)}
+.mday,.cal2 .d{border:2px solid var(--hair);background:#fff}
+.mday.sun{background:#fff1f3}.mday.sat{background:#eef6ff}
+.mday.today{border-color:#ff6b6b;box-shadow:0 0 0 2px #ff6b6b inset}
+.sheet{border-radius:32px 32px 0 0;background:#fff}
+@media (min-width:700px){.sheet{border-radius:32px}}
+
+/* ホーム: あざやかなタイル */
+main.home{max-width:1040px;padding:clamp(28px,7vh,72px) 20px 72px;position:relative}
+.eyebrow{font-size:18px;font-weight:800;color:#ff6b6b;margin:0 0 4px}
+h1.hero{font-size:clamp(34px,7.5vw,60px);font-weight:900;line-height:1.1;margin:0 0 8px;background:linear-gradient(90deg,#ff6b6b,#ffb703 35%,#06d6a0 65%,#4cc9f0);-webkit-background-clip:text;background-clip:text;color:transparent}
+.role{color:var(--sub);font-size:15px;font-weight:700;margin:0 0 28px}
+.tiles{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media (min-width:900px){.tiles{grid-template-columns:repeat(3,1fr)}}
+.tile{position:relative;display:flex;flex-direction:column;gap:6px;min-height:150px;padding:18px;border-radius:30px;text-decoration:none;color:#fff;overflow:hidden;
+  background:linear-gradient(150deg,hsl(var(--h) 95% 64%),hsl(calc(var(--h) + 30) 90% 54%));
+  box-shadow:0 7px 0 hsl(var(--h) 70% 38%),0 16px 28px hsl(var(--h) 80% 50% / .28);transition:transform .12s,box-shadow .12s}
+.tile::after{content:"";position:absolute;right:-26px;top:-26px;width:110px;height:110px;border-radius:50%;background:rgba(255,255,255,.22)}
+.tile .ic{margin-bottom:auto;width:54px;height:54px;border-radius:50%;font-size:28px;background:#fff;box-shadow:0 3px 0 rgba(0,0,0,.12)}
+.tile b{font-size:19px;font-weight:900;line-height:1.2;text-shadow:0 1px 0 rgba(0,0,0,.12)}
+.tile span{font-size:12.5px;font-weight:700;opacity:.95;line-height:1.35}
+@media (hover:hover){.tile:hover{transform:translateY(-3px)}}
+.tile:active{transform:translateY(5px);box-shadow:0 2px 0 hsl(var(--h) 70% 38%)}
+.grouphead{display:inline-block;margin:34px 0 10px;padding:4px 14px;border-radius:999px;background:#fff;border:2px solid var(--line);font-size:14px;font-weight:900;color:#5b3ff0}
+.rows{display:grid;grid-template-columns:1fr;gap:10px;background:none;border:0;overflow:visible}
+@media (min-width:700px){.rows{grid-template-columns:1fr 1fr}}
+.row{display:flex;align-items:center;gap:12px;padding:12px 16px;border-radius:22px;background:#fff;border:2px solid var(--hair);box-shadow:var(--shadow);text-decoration:none;color:var(--ink);transition:transform .1s}
+.row:first-child{border-top:2px solid var(--hair)}
+.row .rt{flex:1;min-width:0}.row b{display:block;font-size:16px;font-weight:800;color:var(--ink)}.row small{display:block;font-size:12px;color:var(--sub);font-weight:600;margin-top:2px}.row i{font-style:normal;font-size:22px;color:#b9b2d6}
+@media (hover:hover){.row:hover{transform:translateY(-2px);background:#fff}}
+.row .ic{width:42px;height:42px;font-size:21px;border-radius:14px;box-shadow:0 3px 0 hsl(var(--h) 60% 40% / .5)}
+.ic{background:linear-gradient(145deg,hsl(var(--h) 95% 66%),hsl(calc(var(--h) + 24) 90% 56%))}
+button.logout{display:block;margin:34px auto 0;width:auto;padding:11px 28px;background:#fff;color:var(--sub);border:2px solid var(--line);border-radius:999px;font-weight:800;box-shadow:none}
+.pushbanner{display:flex;align-items:center;gap:14px;padding:14px 18px;margin:0 0 16px;border-radius:26px;text-decoration:none;color:#23223f;background:linear-gradient(135deg,#ffe3e8,#ffeec7);border:2px solid #ffd0d8;box-shadow:var(--shadow)}
+.pushbanner b{display:block;font-size:16px;font-weight:900}.pushbanner small{display:block;color:#6d6a8c;font-size:12.5px;font-weight:600;margin-top:2px}.pushbanner i{margin-left:auto;font-style:normal;font-size:24px;color:#b9809a}
+
+/* ログイン */
+main.login{max-width:420px;padding:clamp(40px,12vh,120px) 24px 56px;text-align:center}
+h1.wordmark{font-size:clamp(56px,16vw,92px);font-weight:900;margin:0 0 24px;background:none;color:inherit;display:flex;justify-content:center;gap:2px}
+main.login .eyebrow{letter-spacing:.3em;font-size:13px;color:#8b5cf6}
+main.login form{text-align:left;background:#fff;border:2px solid var(--hair);border-radius:30px;padding:8px 22px 22px;box-shadow:var(--shadow-up)}
+main.login label{color:var(--sub);font-weight:800;font-size:13px}
+main.login input{background:#fff;padding:15px 16px;font-size:18px;color:var(--ink)}
+main.login button[type=submit]{margin-top:26px;width:100%;padding:16px;font-size:18px}
+main.login .hint,main.login .sub{color:var(--sub);font-weight:600}
+main.login .err{color:var(--bad);font-weight:700}
+.tile b,.tile span{text-shadow:0 1px 3px rgba(0,0,0,.28)}

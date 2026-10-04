@@ -56,8 +56,7 @@ function Cards() {
   const Icon = ({ href }: { href: string }) => <span className="ic" style={{ ["--h" as string]: ic(href)[1] }} aria-hidden>{ic(href)[0]}</span>;
   return (
     <main className="home">
-      <div className="aurora" aria-hidden />
-      <p className="eyebrow">{hello}</p>
+      <p className="eyebrow">{hello} 👋</p>
       <h1 className="hero">{me.name}</h1>
       <p className="role">{LEVEL_NAMES[me.level]}　·　株式会社ALBUM</p>
       {push && push !== "on" && push !== "unsupported" && !me.displayOnly && (
@@ -65,7 +64,7 @@ function Cards() {
       )}
       <div className="tiles">
         {big.map((c) => (
-          <Link key={c.href} href={c.href} className="tile"><Icon href={c.href} /><b>{c.title}</b><span>{c.sub}</span></Link>
+          <Link key={c.href} href={c.href} className="tile" style={{ ["--h" as string]: ic(c.href)[1] }}><Icon href={c.href} /><b>{c.title}</b><span>{c.sub}</span></Link>
         ))}
       </div>
       {groups.map(([g, list]) => (
