@@ -74,7 +74,8 @@ describe("棚卸し", () => {
     await expect(svc.saveQuantities(db, id.shift1, stId, [{ lineId: a.id, quantity: -1 }])).rejects.toThrow("整数");
     await svc.saveQuantities(db, id.shift1, stId, [{ lineId: a.id, quantity: 3 }]);
     expect((await svc.getStocktake(db, id.shift1, stId))!.counted).toBe(1);
-    await expect(svc.saveQuantities(db, id.staff, stId, [{ lineId: b.id, quantity: 1 }])).rejects.toThrow(svc.ForbiddenError);
+    await svc.saveQuantities(db, id.staff, stId, [{ lineId: a.id, quantity: 3 }]);   // 棚卸しはみんなでやる: 一般のスタッフも、自店の数量を入れられる
+    expect((await svc.getStocktake(db, id.staff, stId))!.counted).toBe(1);
   });
   it("金額 = 仕入値 × 数量、合計(棚卸金額)が出る。未入力の商品があると提出できない", async () => {
     const d = (await svc.getStocktake(db, id.mgr1, stId))!;

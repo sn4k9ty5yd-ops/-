@@ -73,7 +73,7 @@ function Page() {
       <Link href="/home" className="back">← ホーム</Link>
       <h1>売上</h1>
       <SubTabs items={salesTabs(me.level, me.displayOnly)} />
-      <p className="hint">ここは「レジ売上」です。レジの「月間スタッフ売上表」と同じ表で、このお店の人だけが見られます。{canEdit && "レジの表を貼り付けて入れます。"}</p>
+      <p className="hint">ここは「レジ売上」です。レジの「月間スタッフ売上表」と同じ表です。シフト担当が、出勤簿を事務員さんに提出するときに、一緒に入れます。見られるのは、このお店のシフト担当・店長と、事務員さんだけです。{canEdit && "レジの表を貼り付けて入れます。"}</p>
       <div className="toolbar" style={{ flexWrap: "wrap" }}>
         {me.level === 4 && stores.length > 1 && <select aria-label="お店" value={storeId} onChange={(e) => setStoreId(e.target.value)}>{stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select>}
         <button className="ghost" onClick={() => setYm(addMonth(ym, -1))} aria-label="前の月">‹</button>
@@ -157,4 +157,9 @@ function Page() {
     </main>
   );
 }
-export default function RegisterSalesPage() { return <MeProvider><Page /></MeProvider>; }
+function Gate() {
+  const { me } = useMe();
+  if (me.level < 2 || me.displayOnly) return <main className="wide"><Link href="/home" className="back">← ホーム</Link><h1>売上</h1><p className="hint">売上は、シフト担当が出勤簿と一緒に事務員さんへ提出します。この画面は、シフト担当・店長・事務員さんだけが使います。</p></main>;
+  return <Page />;
+}
+export default function RegisterSalesPage() { return <MeProvider><Gate /></MeProvider>; }

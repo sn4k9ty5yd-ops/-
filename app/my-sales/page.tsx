@@ -139,4 +139,9 @@ function Page() {
     </main>
   );
 }
-export default function MySalesPage() { return <MeProvider><Page /></MeProvider>; }
+function Gate() {
+  const { me } = useMe();
+  if (me.level < 2) return <main><Link href="/home" className="back">← ホーム</Link><h1>売上</h1><p className="hint">売上は、シフト担当が出勤簿と一緒に事務員さんへ提出します。この画面は使いません。</p></main>;
+  return <Page />;
+}
+export default function MySalesPage() { return <MeProvider><Gate /></MeProvider>; }

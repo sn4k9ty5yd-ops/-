@@ -87,7 +87,7 @@ describe("棚卸しを始める・数量を入れる", () => {
       expect(await fails(`update stocktake_lines set name = '改名' where product_id='${P1}'`)).toBe(true);
       expect(await fails(`delete from stocktake_lines where product_id='${P1}'`)).toBe(true);
     });
-    await as(U.staff1, async () => { expect(await rows("select 1 from stocktake_lines")).toHaveLength(0); expect(await fails(`update stocktake_lines set quantity = 9`)).toBe(true); });
+    await as(U.staff1, async () => { expect((await rows("select 1 from stocktake_lines")).length).toBeGreaterThan(0); expect(await fails(`update stocktake_lines set quantity = quantity`)).toBe(false); });   // みんなでやる: 一般のスタッフも見られて、数量を入れられる
   });
   it("金額 = 仕入値 × 数量（未入力は0円）", async () => {
     await as(U.mgr1, async () => {

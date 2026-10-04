@@ -14,7 +14,7 @@ const TABS: { href: string; label: string; min: number; sub?: boolean; owner?: b
   { href: "/admin/shifts", label: "出勤簿", min: 2, sub: true },
   { href: "/admin/staff", label: "スタッフ", min: 3 },
   { href: "/admin/stock", label: "在庫", min: 99 },
-  { href: "/admin/stocktake", label: "棚卸し", min: 2 },
+  { href: "/admin/stocktake", label: "棚卸し", min: 1 },
   { href: "/admin/products", label: "商品", min: 3 },
   { href: "/admin/stores", label: "店舗の編集", min: 4 },
   { href: "/admin/settings", label: "設定", min: 3 },

@@ -178,8 +178,9 @@ describe("レジ売上（月間スタッフ売上表）", () => {
     expect(g.rows[0].membershipId).toBe(u.staffA);       // 名前（空白ぬき）が合う人にひもづく
     expect(g.rows[1].membershipId).toBeNull();
   });
-  it("見られるのは、そのお店の人と事務員さんだけ。他店の人（店長でも）は見えない", async () => {
-    expect((await svc.getRegisterSales(d, u.staffA, sid.a, "2026-09")).rows).toHaveLength(2);   // 同じお店のスタッフ
+  it("見られるのは、そのお店のシフト担当以上と事務員さんだけ。一般のスタッフ・他店の人（店長でも）は見えない", async () => {
+    expect((await svc.getRegisterSales(d, u.staffA, sid.a, "2026-09")).rows).toHaveLength(0);   // 同じお店でも、一般のスタッフには見せない
+    expect((await svc.getRegisterSales(d, u.maker, sid.a, "2026-09")).rows).toHaveLength(2);    // 同じお店のシフト担当
     expect((await svc.getRegisterSales(d, u.office, sid.a, "2026-09")).rows).toHaveLength(2);   // 事務員さん
     expect((await svc.getRegisterSales(d, u.mgrB, sid.a, "2026-09")).status).toBe("none");      // 他店の店長
     expect((await svc.getRegisterSales(d, u.staffB, sid.a, "2026-09")).rows).toHaveLength(0);   // 他店のスタッフ
@@ -189,7 +190,7 @@ describe("レジ売上（月間スタッフ売上表）", () => {
     await svc.saveRegisterSales(d, u.maker, sid.a, "2026-09", 27, [row("山田太郎", 200)]);        // 入れ直し
     expect((await svc.getRegisterSales(d, u.maker, sid.a, "2026-09")).rows).toHaveLength(1);
     await svc.confirmRegisterSales(d, u.office, sid.a, "2026-09", true);
-    expect((await svc.getRegisterSales(d, u.staffA, sid.a, "2026-09")).status).toBe("confirmed");
+    expect((await svc.getRegisterSales(d, u.maker, sid.a, "2026-09")).status).toBe("confirmed");
     await expect(svc.saveRegisterSales(d, u.maker, sid.a, "2026-09", 27, [row("山田太郎", 300)])).rejects.toThrow("確認済み");
     await expect(svc.confirmRegisterSales(d, u.maker, sid.a, "2026-09", false)).rejects.toThrow(svc.ForbiddenError);
     await svc.confirmRegisterSales(d, u.office, sid.a, "2026-09", false);
