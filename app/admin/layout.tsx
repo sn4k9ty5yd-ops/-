@@ -19,6 +19,7 @@ const TABS = [
   { href: "/admin/periods", label: "シフト期間", min: 3 },
   { href: "/admin/settings", label: "設定", min: 3 },
   { href: "/admin/notices", label: "お知らせ文", min: 4 },
+  { href: "/admin/records", label: "税務署用の書面", min: 4 },
 ];
 
 function Shell({ children }: { children: React.ReactNode }) {
@@ -38,7 +39,7 @@ function Shell({ children }: { children: React.ReactNode }) {
       <nav className="tabs">
         {TABS.filter((t) => me.level >= t.min).map((t) => <Link key={t.href} href={t.href} className={path === t.href ? "on" : ""}>{t.label}</Link>)}
       </nav>
-      <main className={path.startsWith("/admin/shifts") || path.startsWith("/admin/attendance") || path.startsWith("/admin/stocktake") || path.startsWith("/admin/stock") || path.startsWith("/admin/products") || path.startsWith("/admin/requests") ? "xwide" : "wide"}>{allowed ? children : <p className="hint">この画面を使う権限がありません。<Link href="/home">ホームへ戻る</Link></p>}</main>
+      <main className={path.startsWith("/admin/shifts") || path.startsWith("/admin/attendance") || path.startsWith("/admin/stocktake") || path.startsWith("/admin/stock") || path.startsWith("/admin/products") || path.startsWith("/admin/requests") || path.startsWith("/admin/records") ? "xwide" : "wide"}>{allowed ? children : <p className="hint">この画面を使う権限がありません。<Link href="/home">ホームへ戻る</Link></p>}</main>
     </div>
   );
 }

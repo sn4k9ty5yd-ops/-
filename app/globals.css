@@ -506,3 +506,17 @@ main.login .hint,main.login .sub{color:var(--sub);font-weight:600}
 main.login .err{color:var(--bad);font-weight:700}
 .tile b,.tile span{text-shadow:0 1px 3px rgba(0,0,0,.28)}
 .formsec{display:inline-block;margin:14px 0 2px;padding:3px 12px;border-radius:999px;background:#f0ebff;color:#5b3ff0;font-size:13px;font-weight:900}
+
+/* 税務署用の書面（印刷用） */
+.doc{background:#fff;color:#000;border:2px solid var(--hair);border-radius:16px;padding:28px;margin-top:16px}
+.doccover{margin-bottom:24px;page-break-after:always}.docco{font-size:18px;font-weight:800;margin:0}.doccover h1{font-size:32px;margin:6px 0 18px}
+.covertable{border-collapse:collapse;width:100%;font-size:14px}.covertable th{width:140px;text-align:left;vertical-align:top;padding:8px;border-bottom:1px solid #ccc;color:#444}.covertable td{padding:8px;border-bottom:1px solid #ccc}
+.docsec h2{font-size:18px;margin:26px 0 6px;border-bottom:2px solid #000;padding-bottom:4px;break-after:avoid}
+.doctable{border-collapse:collapse;width:100%;font-size:11px;margin-top:6px}.doctable th,.doctable td{border:1px solid #999;padding:3px 5px;text-align:left;vertical-align:top;word-break:break-all}.doctable th{background:#eee;white-space:nowrap}.doctable td.r{text-align:right;white-space:nowrap}
+.doctable tr{break-inside:avoid}.docfoot{margin-top:28px;border-top:1px solid #000;padding-top:8px;font-size:12px;text-align:center}
+@media print{
+  body{background:#fff !important}
+  .doc{border:0;padding:0;margin:0;border-radius:0}
+  .doctable{font-size:8.5px}.doctable thead{display:table-header-group}
+  @page{size:A4 landscape;margin:10mm}
+}
