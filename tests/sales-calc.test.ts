@@ -18,3 +18,12 @@ describe("売上の計算", () => {
     expect(pct1(300000, 1200000)).toBe(25);
   });
 });
+
+import { calcCommission } from "../lib/sales-calc";
+describe("歩合", () => {
+  it("店販10%・着付け25%・メイク20%・ヘッドスパ20%。円未満は切り捨て", () => {
+    const r = calcCommission({ retail: 45000, kitsukeSales: 60000, makeupSales: 12345, spaSales: 30000 }, { retail: 10, kitsuke: 25, makeup: 20, spa: 20 });
+    expect(r.items.map((i) => i.amount)).toEqual([4500, 15000, 2469, 6000]);
+    expect(r.total).toBe(27969);
+  });
+});

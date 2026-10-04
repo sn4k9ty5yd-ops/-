@@ -9,3 +9,13 @@ export const achievement = (total: number, target: number | null) => (target && 
 export const yoy = (cur: number, prev: number | null | undefined) => (prev && prev > 0 ? Math.round(((cur - prev) / prev) * 1000) / 10 : null);
 export const yen = (n: number) => `${n.toLocaleString("ja-JP")}円`;
 export const signed = (n: number) => `${n > 0 ? "+" : ""}${n}%`;
+
+export interface CommissionInput { retail: number; kitsukeSales: number; makeupSales: number; spaSales: number }
+export interface CommissionRates { retail: number; kitsuke: number; makeup: number; spa: number }
+export const COMMISSION_LABELS = { retail: "店販", kitsuke: "着付け", makeup: "メイク", spa: "ヘッドスパ" } as const;
+/** 歩合の目安（売上 × 割合。1項目ごとに、円未満は切り捨て） */
+export function calcCommission(v: CommissionInput, rates: CommissionRates): { items: { key: keyof CommissionRates; label: string; sales: number; rate: number; amount: number }[]; total: number } {
+  const src = { retail: v.retail, kitsuke: v.kitsukeSales, makeup: v.makeupSales, spa: v.spaSales };
+  const items = (Object.keys(src) as (keyof CommissionRates)[]).map((key) => ({ key, label: COMMISSION_LABELS[key], sales: src[key], rate: rates[key], amount: Math.floor((src[key] * rates[key]) / 100) }));
+  return { items, total: items.reduce((s, i) => s + i.amount, 0) };
+}

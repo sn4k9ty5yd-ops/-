@@ -33,7 +33,7 @@ function Cards() {
     { href: "/admin/products", title: "商品一覧", sub: "店販・業務の商品と仕入値", show: me.level >= 3 },
     { href: "/admin/shifts", title: "シフトを作る", sub: "日ごと・人ごと・一覧表で入力します", show: me.level >= 2 },
     { big: true, href: "/my-sales", title: "自分の売上", sub: "売上・客単価・前年比・目標・店内ランキング", show: !me.displayOnly },
-    { href: "/sales", title: "売上（指名売上）", sub: "月末の売上を入れる・目標・お店ごとの集計", show: me.level >= 3 },
+    { href: "/sales", title: "売上（指名売上）", sub: "提出の確認・歩合をつける・目標・提出期限", show: me.level >= 2 },
     { big: true, href: "/leave", title: leaveTodo ? `有給の申請（確認待ち${leaveTodo}件）` : "有給の申請", sub: leaveTodo ? "店長・事務員さんの確認が必要な申請があります" : "年2回の有給の提出と、変更の申請", show: true },
     { big: true, href: "/requests", title: "希望休を出す", sub: "休みたい日をえらびます", show: true },
     { href: "/admin/requests", title: "みんなの希望休", sub: "スタッフの希望休を一覧で見ます", show: me.level >= 2 },

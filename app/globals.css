@@ -505,3 +505,4 @@ main.login button[type=submit]{margin-top:26px;width:100%;padding:16px;font-size
 main.login .hint,main.login .sub{color:var(--sub);font-weight:600}
 main.login .err{color:var(--bad);font-weight:700}
 .tile b,.tile span{text-shadow:0 1px 3px rgba(0,0,0,.28)}
+.formsec{display:inline-block;margin:14px 0 2px;padding:3px 12px;border-radius:999px;background:#f0ebff;color:#5b3ff0;font-size:13px;font-weight:900}

@@ -2003,35 +2003,61 @@ export async function leaveOverview(db: Database, userId: string, windowId: stri
 
 
 // ------------------------------------------------------------------ 指名売上（月ごと・個人ごと）
-export interface SalesValues { total: number; free: number; nominated: number; retail: number; customers: number; newCustomers: number; repeatCustomers: number }
+export interface SalesValues {
+  total: number; free: number; nominated: number; retail: number; retailCount: number; customers: number; newCustomers: number; repeatCustomers: number;
+  kitsukeCount: number; kitsukeSales: number; makeupCount: number; makeupSales: number; spaCount: number; spaSales: number;
+}
 export type SalesStatus = "draft" | "submitted" | "manager_ok" | "office_ok" | "returned";
 export const SALES_STATUS_LABEL: Record<SalesStatus, string> = {
   draft: "下書き（まだ提出していません）", submitted: "提出済み（店長の確認待ち）", manager_ok: "店長確認済み（事務員さんの確認待ち）", office_ok: "確定", returned: "差し戻し（直して、もう一度提出）",
 };
-export interface SalesRow extends SalesValues { membershipId: string; name: string; source: string | null; status: SalesStatus | null; returnComment: string | null }
-export const EMPTY_SALES: SalesValues = { total: 0, free: 0, nominated: 0, retail: 0, customers: 0, newCustomers: 0, repeatCustomers: 0 };
+export interface SalesRow extends SalesValues { membershipId: string; name: string; source: string | null; status: SalesStatus | null; returnComment: string | null; commission: number | null }
+export const EMPTY_SALES: SalesValues = { total: 0, free: 0, nominated: 0, retail: 0, retailCount: 0, customers: 0, newCustomers: 0, repeatCustomers: 0, kitsukeCount: 0, kitsukeSales: 0, makeupCount: 0, makeupSales: 0, spaCount: 0, spaSales: 0 };
+export interface SalesRates { retail: number; kitsuke: number; makeup: number; spa: number }
+export const DEFAULT_SALES_RATES: SalesRates = { retail: 10, kitsuke: 25, makeup: 20, spa: 20 };
 const monthStart = (m: string) => { if (!/^\d{4}-\d{2}(-01)?$/.test(m)) throw new Error("月が正しくありません"); return `${m.slice(0, 7)}-01`; };
 const prevYear = (m: string) => `${Number(m.slice(0, 4)) - 1}${m.slice(4)}`;
-const SALES_COLS = `x.total_sales as total, x.free_sales as free, x.nominated_sales as nominated, x.retail_sales as retail, x.customers, x.new_customers as "newCustomers", x.repeat_customers as "repeatCustomers"`;
+const SALES_COLS = `x.total_sales as total, x.free_sales as free, x.nominated_sales as nominated, x.retail_sales as retail, x.retail_count as "retailCount", x.customers, x.new_customers as "newCustomers", x.repeat_customers as "repeatCustomers",
+  x.kitsuke_count as "kitsukeCount", x.kitsuke_sales as "kitsukeSales", x.makeup_count as "makeupCount", x.makeup_sales as "makeupSales", x.spa_count as "spaCount", x.spa_sales as "spaSales"`;
+const pickVals = (r: SalesValues): SalesValues => ({ total: r.total, free: r.free, nominated: r.nominated, retail: r.retail, retailCount: r.retailCount, customers: r.customers, newCustomers: r.newCustomers, repeatCustomers: r.repeatCustomers, kitsukeCount: r.kitsukeCount, kitsukeSales: r.kitsukeSales, makeupCount: r.makeupCount, makeupSales: r.makeupSales, spaCount: r.spaCount, spaSales: r.spaSales });
+const lastDayOf = (m: string) => { const [y, mo] = [Number(m.slice(0, 4)), Number(m.slice(5, 7))]; return `${m.slice(0, 7)}-${String(new Date(Date.UTC(y, mo, 0)).getUTCDate()).padStart(2, "0")}`; };
+export async function getSalesRates(db: Database, userId: string): Promise<SalesRates> {
+  const rows = (await asUser(db, userId, (q) => q.query<{ item: keyof SalesRates; percent: string }>("select item, percent::text as percent from sales_rates"))).rows;
+  const out = { ...DEFAULT_SALES_RATES };
+  for (const r of rows) out[r.item] = Number(r.percent);
+  return out;
+}
+/** 歩合の割合を変える（管理者） */
+export async function setSalesRates(db: Database, userId: string, rates: SalesRates): Promise<void> {
+  const me = await getMe(db, userId);
+  if (!me || me.level < 4) throw new ForbiddenError();
+  for (const [k, v] of Object.entries(rates)) if (!["retail", "kitsuke", "makeup", "spa"].includes(k) || typeof v !== "number" || v < 0 || v > 100) throw new Error("割合は、0〜100%で入れてください");
+  await asUser(db, userId, async (q) => { for (const [k, v] of Object.entries(rates)) await q.query("insert into sales_rates (company_id, item, percent) values ($1,$2,$3) on conflict (company_id, item) do update set percent = excluded.percent, updated_at = now()", [me.companyId, k, v]); });
+}
 
 /** 店長・管理者の入力画面: そのお店の全員（0円の人も）の、その月の数字と、前年同月の数字・目標 */
 export async function listSalesMonth(db: Database, userId: string, storeId: string, month: string): Promise<{
   month: string; rows: SalesRow[]; prev: Record<string, SalesValues>; storeTarget: number | null; targets: Record<string, number>; board: boolean; images: { id: string; at: string; by: string | null }[];
+  rates: SalesRates; dueOn: string; dueIsDefault: boolean;
 }> {
   const m = monthStart(month);
   return asUser(db, userId, async (q) => {
     const people = (await q.query<{ id: string; name: string }>("select id, name from memberships where store_id = $1 and status = 'active' and not display_only and level < 4 order by employee_code", [storeId])).rows;
-    const cur = (await q.query<SalesValues & { mid: string; source: string; status: SalesStatus; rc: string | null }>(`select x.membership_id as mid, x.source, x.status, x.return_comment as rc, ${SALES_COLS} from sales_stats x where x.store_id = $1 and x.month = $2`, [storeId, m])).rows;
+    const cur = (await q.query<SalesValues & { mid: string; source: string; status: SalesStatus; rc: string | null; ca: number | null }>(`select x.membership_id as mid, x.source, x.status, x.return_comment as rc, x.commission_amount as ca, ${SALES_COLS} from sales_stats x where x.store_id = $1 and x.month = $2`, [storeId, m])).rows;
     const prev = (await q.query<SalesValues & { mid: string }>(`select x.membership_id as mid, ${SALES_COLS} from sales_stats x where x.store_id = $1 and x.month = $2`, [storeId, prevYear(m)])).rows;
     const tg = (await q.query<{ membership_id: string | null; target: number }>("select membership_id, target from sales_targets where store_id = $1 and month = $2", [storeId, m])).rows;
     const board = (await q.query<{ b: boolean }>("select sales_board_public as b from stores where id = $1", [storeId])).rows[0]?.b ?? true;
     const images = (await q.query<{ id: string; at: string; by: string | null }>(
       "select i.id, i.created_at as at, u.name as by from sales_images i left join memberships u on u.id = i.created_by where i.store_id = $1 and i.month = $2 order by i.created_at", [storeId, m])).rows;
     const byId = new Map(cur.map((r) => [r.mid, r]));
+    const rates = { ...DEFAULT_SALES_RATES };
+    for (const x of (await q.query<{ item: keyof SalesRates; percent: string }>("select item, percent::text as percent from sales_rates")).rows) rates[x.item] = Number(x.percent);
+    const dl = (await q.query<{ due_on: string }>("select due_on::text as due_on from sales_deadlines where store_id = $1 and month = $2", [storeId, m])).rows[0];
     return {
       month: m, board, images,
-      rows: people.map((p) => { const r = byId.get(p.id); return { membershipId: p.id, name: p.name, source: r?.source ?? null, status: r?.status ?? null, returnComment: r?.rc ?? null, ...(r ? { total: r.total, free: r.free, nominated: r.nominated, retail: r.retail, customers: r.customers, newCustomers: r.newCustomers, repeatCustomers: r.repeatCustomers } : EMPTY_SALES) }; }),
-      prev: Object.fromEntries(prev.map((r) => [r.mid, { total: r.total, free: r.free, nominated: r.nominated, retail: r.retail, customers: r.customers, newCustomers: r.newCustomers, repeatCustomers: r.repeatCustomers }])),
+      rows: people.map((p) => { const r = byId.get(p.id); return { membershipId: p.id, name: p.name, source: r?.source ?? null, status: r?.status ?? null, returnComment: r?.rc ?? null, commission: r?.ca ?? null, ...(r ? pickVals(r) : EMPTY_SALES) }; }),
+      prev: Object.fromEntries(prev.map((r) => [r.mid, pickVals(r)])),
+      rates, dueOn: dl?.due_on ?? lastDayOf(m), dueIsDefault: !dl,
       storeTarget: tg.find((t) => t.membership_id === null)?.target ?? null,
       targets: Object.fromEntries(tg.filter((t) => t.membership_id).map((t) => [t.membership_id as string, t.target])),
     };
@@ -2059,15 +2085,17 @@ export async function saveSales(db: Database, userId: string, storeId: string, m
         if (st === "office_ok" && !importFinal) throw new Error("locked");
         const ex = await q.query(
           `update sales_stats set total_sales=$3, free_sales=$4, nominated_sales=$5, retail_sales=$6, customers=$7, new_customers=$8, repeat_customers=$9, source=$10, updated_by=$11, updated_at=now(),
+                  retail_count=$14, kitsuke_count=$15, kitsuke_sales=$16, makeup_count=$17, makeup_sales=$18, spa_count=$19, spa_sales=$20,
                   status = case when $13::boolean then 'office_ok' when status in ('draft','returned') then 'submitted' else status end,
                   submitted_at = case when status in ('draft','returned') then now() else submitted_at end
             where membership_id = $1 and month = $2 and store_id = $12 returning id`,
-          [r.membershipId, m, v.total, v.free, v.nominated, v.retail, v.customers, v.newCustomers, v.repeatCustomers, source, userId, storeId, importFinal]);
+          [r.membershipId, m, v.total, v.free, v.nominated, v.retail, v.customers, v.newCustomers, v.repeatCustomers, source, userId, storeId, importFinal, v.retailCount, v.kitsukeCount, v.kitsukeSales, v.makeupCount, v.makeupSales, v.spaCount, v.spaSales]);
         if (ex.rows.length === 0)
           await q.query(
-            `insert into sales_stats (company_id, store_id, membership_id, month, total_sales, free_sales, nominated_sales, retail_sales, customers, new_customers, repeat_customers, source, updated_by, status, submitted_at)
-             values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,now())`,
-            [me.companyId, storeId, r.membershipId, m, v.total, v.free, v.nominated, v.retail, v.customers, v.newCustomers, v.repeatCustomers, source, userId, importFinal ? "office_ok" : "submitted"]);
+            `insert into sales_stats (company_id, store_id, membership_id, month, total_sales, free_sales, nominated_sales, retail_sales, customers, new_customers, repeat_customers, source, updated_by, status, submitted_at,
+                retail_count, kitsuke_count, kitsuke_sales, makeup_count, makeup_sales, spa_count, spa_sales)
+             values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,now(),$15,$16,$17,$18,$19,$20,$21)`,
+            [me.companyId, storeId, r.membershipId, m, v.total, v.free, v.nominated, v.retail, v.customers, v.newCustomers, v.repeatCustomers, source, userId, importFinal ? "office_ok" : "submitted", v.retailCount, v.kitsukeCount, v.kitsukeSales, v.makeupCount, v.makeupSales, v.spaCount, v.spaSales]);
       }
     });
   } catch (e) {
@@ -2081,7 +2109,7 @@ export async function saveSales(db: Database, userId: string, storeId: string, m
 /** 本人の記入（下書き・差し戻しのときだけ）。まだ提出ではない */
 export async function saveMySales(db: Database, userId: string, month: string, v: SalesValues): Promise<void> {
   const m = monthStart(month); checkSales(v);
-  try { await asUser(db, userId, (q) => q.query("select public.sales_save_own($1::date,$2,$3,$4,$5,$6,$7,$8)", [m, v.total, v.free, v.nominated, v.retail, v.customers, v.newCustomers, v.repeatCustomers])); }
+  try { await asUser(db, userId, (q) => q.query("select public.sales_save_own($1::date, $2::jsonb)", [m, JSON.stringify(v)])); }
   catch (e) { if (/locked/.test((e as Error).message)) throw new Error("提出したあとは直せません（直したいときは、店長に差し戻してもらってください）"); throw new ForbiddenError(); }
 }
 
@@ -2140,7 +2168,7 @@ export async function setSalesTarget(db: Database, userId: string, storeId: stri
 }
 
 export interface MySales {
-  month: string; status: SalesStatus | null; returnComment: string | null; mine: (SalesValues & { source: string }) | null; prev: SalesValues | null;
+  month: string; status: SalesStatus | null; returnComment: string | null; commission: number | null; rates: SalesRates; dueOn: string; mine: (SalesValues & { source: string }) | null; prev: SalesValues | null;
   store: { total: number; customers: number }; storePrev: { total: number; customers: number };
   target: number | null; storeTarget: number | null;
   board: { membershipId: string; name: string; total: number; customers: number; rank: number }[];
@@ -2152,7 +2180,7 @@ export async function getMySales(db: Database, userId: string, month: string): P
   const me = await getMe(db, userId);
   if (!me) throw new ForbiddenError();
   return asUser(db, userId, async (q) => {
-    const one = async (mm: string) => (await q.query<SalesValues & { source: string; status: SalesStatus; rc: string | null }>(`select x.source, x.status, x.return_comment as rc, ${SALES_COLS} from sales_stats x where x.membership_id = $1 and x.month = $2`, [userId, mm])).rows[0] ?? null;
+    const one = async (mm: string) => (await q.query<SalesValues & { source: string; status: SalesStatus; rc: string | null; ca: number | null }>(`select x.source, x.status, x.return_comment as rc, x.commission_amount as ca, ${SALES_COLS} from sales_stats x where x.membership_id = $1 and x.month = $2`, [userId, mm])).rows[0] ?? null;
     const tot = async (mm: string) => (await q.query<{ total: number; customers: number }>("select total_sales as total, customers from public.sales_store_total($1, $2::date)", [me.storeId, mm])).rows[0] ?? { total: 0, customers: 0 };
     const tg = (await q.query<{ membership_id: string | null; target: number }>("select membership_id, target from sales_targets where store_id = $1 and month = $2 and (membership_id is null or membership_id = $3)", [me.storeId, m, userId])).rows;
     const board = (await q.query<{ membership_id: string; name: string; total_sales: number; customers: number; rank: number }>("select * from public.sales_board($1, $2::date)", [me.storeId, m])).rows;
@@ -2160,8 +2188,11 @@ export async function getMySales(db: Database, userId: string, month: string): P
       "select to_char(month, 'YYYY-MM') as month, total_sales as total, customers from sales_stats where membership_id = $1 and month >= ($2::date - interval '23 months') and month <= $2::date order by month", [userId, m])).rows;
     const prevRow = await one(prevYear(m));
     const mineRow = await one(m);
+    const rates = { ...DEFAULT_SALES_RATES };
+    for (const x of (await q.query<{ item: keyof SalesRates; percent: string }>("select item, percent::text as percent from sales_rates")).rows) rates[x.item] = Number(x.percent);
+    const dl = (await q.query<{ due_on: string }>("select due_on::text as due_on from sales_deadlines where store_id = $1 and month = $2", [me.storeId, m])).rows[0];
     return {
-      month: m, status: mineRow?.status ?? null, returnComment: mineRow?.rc ?? null, mine: mineRow, prev: prevRow, store: await tot(m), storePrev: await tot(prevYear(m)),
+      month: m, status: mineRow?.status ?? null, returnComment: mineRow?.rc ?? null, commission: mineRow?.ca ?? null, rates, dueOn: dl?.due_on ?? lastDayOf(m), mine: mineRow, prev: prevRow, store: await tot(m), storePrev: await tot(prevYear(m)),
       target: tg.find((t) => t.membership_id === userId)?.target ?? null, storeTarget: tg.find((t) => t.membership_id === null)?.target ?? null,
       board: board.map((b) => ({ membershipId: b.membership_id, name: b.name, total: b.total_sales, customers: b.customers, rank: b.rank })), series,
     };
@@ -2188,4 +2219,80 @@ export async function getSalesImage(db: Database, userId: string, id: string): P
 export async function setSalesBoardPublic(db: Database, userId: string, storeId: string, on: boolean): Promise<void> {
   const r = await asUser(db, userId, (q) => q.query("update stores set sales_board_public = $2 where id = $1 returning id", [storeId, on])).catch(() => ({ rows: [] }));
   if (r.rows.length === 0) throw new ForbiddenError();
+}
+
+
+/** 歩合をつける（店長・シフト担当・管理者）。amount=null で取り消す。提出されたあと、確定の前まで */
+export async function setSalesCommission(db: Database, userId: string, memberId: string, month: string, amount: number | null): Promise<void> {
+  const m = monthStart(month);
+  if (amount !== null && (!Number.isInteger(amount) || amount < 0 || amount > 1_000_000_000)) throw new Error("歩合は、0円以上の整数で入れてください");
+  try { await asUser(db, userId, (q) => q.query("select public.sales_set_commission($1, $2::date, $3)", [memberId, m, amount])); }
+  catch (e) {
+    const msg = (e as Error).message ?? "";
+    if (/not submitted/.test(msg)) throw new Error("提出されたあとに、歩合をつけられます");
+    if (/locked/.test(msg)) throw new Error("確定したあとは、歩合を変えられません（差し戻してから）");
+    if (/own/.test(msg)) throw new Error("自分の歩合は、自分ではつけられません");
+    throw new ForbiddenError();
+  }
+  if (amount !== null) await leaveNotify(db, (await getMe(db, userId))!.companyId, [memberId], `${jpMonth(m)}の歩合が決まりました`, `${amount.toLocaleString("ja-JP")}円`, "/my-sales");
+}
+
+/** 提出期限を決める（店長=自店・管理者=全店）。null で「月末」に戻す */
+export async function setSalesDeadline(db: Database, userId: string, storeId: string, month: string, dueOn: string | null): Promise<void> {
+  const m = monthStart(month);
+  if (dueOn !== null && !/^\d{4}-\d{2}-\d{2}$/.test(dueOn)) throw new Error("日付が正しくありません");
+  const me = await getMe(db, userId);
+  if (!me) throw new ForbiddenError();
+  try {
+    await asUser(db, userId, async (q) => {
+      await q.query("delete from sales_deadlines where store_id = $1 and month = $2", [storeId, m]);
+      if (dueOn) await q.query("insert into sales_deadlines (store_id, company_id, month, due_on, updated_by) values ($1,$2,$3,$4,$5)", [storeId, me.companyId, m, dueOn, userId]);
+    });
+  } catch { throw new ForbiddenError(); }
+}
+
+let lastSalesRemind = 0;
+/**
+ * 売上の提出期限の通知（毎日9:00ごろ以降・外から5分ごとに呼ばれる。同じものは1回だけ）
+ *  start : 月はじめ（1日）に、全員へ「期限は◯日です」
+ *  before: 期限の前日、まだ出していない人へ
+ *  due   : 期限の日、まだ出していない人へ
+ *  late  : 期限の翌日、期限を過ぎた人へ＋店長・事務員さんへ「未提出が◯人」
+ */
+export async function runSalesReminders(db: Database, force = false, at?: string): Promise<number> {
+  if (!force && Date.now() - lastSalesRemind < 120_000) return 0;
+  lastSalesRemind = Date.now();
+  const now = at ?? new Date(Date.now() + 9 * 3600_000).toISOString();
+  const today = now.slice(0, 10), hhmm = now.slice(11, 16);
+  if (hhmm < "09:00") return 0;
+  const addD = (d: string, n: number) => { const t = new Date(d + "T00:00:00Z"); t.setUTCDate(t.getUTCDate() + n); return t.toISOString().slice(0, 10); };
+  const thisM = `${today.slice(0, 7)}-01`;
+  const prevM = `${addD(thisM, -1).slice(0, 7)}-01`;
+  const stores = (await db.query<{ id: string; name: string; company_id: string }>("select id, name, company_id from stores where status = 'active'")).rows;
+  let sent = 0;
+  for (const st of stores) {
+    for (const month of [thisM, prevM]) {
+      const due = (await db.query<{ due_on: string }>("select due_on::text as due_on from sales_deadlines where store_id = $1 and month = $2", [st.id, month])).rows[0]?.due_on ?? lastDayOf(month);
+      const kinds: [string, boolean][] = [["start", month === thisM && today === month], ["before", today === addD(due, -1)], ["due", today === due], ["late", today === addD(due, 1)]];
+      for (const [kind, hit] of kinds) {
+        if (!hit) continue;
+        const claim = await db.query("insert into sales_reminder_log (store_id, month, kind, sent_on) values ($1,$2,$3,$4::date) on conflict do nothing returning kind", [st.id, month, kind, today]);
+        if (claim.rows.length === 0) continue;
+        const people = (await db.query<{ id: string; name: string; status: SalesStatus | null }>(
+          `select m.id, m.name, x.status from memberships m left join sales_stats x on x.membership_id = m.id and x.month = $2
+            where m.store_id = $1 and m.status = 'active' and not m.display_only and m.level < 4`, [st.id, month])).rows;
+        const notYet = people.filter((p) => !p.status || p.status === "draft" || p.status === "returned");
+        const label = jpMonth(month), dueLabel = md(due);
+        if (kind === "start") { await leaveNotify(db, st.company_id, people.map((p) => p.id), `${label}の売上の提出期限は ${dueLabel} です`, "自分の売上を記入して、期限までに提出してください。", "/my-sales"); sent += people.length; }
+        else if (kind === "before" || kind === "due") { await leaveNotify(db, st.company_id, notYet.map((p) => p.id), kind === "before" ? `${label}の売上の提出は、明日（${dueLabel}）までです` : `${label}の売上の提出は、今日（${dueLabel}）までです`, "記入して「提出する」を押してください。", "/my-sales"); sent += notYet.length; }
+        else if (kind === "late" && notYet.length > 0) {
+          await leaveNotify(db, st.company_id, notYet.map((p) => p.id), `${label}の売上の提出期限（${dueLabel}）を過ぎています`, "なるべく早く、記入して提出してください。", "/my-sales");
+          const mgrs = [...(await managersOf(db, st.id, st.company_id)), ...(await officeIds(db, st.company_id))];
+          await leaveNotify(db, st.company_id, mgrs, `${st.name}：${label}の売上が未提出です（${notYet.length}人）`, notYet.map((p) => p.name).join("、").slice(0, 120), "/sales");
+          sent += notYet.length;
+        }
+      }
+    }
+  }
+  return sent;
 }

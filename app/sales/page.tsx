@@ -2,9 +2,10 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, MeProvider, useAutoRefresh, useMe } from "@/lib/client";
-import { achievement, newRate, pct1, signed, unitPrice, yen, yoy } from "@/lib/sales-calc";
+import { md } from "@/lib/labels";
+import { achievement, calcCommission, newRate, pct1, signed, unitPrice, yen, yoy } from "@/lib/sales-calc";
 import { todayJst } from "@/lib/period-nav";
-import { SALES_STATUS_LABEL, type SalesRow, type SalesStatus, type SalesValues, type StoreRow } from "@/lib/service";
+import { SALES_STATUS_LABEL, type SalesRates, type SalesRow, type SalesStatus, type SalesValues, type StoreRow } from "@/lib/service";
 
 const addMonth = (ym: string, n: number) => { const [y, m] = ym.split("-").map(Number); const t = new Date(Date.UTC(y, m - 1 + n, 1)); return `${t.getUTCFullYear()}-${String(t.getUTCMonth() + 1).padStart(2, "0")}`; };
 const toInt = (raw: string) => Number(raw.replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0)).replace(/[^\d]/g, "") || "0");
@@ -14,8 +15,8 @@ async function shrink(file: File): Promise<{ mime: string; base64: string }> {
   c.getContext("2d")!.drawImage(bmp, 0, 0, c.width, c.height);
   return { mime: "image/jpeg", base64: c.toDataURL("image/jpeg", 0.85).split(",")[1] };
 }
-type Data = { month: string; rows: SalesRow[]; prev: Record<string, SalesValues>; storeTarget: number | null; targets: Record<string, number>; board: boolean; images: { id: string; at: string; by: string | null }[] };
-const FIELDS: [keyof SalesValues, string][] = [["total", "総合売上"], ["free", "フリー売上"], ["nominated", "指名技術売上"], ["retail", "店販売上"], ["customers", "客数"], ["newCustomers", "新規"], ["repeatCustomers", "再来"]];
+type Data = { month: string; rows: SalesRow[]; prev: Record<string, SalesValues>; storeTarget: number | null; targets: Record<string, number>; board: boolean; images: { id: string; at: string; by: string | null }[]; rates: SalesRates; dueOn: string; dueIsDefault: boolean };
+const FIELDS: [keyof SalesValues, string][] = [["total", "総合売上"], ["free", "フリー売上"], ["nominated", "指名技術売上"], ["retail", "店販売上"], ["retailCount", "店販人数"], ["customers", "客数"], ["newCustomers", "新規"], ["repeatCustomers", "再来"], ["kitsukeCount", "着付け人数"], ["kitsukeSales", "着付け売上"], ["makeupCount", "メイク人数"], ["makeupSales", "メイク売上"], ["spaCount", "スパ人数"], ["spaSales", "スパ売上"]];
 
 function Page() {
   const { me } = useMe();
@@ -37,6 +38,13 @@ function Page() {
   const prevSum = useMemo(() => Object.values(data?.prev ?? {}).reduce((a, v) => ({ total: a.total + v.total, customers: a.customers + v.customers }), { total: 0, customers: 0 }), [data]);
   const setField = (r: SalesRow, k: keyof SalesValues, raw: string) => setEdit((e) => ({ ...e, [r.membershipId]: { ...cur(r), [k]: toInt(raw) } }));
   const dirty = Object.keys(edit).length;
+  const [cEdit, setCEdit] = useState<Record<string, string>>({});
+  const setCommission = async (membershipId: string, amount: number | null) => {
+    try { await api("/api/sales", { action: "commission", storeId, month: ym, membershipId, amount }); setCEdit((c) => { const n = { ...c }; delete n[membershipId]; return n; }); setOk(amount === null ? "歩合を取り消しました" : "歩合をつけました（本人に通知しました）"); await load(); } catch (e) { setMsg((e as Error).message); }
+  };
+  const setDue = async (due: string | null) => { try { await api("/api/sales", { action: "deadline", storeId, month: ym, due }); setOk("提出期限を決めました"); await load(); } catch (e) { setMsg((e as Error).message); } };
+  const [rEdit, setREdit] = useState<SalesRates | null>(null);
+  const saveRates = async () => { if (!rEdit) return; try { await api("/api/sales", { action: "rates", storeId, month: ym, rates: rEdit }); setREdit(null); setOk("歩合の割合を保存しました"); await load(); } catch (e) { setMsg((e as Error).message); } };
   const review = async (members: string[], action: "manager_ok" | "office_ok" | "return", comment = "") => {
     if (members.length === 0) return;
     try { await api("/api/sales", { action: "review", storeId, month: ym, members, review: action, comment }); setOk(action === "return" ? "差し戻しました" : action === "manager_ok" ? "確認しました（事務員さんへ）" : "確定しました"); await load(); } catch (e) { setMsg((e as Error).message); }
@@ -59,7 +67,8 @@ function Page() {
   };
 
   const canEdit = me.level === 4 || (me.level === 3 && storeId === me.storeId);
-  if (me.level < 3) return <main className="wide"><Link href="/home" className="back">← ホーム</Link><h1>売上</h1><p className="hint">この画面は、店長と管理者が使います。自分の売上は、ホームの「自分の売上」から見られます。</p></main>;
+  const canCommission = me.level === 4 || (me.level >= 2 && storeId === me.storeId);
+  if (me.level < 2) return <main className="wide"><Link href="/home" className="back">← ホーム</Link><h1>売上</h1><p className="hint">この画面は、店長・シフト担当・管理者が使います。自分の売上は、ホームの「自分の売上」から見られます。</p></main>;
   const tgt = data?.storeTarget ?? null;
   const ach = achievement(sum.total, tgt);
 
@@ -96,9 +105,16 @@ function Page() {
           {me.level === 4 && idsBy("manager_ok").length > 0 && <button onClick={() => review(idsBy("manager_ok"), "office_ok")}>店長確認済みの {idsBy("manager_ok").length}人を、まとめて確定する</button>}
         </div>
       </div>
+      <div className="card">
+        <div className="toolbar" style={{ marginBottom: 0 }}>
+          <b>提出期限：{data ? md(data.dueOn) : ""}{data?.dueIsDefault ? "（月末）" : ""}</b>
+          {canEdit && <><input type="date" value={data?.dueOn ?? ""} onChange={(e) => e.target.value && setDue(e.target.value)} style={{ width: 170 }} />{!data?.dueIsDefault && <button className="ghost" onClick={() => setDue(null)}>月末にもどす</button>}</>}
+        </div>
+        <p className="sub" style={{ margin: "6px 0 0" }}>期限の前日と当日に、まだ出していない人へ通知が届きます。期限を過ぎると、店長と事務員さんにも通知します。</p>
+      </div>
       <div className="scroll card">
         <table className="sttable salestable">
-          <thead><tr><th>名前</th><th>状態</th>{FIELDS.map(([, l]) => <th key={l} className="r">{l}</th>)}<th className="r">客単価</th><th className="r">新規%</th><th className="r">前年比</th><th className="r">店内%</th><th className="r">個人目標</th><th className="r">達成</th></tr></thead>
+          <thead><tr><th>名前</th><th>状態</th>{FIELDS.map(([, l]) => <th key={l} className="r">{l}</th>)}<th className="r">客単価</th><th className="r">新規%</th><th className="r">前年比</th><th className="r">店内%</th><th className="r">個人目標</th><th className="r">達成</th><th className="r">歩合（目安→つける）</th></tr></thead>
           <tbody>{(data?.rows ?? []).map((r) => {
             const v = cur(r); const pv = data?.prev[r.membershipId]; const ptg = data?.targets[r.membershipId] ?? null; const y = yoy(v.total, pv?.total);
             return (
@@ -117,11 +133,33 @@ function Page() {
                 <td className="r">{pct1(v.total, sum.total) ?? "－"}</td>
                 <td className="r">{canEdit ? <input className="cellin" inputMode="numeric" placeholder="－" value={tEdit[r.membershipId] ?? (ptg === null ? "" : String(ptg))} onChange={(e) => setTEdit({ ...tEdit, [r.membershipId]: e.target.value })} onBlur={() => { if (tEdit[r.membershipId] !== undefined) saveTarget(r.membershipId, tEdit[r.membershipId]); }} /> : ptg ?? "－"}</td>
                 <td className="r">{achievement(v.total, ptg) ?? "－"}</td>
+                <td className="r" style={{ whiteSpace: "nowrap" }}>{(() => {
+                  const sug = calcCommission({ retail: v.retail, kitsukeSales: v.kitsukeSales, makeupSales: v.makeupSales, spaSales: v.spaSales }, data!.rates).total;
+                  const lock = !r.status || r.status === "draft" || r.status === "returned" || r.status === "office_ok" || r.membershipId === me.id || !canCommission;
+                  return (<>
+                    <span className="sub">目安 {yen(sug)}</span>{" "}
+                    <input className="cellin" inputMode="numeric" disabled={lock} placeholder={String(sug)} value={cEdit[r.membershipId] ?? (r.commission === null ? "" : String(r.commission))} onChange={(e) => setCEdit({ ...cEdit, [r.membershipId]: e.target.value.replace(/[^\d]/g, "") })} />
+                    {!lock && <button className="ghost" onClick={() => setCommission(r.membershipId, cEdit[r.membershipId] ? Number(cEdit[r.membershipId]) : sug)}>つける</button>}
+                    {r.commission !== null && <b>　{yen(r.commission)}</b>}
+                  </>);
+                })()}</td>
               </tr>
             );
           })}</tbody>
         </table>
       </div>
+      {data && (
+        <div className="card">
+          <b>歩合の割合</b>{" "}
+          {rEdit === null ? <>
+            <span className="sub">店販 {data.rates.retail}% ／ 着付け {data.rates.kitsuke}% ／ メイク {data.rates.makeup}% ／ ヘッドスパ {data.rates.spa}%</span>
+            {me.level === 4 && <button className="ghost" onClick={() => setREdit(data.rates)}>割合を変える</button>}
+          </> : <div className="toolbar">
+            {(["retail", "kitsuke", "makeup", "spa"] as const).map((k) => <label key={k} style={{ margin: 0 }}>{{ retail: "店販", kitsuke: "着付け", makeup: "メイク", spa: "ヘッドスパ" }[k]}（%）<input inputMode="numeric" style={{ width: 90 }} value={String(rEdit[k])} onChange={(e) => setREdit({ ...rEdit, [k]: Number(e.target.value.replace(/[^\d.]/g, "")) || 0 })} /></label>)}
+            <button onClick={saveRates}>保存</button><button className="ghost" onClick={() => setREdit(null)}>やめる</button></div>}
+          <p className="sub" style={{ margin: "6px 0 0" }}>歩合は、「売上 × 割合」で目安が出ます。店長・シフト担当が、確認して「つける」を押します（金額は直せます）。</p>
+        </div>
+      )}
       {canEdit && <div className="stickybar"><button onClick={save} disabled={dirty === 0}>保存する{dirty ? `（${dirty}人）` : ""}</button>{dirty > 0 && <button className="ghost" onClick={() => setEdit({})}>やめる</button>}</div>}
       <p className="hint">客単価・新規の割合・前年比・お店の中の割合は、自動で計算されます。前年の数字は、前年の同じ月に入れた数字です（前年のデータは、同じ画面で前年の月に入れてください）。</p>
 

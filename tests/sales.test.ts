@@ -7,7 +7,7 @@ import * as svc from "../lib/service";
 let db: Database;
 const id: Record<string, string> = {};
 const st: Record<string, string> = {};
-const V = (total: number, customers: number, over: Partial<svc.SalesValues> = {}): svc.SalesValues => ({ total, free: 0, nominated: 0, retail: 0, customers, newCustomers: 0, repeatCustomers: 0, ...over });
+const V = (total: number, customers: number, over: Partial<svc.SalesValues> = {}): svc.SalesValues => ({ ...svc.EMPTY_SALES, total, customers, ...over });
 
 beforeAll(async () => {
   db = await newDb();
@@ -17,7 +17,7 @@ beforeAll(async () => {
   const mk = async (k: string, code: string, level: number, s: string, name: string) =>
     (id[k] = (await db.query<{ id: string }>("insert into memberships (company_id, store_id, employee_code, name, level) values ($1,$2,$3,$4,$5) returning id", [co, s, code, name, level])).rows[0].id);
   await mk("office", "1", 4, st["A店"], "事務員"); await mk("mgr", "2", 3, st["A店"], "A店長");
-  await mk("a", "3", 1, st["A店"], "山田"); await mk("a2", "4", 1, st["A店"], "佐藤"); await mk("b", "5", 1, st["B店"], "他店"); await mk("mgrB", "6", 3, st["B店"], "B店長");
+  await mk("a", "3", 1, st["A店"], "山田"); await mk("shift", "7", 2, st["A店"], "シフト担当"); await mk("a2", "4", 1, st["A店"], "佐藤"); await mk("b", "5", 1, st["B店"], "他店"); await mk("mgrB", "6", 3, st["B店"], "B店長");
 });
 
 describe("指名売上", () => {
@@ -40,7 +40,7 @@ describe("指名売上", () => {
   });
 
   it("見られる範囲: 店長は自店の全員、管理者は全店、スタッフは自分だけ。お店の合計は本人にも見える", async () => {
-    expect((await svc.listSalesMonth(db, id.mgr, st["A店"], "2026-10")).rows.map((r) => [r.name, r.total])).toEqual([["A店長", 0], ["山田", 500000], ["佐藤", 320000]]);
+    expect((await svc.listSalesMonth(db, id.mgr, st["A店"], "2026-10")).rows.map((r) => [r.name, r.total])).toEqual([["A店長", 0], ["山田", 500000], ["佐藤", 320000], ["シフト担当", 0]]);
     expect((await svc.listSalesMonth(db, id.mgrB, st["A店"], "2026-10")).rows.every((r) => r.total === 0)).toBe(true);        // 他店は見えない
     const mine = await svc.getMySales(db, id.a, "2026-10");
     expect(mine.mine?.total).toBe(500000);
@@ -137,5 +137,53 @@ describe("指名売上", () => {
     await svc.saveSales(db, id.office, st["A店"], "2025-12", [{ membershipId: id.a2, values: V(250000, 40) }], "import");
     expect((await svc.listSalesMonth(db, id.office, st["A店"], "2025-12")).rows.find((r) => r.membershipId === id.a2)?.status).toBe("office_ok");
     await expect(svc.saveMySales(db, id.office, M, V(1, 1))).rejects.toThrow(svc.ForbiddenError);              // 管理者は個人の売上は持たない
+  });
+
+  it("着付け・メイク・ヘッドスパの人数と売上を記入でき、歩合をシフト担当・店長がつけられる（本人・他の人・確定後は不可）", async () => {
+    const M = "2027-01";
+    await svc.saveMySales(db, id.a, M, V(500000, 70, { retail: 45000, retailCount: 9, kitsukeCount: 3, kitsukeSales: 60000, makeupCount: 4, makeupSales: 40000, spaCount: 5, spaSales: 25000 }));
+    const mine = await svc.getMySales(db, id.a, M);
+    expect(mine.mine).toMatchObject({ kitsukeCount: 3, kitsukeSales: 60000, spaSales: 25000, retailCount: 9 });
+    expect(mine.rates).toEqual({ retail: 10, kitsuke: 25, makeup: 20, spa: 20 });
+    await expect(svc.setSalesCommission(db, id.shift, id.a, M, 1000)).rejects.toThrow("提出されたあと");        // 提出前はつけられない
+    await svc.submitMySales(db, id.a, M);
+    await expect(svc.setSalesCommission(db, id.a, id.a, M, 1000)).rejects.toThrow(svc.ForbiddenError);          // 本人はつけられない
+    await expect(svc.setSalesCommission(db, id.a2, id.a, M, 1000)).rejects.toThrow(svc.ForbiddenError);         // ふつうのスタッフは不可
+    await expect(svc.setSalesCommission(db, id.mgrB, id.a, M, 1000)).rejects.toThrow(svc.ForbiddenError);       // 他店は不可
+    await svc.setSalesCommission(db, id.shift, id.a, M, 27500);                                                 // シフト担当(Lv2)はつけられる
+    expect((await svc.getMySales(db, id.a, M)).commission).toBe(27500);
+    expect((await svc.listNotifications(db, id.a)).items.some((n) => n.title.includes("歩合が決まりました"))).toBe(true);
+    // シフト担当は見られるが、数字の直しと確認はできない
+    expect((await svc.listSalesMonth(db, id.shift, st["A店"], M)).rows.find((r) => r.membershipId === id.a)?.total).toBe(500000);
+    await expect(svc.saveSales(db, id.shift, st["A店"], M, [{ membershipId: id.a, values: V(1, 1) }])).rejects.toThrow(svc.ForbiddenError);
+    await expect(svc.reviewSales(db, id.shift, id.a, M, "manager_ok")).rejects.toThrow(svc.ForbiddenError);
+    await svc.reviewSales(db, id.mgr, id.a, M, "manager_ok"); await svc.reviewSales(db, id.office, id.a, M, "office_ok");
+    await expect(svc.setSalesCommission(db, id.mgr, id.a, M, 30000)).rejects.toThrow("確定");
+    await svc.setSalesRates(db, id.office, { retail: 12, kitsuke: 25, makeup: 20, spa: 20 });
+    expect((await svc.getSalesRates(db, id.mgr)).retail).toBe(12);
+    await expect(svc.setSalesRates(db, id.mgr, { retail: 1, kitsuke: 1, makeup: 1, spa: 1 })).rejects.toThrow(svc.ForbiddenError);
+    await svc.setSalesRates(db, id.office, { retail: 10, kitsuke: 25, makeup: 20, spa: 20 });
+  });
+
+  it("提出期限: 決めなければ月末。店長が決められる。前日・当日・翌日に通知が届く（1回だけ）", async () => {
+    const M = "2027-02";
+    expect((await svc.listSalesMonth(db, id.mgr, st["A店"], M))).toMatchObject({ dueOn: "2027-02-28", dueIsDefault: true });
+    await svc.setSalesDeadline(db, id.mgr, st["A店"], M, "2027-02-25");
+    expect((await svc.getMySales(db, id.a, M)).dueOn).toBe("2027-02-25");
+    await expect(svc.setSalesDeadline(db, id.a, st["A店"], M, "2027-02-20")).rejects.toThrow(svc.ForbiddenError);
+    await svc.submitMySales(db, id.a2, M).catch(() => {});                                                       // a2: 下書きなし
+    await svc.saveMySales(db, id.a, M, V(100000, 10)); await svc.submitMySales(db, id.a, M);                      // a は提出済み
+    const n0 = (await svc.listNotifications(db, id.a2)).items.length;
+    expect(await svc.runSalesReminders(db, true, "2027-02-24T08:00:00Z")).toBe(0);                               // 9時前は送らない
+    const sent = await svc.runSalesReminders(db, true, "2027-02-24T09:10:00Z");                                  // 前日
+    expect(sent).toBeGreaterThan(0);
+    const t2 = (await svc.listNotifications(db, id.a2)).items.map((n) => n.title);
+    expect(t2.some((t) => t.includes("明日（2/25）までです"))).toBe(true);
+    expect((await svc.listNotifications(db, id.a)).items.some((n) => n.title.includes("明日（2/25）"))).toBe(false);   // 出した人には送らない
+    expect(await svc.runSalesReminders(db, true, "2027-02-24T10:00:00Z")).toBe(0);                               // 同じ日に2回は送らない
+    expect((await svc.listNotifications(db, id.a2)).items.length).toBe(n0 + 1);
+    await svc.runSalesReminders(db, true, "2027-02-26T09:00:00Z");                                               // 翌日: 期限切れ
+    expect((await svc.listNotifications(db, id.mgr)).items.some((n) => n.title.includes("未提出です"))).toBe(true);
+    expect((await svc.listNotifications(db, id.a2)).items.some((n) => n.title.includes("期限") && n.title.includes("過ぎています"))).toBe(true);
   });
 });

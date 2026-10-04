@@ -2,9 +2,10 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { api, MeProvider, useAutoRefresh, useMe } from "@/lib/client";
-import { achievement, newRate, pct1, repeatRate, signed, unitPrice, yen, yoy } from "@/lib/sales-calc";
+import { achievement, calcCommission, newRate, pct1, repeatRate, signed, unitPrice, yen, yoy } from "@/lib/sales-calc";
+import { md } from "@/lib/labels";
 import { todayJst } from "@/lib/period-nav";
-import { SALES_STATUS_LABEL, type MySales, type SalesValues } from "@/lib/service";
+import { EMPTY_SALES, SALES_STATUS_LABEL, type MySales, type SalesValues } from "@/lib/service";
 
 const addMonth = (ym: string, n: number) => { const [y, m] = ym.split("-").map(Number); const t = new Date(Date.UTC(y, m - 1 + n, 1)); return `${t.getUTCFullYear()}-${String(t.getUTCMonth() + 1).padStart(2, "0")}`; };
 
@@ -40,9 +41,10 @@ function Page() {
 
   const [form, setForm] = useState<SalesValues | null>(null);
   const [ok, setOk] = useState("");
-  const EMPTY: SalesValues = { total: 0, free: 0, nominated: 0, retail: 0, customers: 0, newCustomers: 0, repeatCustomers: 0 };
+  const EMPTY: SalesValues = EMPTY_SALES;
   const editable = !!d && (d.status === null || d.status === "draft" || d.status === "returned");
-  const cur: SalesValues = form ?? (d?.mine ? { total: d.mine.total, free: d.mine.free, nominated: d.mine.nominated, retail: d.mine.retail, customers: d.mine.customers, newCustomers: d.mine.newCustomers, repeatCustomers: d.mine.repeatCustomers } : EMPTY);
+  const cur: SalesValues = form ?? (d?.mine ? { ...EMPTY_SALES, ...d.mine } : EMPTY);
+  const daysLeft = d ? Math.round((new Date(d.dueOn + "T00:00:00Z").getTime() - new Date(todayJst() + "T00:00:00Z").getTime()) / 86400000) : 0;
   const num = (raw: string) => Number(raw.replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0)).replace(/[^\d]/g, "") || "0");
   const saveForm = async (andSubmit: boolean) => {
     try {
@@ -72,16 +74,32 @@ function Page() {
             <span className="chip" style={{ color: d.status === "office_ok" ? "var(--ok)" : d.status === "returned" ? "var(--bad)" : undefined }}>{d.status ? SALES_STATUS_LABEL[d.status] : "まだ入れていません"}</span></div>
           <p className="sub" style={{ margin: "6px 0 10px" }}>流れ：<b>自分で記入して提出 → 店長が確認 → 事務員さんが確定</b></p>
           {d.status === "returned" && <p className="err">差し戻されました{d.returnComment ? `：「${d.returnComment}」` : ""}。直して、もう一度提出してください。</p>}
-          <div className="salesform">
-            {([["total", "総合売上（円）"], ["free", "フリー売上（円）"], ["nominated", "指名技術売上（円）"], ["retail", "店販売上（円）"], ["customers", "客数（人）"], ["newCustomers", "新規（人）"], ["repeatCustomers", "再来（人）"]] as [keyof SalesValues, string][]).map(([k, l]) => (
-              <label key={k}>{l}<input inputMode="numeric" disabled={!editable} value={cur[k] === 0 ? "" : String(cur[k])} placeholder="0" onChange={(e) => setForm({ ...cur, [k]: num(e.target.value) })} /></label>
-            ))}
-          </div>
+          <p className="sub" style={{ margin: "0 0 6px" }}>提出期限：<b>{md(d.dueOn)}</b>　{editable && (daysLeft < 0 ? <span className="chip" style={{ color: "var(--bad)" }}>期限を過ぎています</span> : daysLeft <= 3 ? <span className="chip warn">あと{daysLeft}日</span> : <span className="chip">あと{daysLeft}日</span>)}</p>
+          {([
+            ["全体", [["total", "総合売上（円）"], ["free", "フリー売上（円）"], ["nominated", "指名技術売上（円）"], ["customers", "客数（人）"], ["newCustomers", "新規（人）"], ["repeatCustomers", "再来（人）"]]],
+            [`店販（歩合 ${d.rates.retail}%）`, [["retail", "店販売上（円）"], ["retailCount", "店販の人数（人）"]]],
+            [`着付け（歩合 ${d.rates.kitsuke}%）`, [["kitsukeCount", "着付けの人数（人）"], ["kitsukeSales", "着付けの売上（円）"]]],
+            [`メイク（歩合 ${d.rates.makeup}%）`, [["makeupCount", "メイクの人数（人）"], ["makeupSales", "メイクの売上（円）"]]],
+            [`ヘッドスパ（歩合 ${d.rates.spa}%）`, [["spaCount", "ヘッドスパの人数（人）"], ["spaSales", "ヘッドスパの売上（円）"]]],
+          ] as [string, [keyof SalesValues, string][]][]).map(([title, fields]) => (
+            <div key={title}>
+              <b className="formsec">{title}</b>
+              <div className="salesform">{fields.map(([k, l]) => (
+                <label key={k}>{l}<input inputMode="numeric" disabled={!editable} value={cur[k] === 0 ? "" : String(cur[k])} placeholder="0" onChange={(e) => setForm({ ...cur, [k]: num(e.target.value) })} /></label>
+              ))}</div>
+            </div>
+          ))}
           <p className="sub">客単価 <b>{unitPrice(cur.total, cur.customers) === null ? "－" : yen(unitPrice(cur.total, cur.customers) as number)}</b>　新規の割合 <b>{newRate(cur.newCustomers, cur.repeatCustomers) ?? "－"}{newRate(cur.newCustomers, cur.repeatCustomers) === null ? "" : "%"}</b>（自動で計算されます）</p>
           {editable && <div className="toolbar"><button onClick={() => saveForm(true)} disabled={cur.total === 0}>提出する</button><button className="ghost" onClick={() => saveForm(false)}>保存だけ</button>{form && <button className="ghost" onClick={() => setForm(null)}>やめる</button>}</div>}
           {!editable && <p className="hint">提出したあとは、直せません。直したいときは、店長に「差し戻し」をお願いしてください。</p>}
         </div>
       )}
+      {d && (() => { const c = calcCommission({ retail: cur.retail, kitsukeSales: cur.kitsukeSales, makeupSales: cur.makeupSales, spaSales: cur.spaSales }, d.rates); return c.total > 0 || d.commission !== null ? (
+        <div className="card"><b>歩合</b>
+          {d.commission !== null ? <p style={{ margin: "6px 0" }}>確定した歩合：<b style={{ fontSize: 24 }}>{yen(d.commission)}</b><span className="sub">　（店長・シフト担当がつけました）</span></p>
+            : <p className="sub" style={{ margin: "6px 0" }}>まだ、つけられていません。下は、入れた数字からの目安です。</p>}
+          <table className="sttable"><tbody>{c.items.filter((i) => i.sales > 0).map((i) => <tr key={i.key}><td>{i.label}</td><td className="r">{yen(i.sales)}</td><td className="r">{i.rate}%</td><td className="r"><b>{yen(i.amount)}</b></td></tr>)}
+            <tr className="sumrow"><td colSpan={3}>目安の合計</td><td className="r"><b>{yen(c.total)}</b></td></tr></tbody></table></div>) : null; })()}
       {d && !d.mine && <p className="hint">この月の売上は、まだ入っていません。</p>}
       {d?.mine && d.status && d.status !== "draft" && d.status !== "returned" && (
         <>
