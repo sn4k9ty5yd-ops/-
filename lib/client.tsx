@@ -1,6 +1,6 @@
 "use client";
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import type { Me } from "./service";
 
 export async function api<T = unknown>(path: string, body?: unknown): Promise<T> {
@@ -22,6 +22,7 @@ export const useMe = () => {
 /** ログイン必須の領域。未ログインならログイン画面へ */
 export function MeProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname();
   const [me, setMe] = useState<Me | null>(null);
   useEffect(() => {
     api<Me>("/api/me").then(setMe).catch(() => router.replace("/login"));
@@ -30,6 +31,7 @@ export function MeProvider({ children }: { children: React.ReactNode }) {
     await api("/api/logout", {}).catch(() => {});
     router.replace("/login");
   }, [router]);
+  useEffect(() => { if (me?.mustChangePasscode && pathname !== "/security") router.replace("/security"); }, [me, pathname, router]);   // 最初に、パスコードを変えてもらう
   if (!me) return null;
   return <MeCtx.Provider value={{ me, logout }}>{children}</MeCtx.Provider>;
 }

@@ -10,7 +10,7 @@ import type { Level } from "./permissions";
 
 // 画面(API)から呼ばれる業務処理。権限の判定はすべてDB側(RLS)で行い、ここでは再実装しない。
 
-export interface Me { id: string; name: string; level: Level; storeId: string; companyId: string; companyName: string; closingStartDay: number; breakRule: BreakRule; displayOnly: boolean; materialManager?: boolean; rank?: "assistant" | "stylist" | null; eduLead?: boolean; }
+export interface Me { mustChangePasscode?: boolean; id: string; name: string; level: Level; storeId: string; companyId: string; companyName: string; closingStartDay: number; breakRule: BreakRule; displayOnly: boolean; materialManager?: boolean; rank?: "assistant" | "stylist" | null; eduLead?: boolean; }
 export interface StoreRow { id: string; name: string; status: "active" | "closed"; defaultOpen: string; defaultClose: string; satOpen: string | null; satClose: string | null; }
 /** 管理者だけが見られる、ログインの状況 */
 export type Presence = "online" | "idle" | "loggedout" | "never";
@@ -28,7 +28,7 @@ export async function getMe(db: Database, userId: string): Promise<Me | null> {
   const { rows } = await asUser(db, userId, (q) =>
     q.query<Omit<Me, "breakRule"> & { cap: number | null; tiers: { overMinutes: number; breakMinutes: number }[] }>(
       `select m.id, m.name, m.level, m.store_id as "storeId", m.company_id as "companyId", c.name as "companyName", c.closing_start_day as "closingStartDay",
-              c.work_cap_minutes as cap, c.break_tiers as tiers, m.display_only as "displayOnly", m.material_manager as "materialManager", m.rank as rank, m.edu_lead as "eduLead"
+              c.work_cap_minutes as cap, c.break_tiers as tiers, m.display_only as "displayOnly", m.material_manager as "materialManager", m.rank as rank, m.edu_lead as "eduLead", m.passcode_must_change as "mustChangePasscode"
          from memberships m join companies c on c.id = m.company_id where m.id = $1`, [userId]),
   );
   const r = rows[0];
@@ -2295,4 +2295,32 @@ export async function runSalesReminders(db: Database, force = false, at?: string
     }
   }
   return sent;
+}
+
+
+// ------------------------------------------------------------------ セキュリティ（ログイン記録・操作の記録）
+export interface LoginEventRow { at: string; ok: boolean; reason: string | null; ip: string | null; ua: string | null; code?: string | null; name?: string | null }
+export interface AuditRow { at: string; action: string; actor: string | null; target: string | null; detail: unknown }
+export interface SecurityOverview {
+  mustChange: boolean; mine: LoginEventRow[];
+  admin: null | { recent: LoginEventRow[]; failedByCode: { code: string; n: number }[]; audit: AuditRow[] };
+}
+export async function securityOverview(db: Database, userId: string): Promise<SecurityOverview> {
+  const me = await getMe(db, userId);
+  if (!me) throw new ForbiddenError();
+  return asUser(db, userId, async (q) => {
+    const mine = (await q.query<LoginEventRow>(
+      `select at, ok, reason, ip, user_agent as ua from login_events where membership_id = $1 and ok order by at desc limit 12`, [userId])).rows;
+    let admin: SecurityOverview["admin"] = null;
+    if (me.level === 4) {
+      const recent = (await q.query<LoginEventRow>(
+        `select e.at, e.ok, e.reason, e.ip, e.user_agent as ua, e.employee_code as code, m.name from login_events e left join memberships m on m.id = e.membership_id order by e.at desc limit 120`)).rows;
+      const failedByCode = (await q.query<{ code: string; n: number }>(
+        `select employee_code as code, count(*)::int as n from login_events where not ok and at > now() - interval '24 hours' group by 1 order by n desc limit 10`)).rows;
+      const audit = (await q.query<AuditRow>(
+        `select a.at, a.action, ma.name as actor, mt.name as target, a.detail from audit_logs a left join memberships ma on ma.id = a.actor_id left join memberships mt on mt.id = a.target_id order by a.at desc limit 100`)).rows;
+      admin = { recent, failedByCode, audit };
+    }
+    return { mustChange: !!me.mustChangePasscode, mine, admin };
+  });
 }

@@ -8,7 +8,7 @@ export interface Db {
 
 export const MAX_FAILED = 5; // この回数まちがえるとロック
 export const LOCK_MINUTES = 15;
-export const SESSION_DAYS = 30;
+export const SESSION_DAYS = 14;
 
 export type LoginResult =
   | { ok: true; token: string; membershipId: string }
@@ -84,11 +84,38 @@ export async function logout(db: Db, token: string): Promise<void> {
 export async function setPasscode(db: Db, membershipId: string, passcode: string): Promise<void> {
   const err = validatePasscode(passcode);
   if (err) throw new Error(err);
+  // 発行（再発行）されたパスコードは、最初のログインで本人に変えてもらう（お店のiPad用は除く）
   await db.query(
-    `update memberships set passcode_hash = $2, failed_attempts = 0, locked_until = null where id = $1`,
+    `update memberships set passcode_hash = $2, failed_attempts = 0, locked_until = null, passcode_must_change = not display_only where id = $1`,
     [membershipId, await hashPasscode(passcode)],
   );
   await db.query(`delete from sessions where membership_id = $1`, [membershipId]);
+}
+
+/** 本人がパスコードを変える。いまのパスコードの確認が要る。変えたら、ほかの端末はログアウトされる（いまの端末は続けて使える） */
+export async function changeOwnPasscode(db: Db, membershipId: string, current: string, next: string, keepToken?: string): Promise<void> {
+  const err = validatePasscode(next);
+  if (err) throw new Error(err);
+  const { rows } = await db.query<{ passcode_hash: string | null }>("select passcode_hash from memberships where id = $1", [membershipId]);
+  if (!rows[0]?.passcode_hash || !(await verifyPasscode(current, rows[0].passcode_hash))) throw new Error("いまのパスコードが違います");
+  if (current === next) throw new Error("いまと同じパスコードは使えません。ちがうパスコードにしてください");
+  await db.query("update memberships set passcode_hash = $2, passcode_must_change = false, failed_attempts = 0, locked_until = null where id = $1", [membershipId, await hashPasscode(next)]);
+  await db.query("delete from sessions where membership_id = $1 and ($2::text is null or token_hash <> $2)", [membershipId, keepToken ? sha256(keepToken) : null]);
+}
+
+/** ほかの端末をすべてログアウト（いまの端末は残す） */
+export async function logoutOthers(db: Db, membershipId: string, keepToken: string): Promise<number> {
+  const r = await db.query<{ n: number }>("with d as (delete from sessions where membership_id = $1 and token_hash <> $2 returning 1) select count(*)::int as n from d", [membershipId, sha256(keepToken)]);
+  return r.rows[0]?.n ?? 0;
+}
+
+/** ログインの記録（成功も失敗も）。90日たったものは消す */
+export async function recordLogin(db: Db, e: { companyCode: string; employeeCode: string; ok: boolean; reason: string; ip: string; ua: string; membershipId?: string }): Promise<void> {
+  await db.query(
+    `insert into login_events (company_id, membership_id, employee_code, ok, reason, ip, user_agent)
+     values ((select id from companies where code = $1), $2, $3, $4, $5, $6, $7)`,
+    [e.companyCode.trim().toLowerCase(), e.membershipId ?? null, e.employeeCode.slice(0, 40), e.ok, e.reason, e.ip.slice(0, 80), e.ua.slice(0, 200)]);
+  if (Math.random() < 0.02) await db.query("delete from login_events where at < now() - interval '90 days'");
 }
 
 export async function issuePasscode(db: Db, membershipId: string): Promise<string> {

@@ -13,6 +13,7 @@ export function validatePasscode(pc: string): string | null {
   if (!/^\d{6}$/.test(pc)) return "パスコードは6けたの数字にしてください";
   if (/^(\d)\1{5}$/.test(pc)) return "同じ数字だけのパスコードは使えません";
   if ("0123456789".includes(pc) || "9876543210".includes(pc)) return "連続した数字のパスコードは使えません";
+  if (/^(\d\d)\1\1$/.test(pc) || /^(\d\d\d)\1$/.test(pc) || ["112233", "123321", "121212", "520520", "696969", "000123", "135790", "159357"].includes(pc)) return "かんたんすぎるパスコードは使えません（くりかえしの数字など）";
   return null;
 }
 

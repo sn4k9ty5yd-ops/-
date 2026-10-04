@@ -5,7 +5,7 @@ import { getDb } from "./db";
 import { applyScheduledRetirements, ForbiddenError, purgeOldMaterialImages, runMorningNotices, runSalesReminders } from "./service";
 
 export const COOKIE = "session";
-export const COOKIE_MAX_AGE = 60 * 60 * 24 * 30;
+export const COOKIE_MAX_AGE = 60 * 60 * 24 * 14;
 
 /** ログイン中の人のID（未ログインなら null） */
 export async function currentUserId(): Promise<string | null> {
@@ -25,7 +25,8 @@ async function touchPresence(userId: string) {
   } catch { /* 印がつけられなくても、本来の処理は続ける */ }
 }
 
-export const json = (data: unknown, status = 200) => NextResponse.json(data, { status });
+/** 返事は、ほかの人や中間のサーバーに保存されないようにする（個人の情報が入っているため） */
+export const json = (data: unknown, status = 200) => NextResponse.json(data, { status, headers: { "Cache-Control": "no-store" } });
 
 /** 他サイトからのなりすまし送信(CSRF)対策: 書き込みは JSON 形式のみ受け付ける（SameSite Cookieと併用） */
 export function isJson(req: Request): boolean {
@@ -43,6 +44,12 @@ export function authed<P = Record<string, never>>(
     const userId = await currentUserId();
     if (!userId) return json({ error: "ログインが必要です" }, 401);
     await touchPresence(userId);
+    // 発行されたままのパスコードの人は、先にパスコードを変えるまで、ほかの機能は使えない
+    const path = new URL(req.url).pathname;
+    if (!["/api/me", "/api/security", "/api/logout"].includes(path)) {
+      const mc = (await (await getDb()).query<{ m: boolean }>("select passcode_must_change as m from memberships where id = $1", [userId])).rows[0]?.m;
+      if (mc) return json({ error: "先に、パスコードを変えてください（「セキュリティ」の画面）" }, 403);
+    }
     try {
       return await fn(userId, req, await ctx.params);
     } catch (e) {

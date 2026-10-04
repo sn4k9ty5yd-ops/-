@@ -14,6 +14,7 @@ beforeAll(async () => {
   await db.exec(readFileSync("db/migrations/0001_tenant_core.sql", "utf8"));
   await db.exec(readFileSync("db/migrations/0010_presence.sql", "utf8"));
   await db.exec(readFileSync("db/migrations/0012_scheduled_retirement.sql", "utf8"));
+  await db.exec("alter table memberships add column display_only boolean not null default false, add column passcode_must_change boolean not null default false");   // 後の機能の列（パスコードの設定で使う）
   await db.exec(`
     insert into companies (id, code, name) values ('${CO}', 'atena', 'A社'), ('b0000000-0000-0000-0000-000000000001', 'other', 'B社');
     insert into stores (id, company_id, name) values ('${ST}', '${CO}', '店');
