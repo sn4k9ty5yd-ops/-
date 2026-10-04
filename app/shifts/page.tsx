@@ -140,7 +140,7 @@ function Page() {
               <b style={{ fontSize: 20 }}>{md(detail)}（{WEEKDAYS[dow(detail)]}）</b>{holidayName(detail) && <small className="holname"> {holidayName(detail)}</small>}
               {me.level >= 2 && db && (
                 <div className="card" style={{ margin: "8px 0", padding: 10 }}>
-                  <div className="sub">この日に休める人数の上限（シフトを作る人が決めます）</div>
+                  <div className="sub">この日に休める人数の上限（出勤簿をつける人が決めます）</div>
                   {conflicts.has(detail) && <p style={{ color: "#d70015", margin: "4px 0", fontWeight: 700 }}>⚠ いま{conflicts.get(detail)!.count}人が休み（上限{conflicts.get(detail)!.maxOff}人）。かぶっています。</p>}
                   <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                     <input type="number" min={0} max={99} inputMode="numeric" style={{ width: 80, margin: 0 }} value={limitInput !== "" ? limitInput : limits.has(detail) ? String(limits.get(detail)) : ""} placeholder="なし" onChange={(e) => setLimitInput(e.target.value)} />

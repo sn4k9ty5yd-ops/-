@@ -38,7 +38,7 @@ function Page() {
         {note && <p className="sub">{note}</p>}
       </div>
       <h2>話し合い</h2>
-      <p className="hint">ここに書くと、この日に休みを希望している人と、シフトを作る人に、お知らせが届きます。譲れる日・譲れない日などを書いて、調整してください。決まったら、シフトを作る人が直します。</p>
+      <p className="hint">ここに書くと、この日に休みを希望している人と、出勤簿をつける人に、お知らせが届きます。譲れる日・譲れない日などを書いて、調整してください。決まったら、出勤簿をつける人が直します。</p>
       <ul className="list">
         {info.messages.length === 0 && <li><span className="sub">まだ書き込みはありません。</span></li>}
         {info.messages.map((m) => <li key={m.id} style={{ display: "block" }}><div className="sub">{m.name}{m.userId === me.id && "（あなた）"}　{m.at}</div><div style={{ whiteSpace: "pre-wrap" }}>{m.body}</div></li>)}

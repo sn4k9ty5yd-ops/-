@@ -77,7 +77,7 @@ export default function ShiftsPage() {
   };
   const save = async (entries: ShiftEntry[]) => { await post({ action: "save", entries }); };
   const loading = loadedKey !== `${storeId}|${view.start}`;
-  const readOnlyReason = loading ? "" : !dbPeriod ? "この期間は、まだ作成されていません。" : editable ? "" : storeId !== me.storeId && me.level < 4 ? "他のお店の出勤簿です（見るだけ）。" : pstatus === "preparing" ? "まだ準備中です。希望休の受付を始めるか、シフト作成を始めると入力できます。" : "いまはシフトを変更できません（確定済みなど）。";
+  const readOnlyReason = loading ? "" : !dbPeriod ? "この期間は、まだ作成されていません。" : editable ? "" : storeId !== me.storeId && me.level < 4 ? "他のお店の出勤簿です（見るだけ）。" : pstatus === "preparing" ? "まだ準備中です。希望休の受付を始めるか、出勤簿づくりを始めると入力できます。" : "いまは出勤簿を変更できません（確定済みなど）。";
 
   const dayCount = (d: string) => roster.filter((r) => byKey.get(`${r.id}|${d}`)?.kind === "work").length;
 

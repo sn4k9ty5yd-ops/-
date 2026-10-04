@@ -291,7 +291,7 @@ export type AttendanceStatus = "open" | "submitted" | "acknowledged";
 export const ATTENDANCE_LABEL: Record<AttendanceStatus, string> = { open: "入力中", submitted: "オフィスに提出済み", acknowledged: "確認済み" };
 export const STATUS_ORDER: PeriodStatus[] = ["preparing", "collecting", "closed", "drafting", "confirmed", "published", "submitted", "acknowledged"];
 export const STATUS_LABEL: Record<PeriodStatus, string> = {
-  preparing: "準備中", collecting: "希望休受付中", closed: "受付終了", drafting: "シフト作成中",
+  preparing: "準備中", collecting: "希望休受付中", closed: "受付終了", drafting: "出勤簿づくり中",
   confirmed: "確定", published: "公開済み", submitted: "オフィスに提出済み", acknowledged: "確認済み",
 };
 
