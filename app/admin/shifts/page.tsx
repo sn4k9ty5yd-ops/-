@@ -96,7 +96,7 @@ export default function ShiftsPage() {
     <>
       <SubTabs items={[{ href: "/admin/periods", label: "やること" }, { href: "/admin/shifts", label: "出勤簿" }]} />
       <h1>出勤簿</h1>
-      <p className="hint">ここは「つくる」の出勤簿です。日にちを選んで、その日の全員の入店・退店を、まとめて、または1人ずつ直します。</p>
+      <p className="hint">ここは「つくる」の出勤簿です。表の<b>日付を押す</b>と、その日の全員を、まとめて、または1人ずつ直せます。<b>名前を押す</b>と、その人の日をまとめて直せます。表のマスを押すと、1か所だけ直せます。</p>
       <div className="toolbar">
         <select aria-label="お店" value={storeId} onChange={(e) => setStoreId(e.target.value)}>
           {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
@@ -207,10 +207,10 @@ export default function ShiftsPage() {
         {mode === "table" && (
           <div className="scroll">
             <table className="shifttable">
-              <thead><tr><th>名前</th>{days.map((d) => <th key={d} className={dow(d) === 0 || holidayName(d) ? "su" : dow(d) === 6 ? "sa" : ""}>{md(d)}<br /><small>{WEEKDAYS[dow(d)]}</small>{holidayName(d) && <><br /><small className="holname" style={{ fontSize: 9 }}>{holidayName(d)}</small></>}</th>)}</tr></thead>
+              <thead><tr><th>名前</th>{days.map((d) => <th key={d} title="押すと、この日の全員を一括・個別で直せます" style={{ cursor: "pointer" }} onClick={() => { setDay(d); setMode("day"); window.scrollTo({ top: 0, behavior: "smooth" }); }} className={dow(d) === 0 || holidayName(d) ? "su" : dow(d) === 6 ? "sa" : ""}>{md(d)}<br /><small>{WEEKDAYS[dow(d)]}</small>{holidayName(d) && <><br /><small className="holname" style={{ fontSize: 9 }}>{holidayName(d)}</small></>}</th>)}</tr></thead>
               <tbody>
                 {roster.map((p) => (
-                  <tr key={p.id}><td className="name">{p.name}</td>
+                  <tr key={p.id}><td className="name" style={{ cursor: "pointer" }} title="押すと、この人の日をまとめて直せます" onClick={() => { setPersonId(p.id); setPicked(new Set()); setMode("person"); window.scrollTo({ top: 0, behavior: "smooth" }); }}>{p.name}</td>
                     {days.map((d) => {
                       const s = byKey.get(`${p.id}|${d}`), r = reqKey.get(`${p.id}|${d}`);
                       return <td key={d} className={`${kindClass(s)} ${editable ? "click" : ""}`} onClick={() => editable && setTarget({ person: p, days: [d] })}>{cellText(s)}{r && !s && <i className="dot" />}</td>;
