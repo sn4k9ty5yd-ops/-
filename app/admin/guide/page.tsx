@@ -2,20 +2,24 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/client";
 import type { Guide } from "@/lib/guides";
+import { Notices } from "./Notices";
 
 export default function GuidePage() {
   const [GUIDES, setGuides] = useState<Guide[]>([]);
   const [id, setId] = useState("");
   const [err, setErr] = useState("");
   const [done, setDone] = useState(false);
+  const [tab, setTab] = useState<"guide" | "notices">("guide");
   useEffect(() => { api<Guide[]>("/api/guide").then((g) => { setGuides(g); setId(g[0]?.id ?? ""); }).catch((e) => setErr((e as Error).message)); }, []);
   const g = GUIDES.find((x) => x.id === id);
   if (!g) return <><h1>アプリの説明書</h1><p className="hint">{err || "読み込み中…"}</p></>;
+  if (tab === "notices") return (<><div className="actions noprint" style={{ marginBottom: 8 }}><button className="ghost" style={{ width: "auto", color: "var(--ink)" }} onClick={() => setTab("guide")}>説明書</button><button style={{ width: "auto" }}>お知らせ文</button></div><Notices /></>);
   const text = `${g.title}\n\n${g.lead}\n\n` + g.sections.map((s) => `■ ${s.h}\n${s.p.join("\n")}${s.list ? "\n" + s.list.map((l) => `・${l}`).join("\n") : ""}`).join("\n\n");
   const copy = async () => { try { await navigator.clipboard.writeText(text); setDone(true); setTimeout(() => setDone(false), 2500); } catch { /* 何もしない */ } };
   return (
     <>
       <h1>アプリの説明書</h1>
+      <div className="actions noprint" style={{ marginBottom: 8 }}><button style={{ width: "auto" }}>説明書</button><button className="ghost" style={{ width: "auto", color: "var(--ink)" }} onClick={() => setTab("notices")}>お知らせ文（LINEに貼る文章）</button></div>
       <div className="actions noprint" style={{ marginBottom: 12 }}>
         {GUIDES.map((x) => <button key={x.id} className={x.id === id ? "" : "ghost"} style={{ width: "auto", color: x.id === id ? undefined : "var(--ink)" }} onClick={() => setId(x.id)}>{x.to}向け</button>)}
         <button className="ghost" style={{ width: "auto", color: "var(--ink)" }} onClick={copy}>{done ? "✓ コピーしました" : "全文コピー"}</button>
