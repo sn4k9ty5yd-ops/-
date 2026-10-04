@@ -23,12 +23,11 @@ function Cards() {
   const cards = [
     { big: true, href: "/inbox", title: unread ? `お知らせ（${unread}件）` : "お知らせ", sub: unread ? "新しいお知らせがあります（休みのかぶりなど）" : "休みのかぶりや、話し合いの書き込み", show: true },
     { big: true, href: "/manual", title: "マニュアル", sub: "教育・営業マニュアル、技術動画、技術評価", show: true },
-    { big: true, href: "/shifts", title: leaveTodo ? `シフト関連（有給の確認待ち${leaveTodo}件）` : "シフト関連", sub: "シフトを見る・希望休を出す・有給の提出と変更", show: true },
+    { big: true, href: "/shifts", title: leaveTodo ? `シフト（有給の確認待ち${leaveTodo}件）` : "シフト", sub: me.level >= 2 ? "見る・希望休・有給・次のシフトを作る・出勤簿" : "シフトを見る・希望休を出す・有給の提出と変更", show: true },
     { big: true, href: "/material", title: "材料費（発注額）", sub: "発注した額を記録・月ごとの合計", show: true },
     { href: "/material/summary", title: "材料費統括", sub: "月ごと・お店ごと・商品ごとの割合（管理者・材料担当）", show: me.level === 4 || !!me.materialManager },
     { big: true, href: "/my-lessons", title: "自分のレッスン", sub: "何をしたか・何人目か・かかった時間をカレンダーで見る", show: me.rank === "assistant" },
     { href: "/lessons", title: "レッスン記録", sub: "アシスタントが今日何をしたかを、ボタンで記録・報告", show: me.level >= 3 || !!me.eduLead },
-    { big: true, href: "/admin/periods", title: "シフト管理", sub: "次のシフトを作る・いまの進み具合・締切・出勤簿", show: me.level >= 2 },
     { href: "/admin/stocktake", title: "棚卸し", sub: "店販・業務の棚卸し（印刷・コピーもできます）", show: me.level >= 2 },
     { href: "/admin/products", title: "商品一覧", sub: "店販・業務の商品と仕入値", show: me.level >= 3 },
     { href: "/admin/shifts", title: "出勤簿", sub: "日ごと・人ごと・一覧表で入力します", show: false },

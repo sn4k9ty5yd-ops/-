@@ -1,5 +1,6 @@
 "use client";
 import { SubTabs } from "@/app/SubTabs";
+import { shiftTabs } from "@/lib/shift-tabs";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { api, MeProvider, useAutoRefresh, useMe } from "@/lib/client";
@@ -46,9 +47,8 @@ function Page() {
   return (
     <main>
       <Link href="/home" className="back">← ホーム</Link>
-      <h1>シフト関連</h1>
-      <SubTabs items={[{ href: "/shifts", label: "シフトを見る" }, { href: "/requests", label: "希望休を出す" }, { href: "/leave", label: "有給の提出・変更" }]} />
-      {me.level >= 2 && <p style={{ margin: "0 0 12px" }}><Link href="/admin/requests">シフト（みんなの休みの一覧）を見る</Link></p>}
+      <h1>シフト</h1>
+      <SubTabs items={shiftTabs(me.level)} />
       <PeriodNav period={view} startDay={me.closingStartDay} onChange={setView} />
       <div className="tintbox" style={tintStyle(view.start)}>
         <p className="sub" style={{ margin: "4px 4px 10px" }}>

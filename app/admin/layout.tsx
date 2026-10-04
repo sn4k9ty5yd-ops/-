@@ -3,14 +3,16 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { MeProvider, useMe } from "@/lib/client";
 import { LEVEL_NAMES } from "@/lib/permissions";
+import { SubTabs } from "@/app/SubTabs";
+import { shiftTabs } from "@/lib/shift-tabs";
 
 // 画面ごとに必要な操作レベル（データの権限はDB側でも守られている。ここは見た目のため）
 const TABS: { href: string; label: string; min: number; sub?: boolean; owner?: boolean }[] = [
   { href: "/home", label: "ホーム", min: 1 },
-  { href: "/admin/periods", label: "シフト管理", min: 2 },
+  { href: "/shifts", label: "シフト", min: 1 },
+  { href: "/admin/periods", label: "進み具合・締切", min: 2, sub: true },
   { href: "/admin/shifts", label: "出勤簿", min: 2, sub: true },
-  { href: "/admin/requests", label: "シフト", min: 2, sub: true },
-  { href: "/requests", label: "自分の希望休を出す", min: 2, sub: true },
+  { href: "/admin/requests", label: "みんなの休み", min: 2, sub: true },
   { href: "/admin/staff", label: "スタッフ", min: 3 },
   { href: "/admin/stock", label: "在庫", min: 99 },
   { href: "/admin/stocktake", label: "棚卸し", min: 2 },
@@ -22,7 +24,7 @@ const TABS: { href: string; label: string; min: number; sub?: boolean; owner?: b
   { href: "/admin/feedback", label: "ご要望", min: 4, owner: true },
 ];
 
-const SHIFT_PATHS = ["/admin/shift", "/admin/requests", "/admin/periods", "/requests"];
+const SHIFT_PATHS = ["/admin/shift", "/admin/requests", "/admin/periods"];
 
 function Shell({ children }: { children: React.ReactNode }) {
   const { me, logout } = useMe();
@@ -41,8 +43,9 @@ function Shell({ children }: { children: React.ReactNode }) {
         </span>
       </header>
       <nav className="tabs">
-        {TABS.filter((t) => me.level >= t.min && (!t.owner || me.appOwner) && (!t.sub || inShift)).map((t) => <Link key={t.href} href={t.href} className={path === t.href || (t.href === "/admin/shift" && path === "/admin/shift") ? "on" : ""}>{t.label}</Link>)}
+        {TABS.filter((t) => me.level >= t.min && (!t.owner || me.appOwner) && !t.sub).map((t) => <Link key={t.href} href={t.href} className={path === t.href || (t.href === "/shifts" && inShift) ? "on" : ""}>{t.label}</Link>)}
       </nav>
+      {inShift && <div className="wide" style={{ paddingBottom: 0 }}><SubTabs items={shiftTabs(me.level)} /></div>}
       <main className={path.startsWith("/admin/shifts") || path.startsWith("/admin/stocktake") || path.startsWith("/admin/stock") || path.startsWith("/admin/products") || path.startsWith("/admin/requests") || path.startsWith("/admin/records") ? "xwide" : "wide"}>{allowed ? children : <p className="hint">この画面を使う権限がありません。<Link href="/home">ホームへ戻る</Link></p>}</main>
     </div>
   );
