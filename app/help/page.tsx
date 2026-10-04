@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { api, MeProvider, useMe } from "@/lib/client";
-import { HELP, HELP_INTRO } from "@/lib/help";
+import { GLOSSARY, HELP, HELP_INTRO } from "@/lib/help";
 import type { FeedbackRow } from "@/lib/service";
 
 const ST = { new: "届きました", read: "読みました", done: "対応しました" } as const;
@@ -25,20 +25,25 @@ function Inner() {
       <h1>ヘルプ</h1>
       <p className="hint">{HELP_INTRO}</p>
       <p className="sub">いまの自分（{me.name}）が使える機能だけを出しています。</p>
+      <details className="card" style={{ marginBottom: 10 }}>
+        <summary style={{ cursor: "pointer", fontSize: 17 }}><b>🔰 はじめに：言葉の説明</b></summary>
+        <dl style={{ lineHeight: 1.8 }}>{GLOSSARY.map(([k, v]) => <div key={k} style={{ marginBottom: 6 }}><dt><b>{k}</b></dt><dd style={{ margin: "0 0 0 1em" }}>{v}</dd></div>)}</dl>
+      </details>
       <nav className="actions" style={{ flexWrap: "wrap", margin: "8px 0 16px" }}>
         {topics.map((t) => <a key={t.id} href={`#h-${t.id}`} onClick={() => setOpen(t.id)} className="badge2" style={{ textDecoration: "none" }}>{t.icon} {t.title.split("（")[0]}</a>)}
       </nav>
       {topics.map((t) => (
         <details key={t.id} id={`h-${t.id}`} className="card" style={{ marginBottom: 10 }} open={open === t.id || undefined}>
           <summary style={{ cursor: "pointer", fontSize: 17 }}><b>{t.icon} {t.title}</b> <span className="sub">　使う人：{t.who}</span></summary>
-          <ol style={{ lineHeight: 1.9, paddingLeft: 22 }}>{t.steps.map((s, i) => <li key={i}>{s}</li>)}</ol>
+          <p style={{ margin: "6px 0 0" }}>{t.what}</p>
+          <ol style={{ lineHeight: 2, paddingLeft: 22, fontSize: 16 }}>{t.steps.map((s, i) => <li key={i}>{s}</li>)}</ol>
           {t.tips && <ul style={{ lineHeight: 1.8 }} className="sub">{t.tips.map((s, i) => <li key={i}>💡 {s}</li>)}</ul>}
         </details>
       ))}
 
       {!me.displayOnly && (
         <section id="order" className="card" style={{ marginTop: 24 }}>
-          <h2 style={{ marginTop: 0 }}>💌 このアプリを、もっとこうしてほしい！</h2>
+          <h2 style={{ marginTop: 0 }}>💌 このアプリを、もっとこうしてほしい！・困っていること</h2>
           <p className="sub">「ここが使いにくい」「こんな機能がほしい」など、なんでも書いてください。アプリを作っている人に、直接届きます（ほかの人には見えません）。</p>
           <textarea value={text} onChange={(e) => setText(e.target.value)} rows={5} maxLength={2000} style={{ width: "100%", fontSize: 16 }} placeholder="例：売上の画面に、先月との比べも出してほしい" />
           <button disabled={!text.trim()} onClick={send}>送る</button>
