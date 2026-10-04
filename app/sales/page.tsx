@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import { SubTabs } from "@/app/SubTabs";
+import { salesTabs } from "@/lib/sales-tabs";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, MeProvider, useAutoRefresh, useMe } from "@/lib/client";
 import { md } from "@/lib/labels";
@@ -77,7 +78,7 @@ function Page() {
     <main className="xwide">
       <Link href="/home" className="back">← ホーム</Link>
       <h1>売上</h1>
-      <SubTabs items={[{ href: "/my-sales", label: "自分の売上", show: me.level < 4 }, { href: "/sales", label: "売上の確認・歩合（店長・事務員さん）", show: me.level >= 2 }]} />
+      <SubTabs items={salesTabs(me.level, me.displayOnly)} />
       <div className="toolbar">
         <select aria-label="お店" value={storeId} onChange={(e) => setStoreId(e.target.value)}>
           {(me.level === 4 ? stores : stores.filter((s) => s.id === me.storeId)).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
