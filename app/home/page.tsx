@@ -42,7 +42,7 @@ function Cards() {
     { href: "/admin/staff", title: "スタッフ", sub: "登録・退職・パスコード", show: me.level >= 3 },
     { href: "/security", title: "セキュリティ", sub: "パスコードを変える・ログインの記録", show: true },
     { href: "/admin/records", title: "税務署用の書面", sub: "全情報を、期間をえらんで書面（印刷・PDF）にする", show: me.level === 4 },
-    { href: "/admin/guide", title: "アプリの説明書", sub: "社長用・事務員さん用・全社員Zoom台本（印刷・コピー）", show: me.level >= 4 },
+    { href: "/admin/guide", title: "アプリの説明書", sub: "社長用・事務員さん用・全社員Zoom台本（印刷・コピー）", show: !!me.appOwner },
     { href: "/admin/settings", title: "設定", sub: "休憩・実働のルール", show: me.level >= 4 },
     { href: "/admin/stores", title: "店舗の編集", sub: "新店舗の追加・名前の変更・閉店（管理者のみ）", show: me.level >= 4 },
   ].filter((c) => c.show);

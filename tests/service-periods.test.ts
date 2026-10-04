@@ -3,6 +3,7 @@ import { newDb } from "./helpers";
 import { migrate } from "../lib/db/migrate";
 import type { Database } from "../lib/db/types";
 import * as svc from "../lib/service";
+import { asUser } from "../lib/db/user-context";
 
 let db: Database;
 const id: Record<string, string> = {};
@@ -113,5 +114,12 @@ describe("シフト担当（Lv2）の操作", () => {
     await svc.setPeriodStatus(d, u.maker, { periodId: p.id, storeId: s2.a, status: "collecting" });
     await expect(svc.setPeriodStatus(d, u.maker, { periodId: p.id, storeId: s2.b, status: "collecting" })).rejects.toThrow(svc.ForbiddenError);
     await expect(svc.setPeriodStatus(d, u.maker, { periodId: p.id, storeId: s2.a, status: "acknowledged" })).rejects.toThrow();
+  });
+  it("アプリ制作者の印は、画面（アプリ用の接続）からは付けられない。管理者でも付かない", async () => {
+    expect((await svc.getMe(d, u.office))?.appOwner).toBe(false);
+    await expect(asUser(d, u.office, (q) => q.query("update memberships set app_owner = true where id = $1", [u.office]))).rejects.toThrow();
+    await d.query("update memberships set app_owner = true where id = $1", [u.office]);   // 制作者の印はデータベースへ直接
+    expect((await svc.getMe(d, u.office))?.appOwner).toBe(true);
+    expect((await svc.getMe(d, u.maker))?.appOwner).toBe(false);
   });
 });

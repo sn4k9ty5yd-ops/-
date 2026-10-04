@@ -11,7 +11,7 @@ import type { Level } from "./permissions";
 
 // 画面(API)から呼ばれる業務処理。権限の判定はすべてDB側(RLS)で行い、ここでは再実装しない。
 
-export interface Me { mustChangePasscode?: boolean; id: string; name: string; level: Level; storeId: string; companyId: string; companyName: string; closingStartDay: number; breakRule: BreakRule; displayOnly: boolean; materialManager?: boolean; rank?: "assistant" | "stylist" | null; eduLead?: boolean; }
+export interface Me { mustChangePasscode?: boolean; id: string; name: string; level: Level; storeId: string; companyId: string; companyName: string; closingStartDay: number; breakRule: BreakRule; displayOnly: boolean; materialManager?: boolean; appOwner?: boolean; rank?: "assistant" | "stylist" | null; eduLead?: boolean; }
 export interface StoreRow { id: string; name: string; status: "active" | "closed"; defaultOpen: string; defaultClose: string; satOpen: string | null; satClose: string | null; }
 /** 管理者だけが見られる、ログインの状況 */
 export type Presence = "online" | "idle" | "loggedout" | "never";
@@ -29,7 +29,7 @@ export async function getMe(db: Database, userId: string): Promise<Me | null> {
   const { rows } = await asUser(db, userId, (q) =>
     q.query<Omit<Me, "breakRule"> & { cap: number | null; tiers: { overMinutes: number; breakMinutes: number }[] }>(
       `select m.id, m.name, m.level, m.store_id as "storeId", m.company_id as "companyId", c.name as "companyName", c.closing_start_day as "closingStartDay",
-              c.work_cap_minutes as cap, c.break_tiers as tiers, m.display_only as "displayOnly", m.material_manager as "materialManager", m.rank as rank, m.edu_lead as "eduLead", m.passcode_must_change as "mustChangePasscode"
+              c.work_cap_minutes as cap, c.break_tiers as tiers, m.display_only as "displayOnly", m.material_manager as "materialManager", m.app_owner as "appOwner", m.rank as rank, m.edu_lead as "eduLead", m.passcode_must_change as "mustChangePasscode"
          from memberships m join companies c on c.id = m.company_id where m.id = $1`, [userId]),
   );
   const r = rows[0];
