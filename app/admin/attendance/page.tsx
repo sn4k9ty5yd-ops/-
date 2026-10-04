@@ -61,26 +61,26 @@ export default function AttendancePage() {
     try { setMsg(""); const r = await api<T>("/api/attendance", { periodId, storeId, ...body }); await load(); return r; } catch (e) { setMsg((e as Error).message); throw e; }
   };
   const canSubmit = me.level === 4 || (me.level >= 2 && storeId === me.storeId);
-  const reason = loading ? "" : !dbp ? "この期間は、まだ作成されていません。" : editable ? "" : attStatus !== "open" ? "提出済み・確認済みのため、変更できません。" : me.level < 4 && storeId !== me.storeId ? "他のお店の出勤簿です（見るだけ）。" : "いまは変更できません。";
+  const reason = loading ? "" : !dbp ? "この期間は、まだ作成されていません。" : editable ? "" : attStatus !== "open" ? "提出済み・確認済みのため、変更できません。" : me.level < 4 && storeId !== me.storeId ? "他のお店の勤務時間です（見るだけ）。" : "いまは変更できません。";
 
   return (
     <>
-      <h1 className="noprint">出勤簿</h1>
+      <h1 className="noprint">勤務時間の提出</h1>
       <h1 className="printonly" style={{ fontSize: 20 }}>出　勤　簿　（{reiwaRange(view.start, view.end)}）　　店名：{store?.name}</h1>
       <div className="toolbar">
         <select aria-label="お店" value={storeId} onChange={(e) => setStoreId(e.target.value)}>{stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
         <div className="seg" style={{ margin: 0 }}>
-          {([["day", "日ごと"], ["table", "出勤簿"], ["total", "合計・有給"]] as [Mode, string][]).map(([m, l]) => <button key={m} className={mode === m ? "on" : ""} onClick={() => setMode(m)}>{l}</button>)}
+          {([["day", "日ごと"], ["table", "表"], ["total", "合計・有給"]] as [Mode, string][]).map(([m, l]) => <button key={m} className={mode === m ? "on" : ""} onClick={() => setMode(m)}>{l}</button>)}
         </div>
       </div>
       <PeriodNav period={view} startDay={me.closingStartDay} onChange={setView} />
-      <p className="sub" style={{ margin: "0 0 8px" }}>{store?.name}：出勤簿 {loading ? "読み込み中…" : ATTENDANCE_LABEL[attStatus]}　{reason && <b style={{ color: "#b45309" }}>{reason}</b>}</p>
+      <p className="sub" style={{ margin: "0 0 8px" }}>{store?.name}：勤務時間 {loading ? "読み込み中…" : ATTENDANCE_LABEL[attStatus]}　{reason && <b style={{ color: "#b45309" }}>{reason}</b>}</p>
 
       {!loading && dbp && (
         <div className="actions" style={{ marginBottom: 10 }}>
-          {editable && <button className="ghost" style={{ color: "var(--blue)" }} onClick={async () => { const r = await post<{ count: number }>({ action: "draft" }); setNote(`シフトから${r.count}件の下書きを作りました`); }}>シフトから下書きを作る</button>}
+          {editable && <button className="ghost" style={{ color: "var(--blue)" }} onClick={async () => { const r = await post<{ count: number }>({ action: "draft" }); setNote(`シフトから${r.count}件の下書きを作りました`); }}>出勤簿から下書きを作る</button>}
           {editable && <button className="ghost" style={{ color: "var(--blue)" }} onClick={() => setShowBulk(!showBulk)}>まとめて入力</button>}
-          {canSubmit && attStatus === "open" && <button style={{ width: "auto", margin: 0, padding: "10px 14px", fontSize: 14 }} onClick={() => confirm("出勤簿をオフィスに提出しますか？（提出後は店長は直せません）") && post({ action: "status", status: "submitted" })}>オフィスに提出する</button>}
+          {canSubmit && attStatus === "open" && <button style={{ width: "auto", margin: 0, padding: "10px 14px", fontSize: 14 }} onClick={() => confirm("勤務時間をオフィスに提出しますか？（提出後は店長は直せません）") && post({ action: "status", status: "submitted" })}>オフィスに提出する</button>}
           {me.level === 4 && attStatus === "submitted" && <button style={{ width: "auto", margin: 0, padding: "10px 14px", fontSize: 14 }} onClick={() => post({ action: "status", status: "acknowledged" })}>確認済みにする</button>}
           {me.level === 4 && attStatus !== "open" && <button className="ghost" style={{ color: "var(--sub)" }} onClick={() => confirm("入力中に戻しますか？") && post({ action: "status", status: attStatus === "acknowledged" ? "submitted" : "open" })}>ひとつ戻す</button>}
           {note && <span className="sub">{note}</span>}

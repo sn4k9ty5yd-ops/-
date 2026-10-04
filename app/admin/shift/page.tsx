@@ -10,8 +10,8 @@ import { STATUS_LABEL, STATUS_ORDER, type PeriodRow } from "@/lib/service";
 
 const TILES = [
   { href: "/admin/requests", t: "① みんなの希望休", s: "スタッフの休みを見る・上限を決める", min: 2 },
-  { href: "/admin/shifts", t: "② シフトを作る", s: "日ごと・人ごと・一覧表で入力", min: 2 },
-  { href: "/admin/attendance", t: "③ 出勤簿", s: "出勤・退勤・休憩・実働", min: 2 },
+  { href: "/admin/shifts", t: "② 出勤簿", s: "日ごと・人ごと・一覧表で、入店・退店を入力", min: 2 },
+  { href: "/admin/attendance", t: "③ 勤務時間の提出", s: "働いた時間（休憩・実働）を、事務員さんに提出", min: 2 },
   { href: "/shifts", t: "シフトを見る", s: "今日の出勤・月のシフト", min: 1 },
   { href: "/requests", t: "自分の希望休を出す", s: "休みたい日をえらぶ", min: 1 },
   { href: "/admin/periods", t: "シフト期間（くわしく）", s: "次の期間を作る・締切の日時・進める", min: 2 },
@@ -39,7 +39,7 @@ export default function ShiftHub() {
   return (
     <>
       <h1>シフトまとめ</h1>
-      <p className="hint">シフトの流れは、上から順に「①希望休を受け付ける → ②シフトを作る → ③確定して公開 → ④出勤簿 → 提出」です。いまどこまで進んだか、次に何を押すかを、ここで見られます。</p>
+      <p className="hint">シフトの流れは、上から順に「①希望休を受け付ける → ②出勤簿をつける（入店・退店） → ③確定して公開 → ④勤務時間を提出」です。いまどこまで進んだか、次に何を押すかを、ここで見られます。</p>
       {me.level >= 3 && stores.length > 1 && (
         <select value={storeId} onChange={(e) => setStoreId(e.target.value)} style={{ marginBottom: 8 }}>
           {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
@@ -64,7 +64,7 @@ export default function ShiftHub() {
             {!s ? <p className="sub">このお店は、この期間にまだ入っていません。</p> : (
               <>
                 <div className="steps2" style={{ margin: "10px 0" }}>{STATUS_ORDER.map((x) => <i key={x} className={x === s.status ? "now" : STATUS_ORDER.indexOf(x) < STATUS_ORDER.indexOf(s.status) ? "done" : ""} />)}</div>
-                <p style={{ margin: "4px 0" }}>いま：<b>{STATUS_LABEL[s.status]}</b>　　出勤簿：<b>{{ open: "入力中", submitted: "提出済み", acknowledged: "確認済み" }[s.attendanceStatus]}</b></p>
+                <p style={{ margin: "4px 0" }}>いま：<b>{STATUS_LABEL[s.status]}</b>　　勤務時間：<b>{{ open: "入力中", submitted: "提出済み", acknowledged: "確認済み" }[s.attendanceStatus]}</b></p>
                 {next && canManage && !blocked && (
                   <button onClick={() => confirm(`「${next.label}」でよいですか？`) && run(async () => {
                     try { await api("/api/periods", { periodId: p.id, storeId, status: next.to }); }
