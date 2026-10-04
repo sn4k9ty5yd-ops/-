@@ -1,4 +1,5 @@
 "use client";
+import { SubTabs } from "@/app/SubTabs";
 import { PasteOff } from "./PasteOff";
 import { LimitAll } from "./LimitAll";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -93,7 +94,9 @@ export default function ShiftsPage() {
 
   return (
     <>
+      <SubTabs items={[{ href: "/admin/periods", label: "やること" }, { href: "/admin/shifts", label: "出勤簿" }]} />
       <h1>出勤簿</h1>
+      <p className="hint">ここは「つくる」の出勤簿です。日にちを選んで、その日の全員の入店・退店を、まとめて、または1人ずつ直します。</p>
       <div className="toolbar">
         <select aria-label="お店" value={storeId} onChange={(e) => setStoreId(e.target.value)}>
           {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}

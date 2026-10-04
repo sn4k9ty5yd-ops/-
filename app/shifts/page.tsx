@@ -82,6 +82,7 @@ function Page() {
       {!me.displayOnly && <Link href="/home" className="back">← ホーム</Link>}
       <h1>{me.displayOnly ? `${stores.find((x) => x.id === me.storeId)?.name ?? ""} のシフト` : "シフト"}</h1>
       {!me.displayOnly && <SubTabs items={shiftTabs(me.level)} />}
+      {!me.displayOnly && <p className="hint">ここは「見る」画面です。日にちを押すと、その日の全員が見られます。</p>}
       {(me.level >= 3) && (
         <select aria-label="お店" value={storeId} onChange={(e) => setStoreId(e.target.value)} style={{ marginBottom: 12 }}>
           {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}

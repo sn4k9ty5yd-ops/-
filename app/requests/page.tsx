@@ -49,6 +49,8 @@ function Page() {
       <Link href="/home" className="back">← ホーム</Link>
       <h1>シフト</h1>
       <SubTabs items={shiftTabs(me.level)} />
+      <SubTabs items={[{ href: "/requests", label: "希望休" }, { href: "/leave", label: "有給（年2回の提出・変更）" }]} />
+      <p className="hint">ここは「出す」画面です。休みたい日を、カレンダーで出します。</p>
       <PeriodNav period={view} startDay={me.closingStartDay} onChange={setView} />
       <div className="tintbox" style={tintStyle(view.start)}>
         <p className="sub" style={{ margin: "4px 4px 10px" }}>

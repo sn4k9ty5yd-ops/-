@@ -77,6 +77,8 @@ function Page() {
       <Link href="/home" className="back">← ホーム</Link>
       <h1>シフト</h1>
       <SubTabs items={shiftTabs(me.level)} />
+      <SubTabs items={[{ href: "/requests", label: "希望休" }, { href: "/leave", label: "有給（年2回の提出・変更）" }]} />
+      <p className="hint">ここは「出す」画面です。年に2回、有給を取りたい日を出します。</p>
       {(me.level >= 3) && <Link href="/leave/review" className="storelink" style={{ display: "inline-block", marginBottom: 12 }}>{me.level === 4 ? "確認・許可・提出状況・受付の管理へ" : "確認・提出状況へ"}</Link>}
       {msg && <p className="err">{msg}</p>}{ok && <p className="sub" style={{ color: "var(--ok)" }}>✅ {ok}</p>}
       {wins.length === 0 && <p className="hint">いまは、有給の提出を受け付けていません。事務員さんが受付を始めると、お知らせが届きます。</p>}

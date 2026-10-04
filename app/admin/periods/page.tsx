@@ -1,5 +1,7 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
+import { SubTabs } from "@/app/SubTabs";
 import { api, useAutoRefresh, useMe } from "@/lib/client";
 import { NEXT_ACTION } from "@/lib/labels";
 import { reiwaRange } from "@/lib/era";
@@ -23,10 +25,37 @@ export default function PeriodsPage() {
   const name = (id: string) => stores.find((s) => s.id === id)?.name ?? "";
   const canManage = (storeId: string) => me.level === 4 || (me.level >= 2 && storeId === me.storeId);
 
+  const advance = (periodId: string, storeId: string, next: { to: PeriodStatus; label: string }) =>
+    confirm(`${name(storeId)}：「${next.label}」でよいですか？`) && run(async () => {
+      try { await api("/api/periods", { periodId, storeId, status: next.to }); }
+      catch (e) {
+        if (!(e as Error).message.includes("かぶっている")) throw e;
+        if (confirm(`${(e as Error).message}\n\nそれでも、このまま確定しますか？`)) await api("/api/periods", { periodId, storeId, status: next.to, force: true });
+      }
+    });
+  // 「やること」: 自分のお店の、いま進めるシフト（確認済みになるまで）
+  const todayStr = todayJst();
+  const todo = [...periods].sort((x, y) => x.start.localeCompare(y.start)).filter((x) => x.end >= todayStr).map((x) => ({ p: x, s: x.stores.find((y) => y.storeId === me.storeId) })).find((x) => x.s && x.s.status !== "acknowledged");
   return (
     <>
-      <h1>進み具合・締切</h1>
+      <SubTabs items={[{ href: "/admin/periods", label: "やること" }, { href: "/admin/shifts", label: "出勤簿" }]} />
+      <h1>つくる</h1>
       <p className="hint">シフトの流れ：①希望休の受付 → ②締め切り → ③出勤簿づくり → ④確定 → ⑤スタッフに公開 → ⑥オフィスに提出 → ⑦確認済み。各お店の「次は〜」のボタンを順番に押していきます。まちがえたら「ひとつ戻す」を押してください。</p>
+      {todo && todo.s && (() => {
+        const { p, s } = todo; const next = NEXT_ACTION[s.status];
+        const inKit = s.status === "collecting" || s.status === "closed" || s.status === "drafting";
+        return (
+          <div className="card" style={{ margin: "10px 0" }}>
+            <span className="sub">いまの「やること」（{name(s.storeId)}）</span>
+            <div><b style={{ fontSize: 18 }}>{p.label}</b>　<span className="sub">いま：{STATUS_LABEL[s.status]}</span></div>
+            <div className="steps2">{STATUS_ORDER.map((x) => <i key={x} className={x === s.status ? "now" : STATUS_ORDER.indexOf(x) < STATUS_ORDER.indexOf(s.status) ? "done" : ""} />)}</div>
+            {next && canManage(s.storeId) && (next.to !== "acknowledged" || me.level >= 3) && (
+              <button onClick={() => advance(p.id, s.storeId, next)}>次は：{next.label}</button>
+            )}
+            {inKit && <Link href="/admin/shifts" className="ghost" style={{ display: "block", textAlign: "center", padding: 10 }}>出勤簿を開く</Link>}
+          </div>
+        );
+      })()}
       {me.level >= 2 && <button onClick={() => run(async () => { const r = await api<{ created: boolean; label: string }>("/api/periods", { action: "next" }); setNote(r.created ? `「${r.label}」を作りました` : `「${r.label}」は、もう作ってあります`); })}>次の期間を作る</button>}
       {periods.length === 0 && <p className="hint">まだ期間がありません。「次の期間を作る」を押してください。</p>}
       {periods.slice(0, 3).map((p) => {
@@ -51,13 +80,7 @@ export default function PeriodsPage() {
                   )}
                   {next && canManage(s.storeId) && (!needOffice || me.level >= 3) && (
                     <button style={{ width: "auto", margin: 0, padding: "10px 14px", fontSize: 14 }}
-                      onClick={() => confirm(`${name(s.storeId)}：「${next.label}」でよいですか？`) && run(async () => {
-                        try { await api("/api/periods", { periodId: p.id, storeId: s.storeId, status: next.to }); }
-                        catch (e) {
-                          if (!(e as Error).message.includes("かぶっている")) throw e;
-                          if (confirm(`${(e as Error).message}\n\nそれでも、このまま確定しますか？`)) await api("/api/periods", { periodId: p.id, storeId: s.storeId, status: next.to, force: true });
-                        }
-                      })}>
+                      onClick={() => advance(p.id, s.storeId, next)}>
                       {next.label}
                     </button>
                   )}

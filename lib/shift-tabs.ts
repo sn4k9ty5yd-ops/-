@@ -1,10 +1,8 @@
-/** 「シフト」の項目の中の切りかえ。見られる人・使える人は、レベルで分かれる（データの権限はDB側でも守られている） */
-export function shiftTabs(level: number): { href: string; label: string; show?: boolean }[] {
+/** 「シフト」の項目の中の切りかえ（3つだけ）。「つくる」はシフト担当・店長・事務員さんだけ。データの権限はDB側でも守られている */
+export function shiftTabs(level: number): { href: string; label: string; show?: boolean; also?: string[] }[] {
   return [
-    { href: "/shifts", label: "シフトを見る" },
-    { href: "/requests", label: "希望休" },
-    { href: "/leave", label: "有給" },
-    { href: "/admin/periods", label: "進み具合・締切", show: level >= 2 },
-    { href: "/admin/shifts", label: "出勤簿", show: level >= 2 },
+    { href: "/shifts", label: "見る" },
+    { href: "/requests", label: "出す", also: ["/leave"] },
+    { href: "/admin/periods", label: "つくる", also: ["/admin/shifts"], show: level >= 2 },
   ];
 }
