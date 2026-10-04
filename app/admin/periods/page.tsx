@@ -25,10 +25,11 @@ export default function PeriodsPage() {
 
   return (
     <>
-      <h1>シフト期間</h1>
+      <h1>シフト管理</h1>
+      <p className="hint">シフトの流れ：①希望休の受付 → ②締め切り → ③出勤簿づくり → ④確定 → ⑤スタッフに公開 → ⑥オフィスに提出 → ⑦確認済み。各お店の「次は〜」のボタンを順番に押していきます。まちがえたら「ひとつ戻す」を押してください。</p>
       {me.level >= 2 && <button onClick={() => run(async () => { const r = await api<{ created: boolean; label: string }>("/api/periods", { action: "next" }); setNote(r.created ? `「${r.label}」を作りました` : `「${r.label}」は、もう作ってあります`); })}>次の期間を作る</button>}
       {periods.length === 0 && <p className="hint">まだ期間がありません。「次の期間を作る」を押してください。</p>}
-      {periods.map((p) => {
+      {periods.slice(0, 3).map((p) => {
         const rel = relationLabel(p.start, periodFor(todayJst(), me.closingStartDay).start);
         return (
         <div key={p.id} className="card tint" style={{ marginTop: 16, ...tintStyle(p.start) }}>

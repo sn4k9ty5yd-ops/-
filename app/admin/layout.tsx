@@ -7,7 +7,7 @@ import { LEVEL_NAMES } from "@/lib/permissions";
 // 画面ごとに必要な操作レベル（データの権限はDB側でも守られている。ここは見た目のため）
 const TABS: { href: string; label: string; min: number; sub?: boolean; owner?: boolean }[] = [
   { href: "/home", label: "ホーム", min: 1 },
-  { href: "/admin/shift", label: "シフト管理", min: 2 },
+  { href: "/admin/periods", label: "シフト管理", min: 2 },
   { href: "/admin/shifts", label: "出勤簿", min: 2, sub: true },
   { href: "/admin/requests", label: "シフト", min: 2, sub: true },
   { href: "/requests", label: "自分の希望休を出す", min: 2, sub: true },
@@ -16,7 +16,6 @@ const TABS: { href: string; label: string; min: number; sub?: boolean; owner?: b
   { href: "/admin/stocktake", label: "棚卸し", min: 2 },
   { href: "/admin/products", label: "商品", min: 3 },
   { href: "/admin/stores", label: "店舗の編集", min: 4 },
-  { href: "/admin/periods", label: "シフト期間", min: 2, sub: true },
   { href: "/admin/settings", label: "設定", min: 3 },
   { href: "/admin/notices", label: "お知らせ文", min: 4 },
   { href: "/admin/records", label: "税務署用の書面", min: 4 },
