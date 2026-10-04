@@ -57,7 +57,7 @@ export default function ShiftHub() {
         const s = p.stores.find((x) => x.storeId === storeId);
         const rel = relationLabel(p.start, curStart);
         const next = s ? NEXT_ACTION[s.status] : undefined;
-        const blocked = next?.to === "acknowledged" || (me.level < 3 && next?.to === "submitted");
+        const blocked = next?.to === "acknowledged";
         return (
           <div key={p.id} className="card" style={{ marginTop: 12 }}>
             <span className={`badge2 ${rel.kind}`}>{rel.label}</span> <b style={{ fontSize: 18 }}>{p.label}</b> <span className="sub">{reiwaRange(p.start, p.end)}</span>
@@ -74,7 +74,7 @@ export default function ShiftHub() {
                     }
                   })}>次は：{next.label}</button>
                 )}
-                {next && blocked && <p className="sub">次は「{next.label}」です（{next.to === "acknowledged" ? "オフィスが行います" : "店長が行います"}）。</p>}
+                {next && blocked && <p className="sub">次は「{next.label}」です（オフィスが行います）。</p>}
                 {!canManage && <p className="sub">他のお店です（見るだけ）。</p>}
               </>
             )}

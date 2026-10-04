@@ -113,7 +113,10 @@ describe("シフト担当（Lv2）の操作", () => {
     const p = (await svc.listPeriods(d, u.office))[0];
     await svc.setPeriodStatus(d, u.maker, { periodId: p.id, storeId: s2.a, status: "collecting" });
     await expect(svc.setPeriodStatus(d, u.maker, { periodId: p.id, storeId: s2.b, status: "collecting" })).rejects.toThrow(svc.ForbiddenError);
+    for (const st of ["closed", "drafting", "confirmed", "published", "submitted"] as const) await svc.setPeriodStatus(d, u.maker, { periodId: p.id, storeId: s2.a, status: st });   // 公開もオフィスへの提出も、シフト担当が押せる
     await expect(svc.setPeriodStatus(d, u.maker, { periodId: p.id, storeId: s2.a, status: "acknowledged" })).rejects.toThrow();
+    await svc.setAttendanceStatus(d, u.maker, p.id, s2.a, "submitted");
+    await expect(svc.setAttendanceStatus(d, u.maker, p.id, s2.a, "acknowledged")).rejects.toThrow();
   });
   it("アプリ制作者の印は、画面（アプリ用の接続）からは付けられない。管理者でも付かない", async () => {
     expect((await svc.getMe(d, u.office))?.appOwner).toBe(false);

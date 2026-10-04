@@ -48,7 +48,7 @@ export default function PeriodsPage() {
                         onBlur={(e) => e.target.value && run(() => api("/api/periods", { periodId: p.id, storeId: s.storeId, closeAt: `${e.target.value}:00+09:00` }))} />
                     </label>
                   )}
-                  {next && canManage(s.storeId) && (!needOffice || me.level === 4) && !(me.level < 3 && next.to === "submitted") && (
+                  {next && canManage(s.storeId) && (!needOffice || me.level === 4) && (
                     <button style={{ width: "auto", margin: 0, padding: "10px 14px", fontSize: 14 }}
                       onClick={() => confirm(`${name(s.storeId)}：「${next.label}」でよいですか？`) && run(async () => {
                         try { await api("/api/periods", { periodId: p.id, storeId: s.storeId, status: next.to }); }

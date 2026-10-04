@@ -60,7 +60,7 @@ export default function AttendancePage() {
   const post = async <T,>(body: object): Promise<T> => {
     try { setMsg(""); const r = await api<T>("/api/attendance", { periodId, storeId, ...body }); await load(); return r; } catch (e) { setMsg((e as Error).message); throw e; }
   };
-  const canSubmit = me.level === 4 || (me.level === 3 && storeId === me.storeId);
+  const canSubmit = me.level === 4 || (me.level >= 2 && storeId === me.storeId);
   const reason = loading ? "" : !dbp ? "この期間は、まだ作成されていません。" : editable ? "" : attStatus !== "open" ? "提出済み・確認済みのため、変更できません。" : me.level < 4 && storeId !== me.storeId ? "他のお店の出勤簿です（見るだけ）。" : "いまは変更できません。";
 
   return (
