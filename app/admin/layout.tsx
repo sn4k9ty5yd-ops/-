@@ -7,9 +7,9 @@ import { LEVEL_NAMES } from "@/lib/permissions";
 // 画面ごとに必要な操作レベル（データの権限はDB側でも守られている。ここは見た目のため）
 const TABS: { href: string; label: string; min: number; sub?: boolean; owner?: boolean }[] = [
   { href: "/home", label: "ホーム", min: 1 },
-  { href: "/admin/shift", label: "シフト", min: 2 },
+  { href: "/admin/shift", label: "シフト管理", min: 2 },
   { href: "/admin/shifts", label: "出勤簿", min: 2, sub: true },
-  { href: "/admin/requests", label: "みんなの希望休", min: 2, sub: true },
+  { href: "/admin/requests", label: "シフト", min: 2, sub: true },
   { href: "/requests", label: "自分の希望休を出す", min: 2, sub: true },
   { href: "/admin/staff", label: "スタッフ", min: 3 },
   { href: "/admin/stock", label: "在庫", min: 99 },

@@ -29,6 +29,7 @@ export default function ShiftsPage() {
   const [day, setDay] = useState("");
   const [personId, setPersonId] = useState("");
   const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [fillTime, setFillTime] = useState<{ day: string; start: string; end: string } | null>(null);
   const [bar, setBar] = useState<{ kind: ShiftKind; start: string; end: string }>({ kind: "work", start: "10:00", end: "19:00" });
   const [target, setTarget] = useState<Target | null>(null);
   const [msg, setMsg] = useState("");
@@ -117,11 +118,22 @@ export default function ShiftsPage() {
             </div>
             <div className="card" style={{ marginTop: 10 }}>
               <b style={{ fontSize: 18 }}>{md(day || days[0])}（{WEEKDAYS[dow(day || days[0])]}）</b>
-              {editable && (
-                <button style={{ marginTop: 10, padding: 12, fontSize: 15 }} onClick={async () => { const n = await post({ action: "fill", days: [day], start: hoursOn(store, day).start, end: hoursOn(store, day).end }); setNote(`${n}人分を入れました`); }}>
-                  全員を {hoursOn(store, day).start}〜{hoursOn(store, day).end} で入れる
-                </button>
-              )}
+              {editable && (() => {
+                const dd = day || days[0];
+                const t = fillTime && fillTime.day === dd ? fillTime : { day: dd, ...hoursOn(store, dd) };
+                return (
+                  <div style={{ marginTop: 10 }}>
+                    <div className="times">
+                      <label>入店<input type="time" step={300} value={t.start} onChange={(e) => setFillTime({ ...t, start: e.target.value })} /></label>
+                      <label>退店<input type="time" step={300} value={t.end} onChange={(e) => setFillTime({ ...t, end: e.target.value })} /></label>
+                    </div>
+                    <div className="sub" style={{ margin: "6px 0" }}>{hoursText(t.start, t.end, me.breakRule)}（この日だけの時間です。日によって変えられます）</div>
+                    <button style={{ padding: 12, fontSize: 15 }} disabled={!t.start || !t.end || t.end <= t.start} onClick={async () => { const n = await post({ action: "fill", days: [dd], start: t.start, end: t.end }); setNote(`${n}人分を入れました`); }}>
+                      全員を {t.start}〜{t.end} で入れる
+                    </button>
+                  </div>
+                );
+              })()}
               <ul className="list" style={{ margin: "10px 0 0" }}>
                 {roster.map((p) => {
                   const s = byKey.get(`${p.id}|${day}`), r = reqKey.get(`${p.id}|${day}`);
@@ -162,8 +174,8 @@ export default function ShiftsPage() {
                 <div className="seg">{KIND_BUTTONS.map((k) => <button key={k.kind} className={bar.kind === k.kind ? "on" : ""} onClick={() => setBar({ ...bar, kind: k.kind })}>{k.label}</button>)}</div>
                 {bar.kind === "work" && (
                   <>
-                    <div className="times"><label>入店<input type="time" value={bar.start} onChange={(e) => setBar({ ...bar, start: e.target.value })} /></label>
-                      <label>退店<input type="time" value={bar.end} onChange={(e) => setBar({ ...bar, end: e.target.value })} /></label></div>
+                    <div className="times"><label>入店<input type="time" step={300} value={bar.start} onChange={(e) => setBar({ ...bar, start: e.target.value })} /></label>
+                      <label>退店<input type="time" step={300} value={bar.end} onChange={(e) => setBar({ ...bar, end: e.target.value })} /></label></div>
                     <div className="sub" style={{ margin: "6px 0" }}>{hoursText(bar.start, bar.end, me.breakRule)}{store?.satOpen && bar.start === defaults.start && bar.end === defaults.end ? `（土曜は自動で ${store.satOpen}〜${store.satClose} になります）` : ""}</div>
                   </>
                 )}

@@ -34,7 +34,7 @@ function Cards() {
     { href: "/admin/shifts", title: "出勤簿", sub: "日ごと・人ごと・一覧表で入力します", show: false },
     { big: true, href: me.level === 4 ? "/sales" : "/my-sales", title: "売上", sub: me.level >= 2 ? "自分の売上の提出・みんなの確認・歩合・目標" : "売上・客単価・前年比・目標・店内ランキング", show: !me.displayOnly },
     { big: true, href: "/requests", title: leaveTodo ? `休み・有給（確認待ち${leaveTodo}件）` : "休み・有給", sub: leaveTodo ? "店長・事務員さんの確認が必要な有給の申請があります" : "希望休を出す・有給の提出と変更の申請", show: true },
-    { href: "/admin/requests", title: "みんなの希望休", sub: "スタッフの希望休を一覧で見ます", show: false },
+    { href: "/admin/requests", title: "シフト", sub: "みんなの休みをカレンダーで見る", show: false },
     { href: "/admin/periods", title: "シフト期間", sub: "受付・締切・確定・提出", show: false },
     { href: "/admin/staff", title: "スタッフ", sub: "登録・退職・パスコード", show: me.level >= 3 },
     { href: "/security", title: "セキュリティ", sub: "パスコードを変える・ログインの記録", show: true },

@@ -39,7 +39,7 @@ export default function RequestsOverview() {
   const today = todayJst();
   return (
     <>
-      <h1>みんなの希望休</h1>
+      <h1>シフト</h1>
       {!me.displayOnly && <p style={{ margin: "0 0 12px" }}><Link href="/requests" style={{ fontWeight: 700 }}>▶ 自分の希望休を、カレンダーで出す</Link></p>}
       {activeStores.length > 1 && (
         <select aria-label="お店" value={sid} onChange={(e) => setStoreId(e.target.value)} style={{ marginBottom: 12 }}>

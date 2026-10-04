@@ -29,8 +29,8 @@ export function ShiftSheet({
         {kind === "work" && (
           <>
             <div className="times">
-              <label>入店<input type="time" value={start} onChange={(e) => setStart(e.target.value)} /></label>
-              <label>退店<input type="time" value={end} onChange={(e) => setEnd(e.target.value)} /></label>
+              <label>入店<input type="time" step={300} value={start} onChange={(e) => setStart(e.target.value)} /></label>
+              <label>退店<input type="time" step={300} value={end} onChange={(e) => setEnd(e.target.value)} /></label>
             </div>
             <div className="sub" style={{ margin: "6px 0" }}>{hoursText(start, end, me.breakRule)}</div>
           </>
