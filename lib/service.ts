@@ -780,28 +780,25 @@ export async function listProducts(db: Database, userId: string, kind: ProductKi
          from products p where p.kind = $1 order by p.status, p.maker, p.name, p.spec`, [kind]))).rows;
 }
 
-/** 商品をまとめて登録（Excelからの貼り付けにも使う）。同じ商品がすでにあれば飛ばす */
+/** 商品をまとめて登録（Excelの貼り付け・画像の読み込みにも使う）。同じ商品がすでにあれば飛ばす。店長(Lv3)・事務員さん(Lv4)が登録できる */
 export async function createProducts(db: Database, userId: string, kind: ProductKind, items: ProductInput[], storeIds: string[]): Promise<{ created: number; skipped: number }> {
   if (!["retail", "supply"].includes(kind)) throw new Error("種類が正しくありません");
   items.forEach(checkProduct);
+  if (storeIds.length === 0) throw new Error("使うお店を1つ以上えらんでください");
   const me = await getMe(db, userId);
-  if (!me) throw new ForbiddenError();
+  if (!me || me.level < 3) throw new ForbiddenError();
   try {
-    return await asUser(db, userId, async (q) => {
-      let created = 0;
-      for (const it of items) {
-        const r = await q.query<{ id: string }>(
-          `insert into products (company_id, kind, maker, name, spec, cost_price) values ($1,$2,$3,$4,$5,$6)
-           on conflict (company_id, kind, maker, name, spec) do nothing returning id`,
-          [me.companyId, kind, (it.maker ?? "").trim(), it.name.trim(), (it.spec ?? "").trim(), it.costPrice]);
-        if (r.rows[0]) {
-          created++;
-          for (const sid of storeIds) await q.query("insert into product_stores (product_id, store_id, company_id) values ($1,$2,$3)", [r.rows[0].id, sid, me.companyId]);
-        }
-      }
-      return { created, skipped: items.length - created };
-    });
-  } catch { throw new ForbiddenError(); }
+    const r = await asUser(db, userId, (q) => q.query<{ r: { created: number; skipped: number } }>("select public.product_create($1, $2::jsonb, $3::uuid[]) as r", [kind, JSON.stringify(items), storeIds]));
+    return r.rows[0].r;
+  } catch (e) { if (e instanceof Error && /bad item/.test(e.message)) throw new Error("商品の内容が正しくありません"); throw new ForbiddenError(); }
+}
+
+/** このお店で使う／使わない（店長は自店、事務員さんは全店）。商品そのものは消えない */
+export async function setProductStoreUse(db: Database, userId: string, productId: string, storeId: string, on: boolean): Promise<void> {
+  const me = await getMe(db, userId);
+  if (!me || me.level < 3) throw new ForbiddenError();
+  try { await asUser(db, userId, (q) => q.query("select public.product_store_set($1, $2, $3)", [productId, storeId, on])); }
+  catch { throw new ForbiddenError(); }
 }
 
 export async function updateProduct(db: Database, userId: string, id: string, p: ProductInput & { status?: "active" | "discontinued" }): Promise<void> {
@@ -812,6 +809,15 @@ export async function updateProduct(db: Database, userId: string, id: string, p:
       q.query("update products set maker = $2, name = $3, spec = $4, cost_price = $5, status = coalesce($6, status) where id = $1 returning id",
         [id, (p.maker ?? "").trim(), p.name.trim(), (p.spec ?? "").trim(), p.costPrice, p.status ?? null]))).rows.length;
   } catch (e) { if (isUnique(e)) throw new Error("同じ商品（メーカー・品名・規格）がすでにあります"); throw new ForbiddenError(); }
+  if (n === 0) throw new ForbiddenError();
+}
+
+/** 全体から消す（取扱い終了）／再開する。事務員さんだけ。商品も過去の棚卸しも消えない */
+export async function setProductStatus(db: Database, userId: string, id: string, status: "active" | "discontinued"): Promise<void> {
+  if (status !== "active" && status !== "discontinued") throw new Error("状態が正しくありません");
+  let n = 0;
+  try { n = (await asUser(db, userId, (q) => q.query("update products set status = $2 where id = $1 returning id", [id, status]))).rows.length; }
+  catch { throw new ForbiddenError(); }
   if (n === 0) throw new ForbiddenError();
 }
 

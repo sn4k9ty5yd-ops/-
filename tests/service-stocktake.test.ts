@@ -32,8 +32,8 @@ describe("商品マスターの登録", () => {
     expect((await svc.listProducts(db, id.office, "retail")).length).toBe(3);
     expect((await svc.listProducts(db, id.office, "supply")).length).toBe(1);   // 店販と業務は別の一覧
   });
-  it("店長・シフト担当・スタッフは登録できない。おかしな仕入値は断る", async () => {
-    for (const u of [id.mgr1, id.shift1, id.staff]) await expect(svc.createProducts(db, u, "retail", [{ name: "x", costPrice: 1 }], [st.s1])).rejects.toThrow(svc.ForbiddenError);
+  it("シフト担当・スタッフは登録できない（店長は登録できる＝別のテストで確認）。おかしな仕入値は断る", async () => {
+    for (const u of [id.shift1, id.staff]) await expect(svc.createProducts(db, u, "retail", [{ name: "x", costPrice: 1 }], [st.s1])).rejects.toThrow(svc.ForbiddenError);
     await expect(svc.createProducts(db, id.office, "retail", [{ name: "x", costPrice: 12.5 }], [st.s1])).rejects.toThrow("整数");
     await expect(svc.createProducts(db, id.office, "retail", [{ name: "x", costPrice: -1 }], [st.s1])).rejects.toThrow("整数");
     await expect(svc.createProducts(db, id.office, "retail", [{ name: " ", costPrice: 1 }], [st.s1])).rejects.toThrow("品名");

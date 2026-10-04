@@ -37,6 +37,7 @@ export default function StocktakePage() {
   return (
     <>
       <h1>棚卸し</h1>
+      {me.level >= 3 && <p style={{ margin: "0 0 10px" }}><a href="/admin/products" style={{ fontWeight: 700 }}>▶ 商品を追加する・写真から読み込む・このお店で使わない商品を消す（商品一覧へ）</a></p>}
       <div className="seg"><button className={view === "list" ? "on" : ""} onClick={() => setView("list")}>棚卸し表（お店・種類ごと）</button><button className={view === "summary" ? "on" : ""} onClick={() => setView("summary")}>合算（店販・業務・全店）</button></div>
       {view === "summary" ? <Summary stores={me.level >= 3 ? stores : stores.filter((s) => s.id === me.storeId)} onOpen={(id) => { setOpenId(id); }} /> : <>
       <div className="toolbar">

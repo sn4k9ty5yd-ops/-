@@ -201,3 +201,46 @@ describe("レジ売上（月間スタッフ売上表）", () => {
     expect(n.rows[0].n).toBeGreaterThanOrEqual(1);
   });
 });
+
+describe("商品の追加・このお店で使わない・全体から消す", () => {
+  let d: Database; const u: Record<string, string> = {}; const sid: Record<string, string> = {};
+  beforeAll(async () => {
+    d = await newDb(); await migrate(d);
+    const co = (await d.query<{ id: string }>("insert into companies (code, name) values ('p-co','P') returning id")).rows[0].id;
+    for (const n of ["a", "b"]) sid[n] = (await d.query<{ id: string }>("insert into stores (company_id, name) values ($1,$2) returning id", [co, n])).rows[0].id;
+    const mk = async (k: string, code: string, level: number, s: string) =>
+      (u[k] = (await d.query<{ id: string }>("insert into memberships (company_id, store_id, employee_code, name, level) values ($1,$2,$3,$4,$5) returning id", [co, s, code, k, level])).rows[0].id);
+    await mk("office", "1", 4, sid.a); await mk("mgrA", "2", 3, sid.a); await mk("mgrB", "3", 3, sid.b); await mk("maker", "4", 2, sid.a);
+  });
+  it("追加できるのは店長以上。追加した商品は、えらんだお店（全店）の一覧に入る。同じ商品は飛ばす", async () => {
+    await expect(svc.createProducts(d, u.maker, "retail", [{ name: "シャンプー", costPrice: 1000 }], [sid.a])).rejects.toThrow(svc.ForbiddenError);
+    const r = await svc.createProducts(d, u.mgrA, "retail", [{ maker: "ミルボン", name: "シャンプー", spec: "500ml", costPrice: 1200 }, { name: "トリートメント", costPrice: 900 }], [sid.a, sid.b]);
+    expect(r).toEqual({ created: 2, skipped: 0 });
+    expect(await svc.createProducts(d, u.mgrB, "retail", [{ maker: "ミルボン", name: "シャンプー", spec: "500ml", costPrice: 1200 }], [sid.a])).toEqual({ created: 0, skipped: 1 });
+    const list = await svc.listProducts(d, u.mgrB, "retail");
+    expect(list).toHaveLength(2);
+    expect(list.every((p) => p.storeIds.length === 2)).toBe(true);
+    await expect(svc.createProducts(d, u.mgrA, "retail", [{ name: "x", costPrice: 1 }], [])).rejects.toThrow();
+  });
+  it("このお店で使わない: 店長は自店だけ。事務員さんは全店。商品は消えない。また使うで戻せる", async () => {
+    const p = (await svc.listProducts(d, u.office, "retail")).find((x) => x.name === "シャンプー")!;
+    await expect(svc.setProductStoreUse(d, u.mgrA, p.id, sid.b, false)).rejects.toThrow(svc.ForbiddenError);   // 他店は不可
+    await expect(svc.setProductStoreUse(d, u.maker, p.id, sid.a, false)).rejects.toThrow(svc.ForbiddenError);  // シフト担当は不可
+    await svc.setProductStoreUse(d, u.mgrA, p.id, sid.a, false);
+    let now = (await svc.listProducts(d, u.office, "retail")).find((x) => x.id === p.id)!;
+    expect(now.storeIds).toEqual([sid.b]);                      // Aだけ外れた。Bはそのまま
+    expect(now.status).toBe("active");
+    await svc.setProductStoreUse(d, u.mgrA, p.id, sid.a, true);
+    now = (await svc.listProducts(d, u.office, "retail")).find((x) => x.id === p.id)!;
+    expect(now.storeIds.sort()).toEqual([sid.a, sid.b].sort());
+    await svc.setProductStoreUse(d, u.office, p.id, sid.b, false);   // 事務員さんは他店もできる
+  });
+  it("全体から消す（取扱い終了）・再開は、事務員さんだけ", async () => {
+    const p = (await svc.listProducts(d, u.office, "retail")).find((x) => x.name === "トリートメント")!;
+    await expect(svc.setProductStatus(d, u.mgrA, p.id, "discontinued")).rejects.toThrow(svc.ForbiddenError);
+    await svc.setProductStatus(d, u.office, p.id, "discontinued");
+    expect((await svc.listProducts(d, u.office, "retail")).find((x) => x.id === p.id)!.status).toBe("discontinued");
+    await svc.setProductStatus(d, u.office, p.id, "active");
+    expect((await svc.listProducts(d, u.office, "retail")).find((x) => x.id === p.id)!.status).toBe("active");
+  });
+});
