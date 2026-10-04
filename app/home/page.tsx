@@ -23,7 +23,7 @@ function Cards() {
   const cards = [
     { big: true, href: "/inbox", title: unread ? `お知らせ（${unread}件）` : "お知らせ", sub: unread ? "新しいお知らせがあります（休みのかぶりなど）" : "休みのかぶりや、話し合いの書き込み", show: true },
     { big: true, href: "/manual", title: "マニュアル", sub: "教育・営業マニュアル、技術動画、技術評価", show: true },
-    { big: true, href: "/shifts", title: "シフトを見る", sub: "今日の出勤・月のシフト・みんなの休み", show: true },
+    { big: true, href: "/shifts", title: leaveTodo ? `シフト関連（有給の確認待ち${leaveTodo}件）` : "シフト関連", sub: "シフトを見る・希望休を出す・有給の提出と変更", show: true },
     { big: true, href: "/material", title: "材料費（発注額）", sub: "発注した額を記録・月ごとの合計", show: true },
     { href: "/material/summary", title: "材料費統括", sub: "月ごと・お店ごと・商品ごとの割合（管理者・材料担当）", show: me.level === 4 || !!me.materialManager },
     { big: true, href: "/my-lessons", title: "自分のレッスン", sub: "何をしたか・何人目か・かかった時間をカレンダーで見る", show: me.rank === "assistant" },
@@ -33,7 +33,6 @@ function Cards() {
     { href: "/admin/products", title: "商品一覧", sub: "店販・業務の商品と仕入値", show: me.level >= 3 },
     { href: "/admin/shifts", title: "出勤簿", sub: "日ごと・人ごと・一覧表で入力します", show: false },
     { big: true, href: me.level === 4 ? "/sales" : "/my-sales", title: "売上", sub: me.level >= 2 ? "自分の売上の提出・みんなの確認・歩合・目標" : "売上・客単価・前年比・目標・店内ランキング", show: !me.displayOnly },
-    { big: true, href: "/requests", title: leaveTodo ? `休み・有給（確認待ち${leaveTodo}件）` : "休み・有給", sub: leaveTodo ? "店長・事務員さんの確認が必要な有給の申請があります" : "希望休を出す・有給の提出と変更の申請", show: true },
     { href: "/admin/requests", title: "シフト", sub: "みんなの休みをカレンダーで見る", show: false },
     { href: "/admin/periods", title: "シフト期間", sub: "受付・締切・確定・提出", show: false },
     { href: "/admin/staff", title: "スタッフ", sub: "登録・退職・パスコード", show: me.level >= 3 },

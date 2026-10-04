@@ -74,8 +74,8 @@ function Page() {
   return (
     <main className="wide">
       <Link href="/home" className="back">← ホーム</Link>
-      <h1>休み・有給</h1>
-      <SubTabs items={[{ href: "/requests", label: "希望休を出す" }, { href: "/leave", label: "有給の提出・変更" }]} />
+      <h1>シフト関連</h1>
+      <SubTabs items={[{ href: "/shifts", label: "シフトを見る" }, { href: "/requests", label: "希望休を出す" }, { href: "/leave", label: "有給の提出・変更" }]} />
       {(me.level >= 3) && <Link href="/leave/review" className="storelink" style={{ display: "inline-block", marginBottom: 12 }}>{me.level === 4 ? "確認・許可・提出状況・受付の管理へ" : "確認・提出状況へ"}</Link>}
       {msg && <p className="err">{msg}</p>}{ok && <p className="sub" style={{ color: "var(--ok)" }}>✅ {ok}</p>}
       {wins.length === 0 && <p className="hint">いまは、有給の提出を受け付けていません。事務員さんが受付を始めると、お知らせが届きます。</p>}

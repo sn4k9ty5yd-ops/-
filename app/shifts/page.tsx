@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { SubTabs } from "@/app/SubTabs";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, MeProvider, useAutoRefresh, useMe } from "@/lib/client";
 import { holidayName } from "@/lib/holidays";
@@ -78,7 +79,8 @@ function Page() {
   return (
     <main style={{ maxWidth: 900 }}>
       {!me.displayOnly && <Link href="/home" className="back">← ホーム</Link>}
-      <h1>{me.displayOnly ? `${stores.find((x) => x.id === me.storeId)?.name ?? ""} のシフト` : "シフト"}</h1>
+      <h1>{me.displayOnly ? `${stores.find((x) => x.id === me.storeId)?.name ?? ""} のシフト` : "シフト関連"}</h1>
+      {!me.displayOnly && <SubTabs items={[{ href: "/shifts", label: "シフトを見る" }, { href: "/requests", label: "希望休を出す" }, { href: "/leave", label: "有給の提出・変更" }]} />}
       {(me.level >= 3) && (
         <select aria-label="お店" value={storeId} onChange={(e) => setStoreId(e.target.value)} style={{ marginBottom: 12 }}>
           {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
