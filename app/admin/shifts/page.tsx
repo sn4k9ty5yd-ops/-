@@ -22,7 +22,7 @@ export default function ShiftsPage() {
   const [storeId, setStoreId] = useState(me.storeId);
   const [periods, setPeriods] = useState<PeriodRow[]>([]);
   const [view, setView] = useState<Period>(() => periodFor(todayJst(), me.closingStartDay));
-  const [mode, setMode] = useState<Mode>("day");
+  const [mode, setMode] = useState<Mode>("table");
   const [roster, setRoster] = useState<Person[]>([]);
   const [shifts, setShifts] = useState<ShiftRow[]>([]);
   const [editable, setEditable] = useState(false);
@@ -51,7 +51,6 @@ export default function ShiftsPage() {
       const d = ["drafting", "closed", "collecting", "confirmed", "published"].map((st) => p.find((x) => x.stores.some((y) => y.storeId === me.storeId && y.status === st))).find(Boolean);
       // 「シフトを見る」の日にちから来たときは、その日・その期間・そのお店の「日ごと」を開く
       const q = new URLSearchParams(window.location.search);
-      if (!q.get("day") && window.innerWidth >= 900) setMode("table");
       const qd = q.get("day"), qs = q.get("storeId");
       const target = qd ? p.find((x) => x.start <= qd && qd <= x.end) : undefined;
       if (target && qd) {
@@ -97,14 +96,11 @@ export default function ShiftsPage() {
     <>
       <SubTabs items={[{ href: "/admin/periods", label: "やること" }, { href: "/admin/shifts", label: "出勤簿" }]} />
       <h1>出勤簿</h1>
-      <p className="hint">{mode === "day" ? "日ごと：日にちを選んで、その日の全員を、まとめて／1人ずつ直します。" : mode === "person" ? "人ごと：1人を選んで、その人の日を何日かまとめて直します。" : "一覧表：日付を押すとその日の「日ごと」へ、名前を押すとその人の「人ごと」へ。マスを押すと1か所だけ直せます。"}</p>
+      <p className="hint">表で直します。<b>日付を押す</b>＝その日の全員をまとめて直す　<b>名前を押す</b>＝その人の日をまとめて直す　<b>マスを押す</b>＝1か所だけ直す</p>
       <div className="toolbar">
         <select aria-label="お店" value={storeId} onChange={(e) => setStoreId(e.target.value)}>
           {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
-        <div className="seg" style={{ margin: 0 }}>
-          {([["day", "日ごと"], ["person", "人ごと"], ["table", "一覧表"]] as [Mode, string][]).map(([m, l]) => <button key={m} className={mode === m ? "on" : ""} onClick={() => setMode(m)}>{l}</button>)}
-        </div>
       </div>
       <PeriodNav period={view} startDay={me.closingStartDay} onChange={setView} />
       <p className="sub" style={{ margin: "0 0 8px" }}>{store?.name}：{loading ? "読み込み中…" : pstatus ? STATUS_LABEL[pstatus] : "未作成"}　{readOnlyReason && <b style={{ color: "#b45309" }}>{readOnlyReason}</b>}</p>
@@ -124,6 +120,8 @@ export default function ShiftsPage() {
       <div className="tintbox" style={tintStyle(view.start)}>
         {/* ------------------------------------------------ 日ごと */}
         {mode === "day" && (
+          <div className="sheet-bg" onClick={() => setMode("table")}><div className="sheet" onClick={(e) => e.stopPropagation()} style={{ maxHeight: "92vh", overflow: "auto", width: "100%", maxWidth: 760 }}>
+          <button className="ghost" style={{ width: "auto", margin: "0 0 8px" }} onClick={() => setMode("table")}>✕ 表にもどる</button>
           <>
             <div className="daystrip">
               {days.map((d) => (
@@ -167,10 +165,13 @@ export default function ShiftsPage() {
               </ul>
             </div>
           </>
+          </div></div>
         )}
 
         {/* ------------------------------------------------ 人ごと */}
         {mode === "person" && (
+          <div className="sheet-bg" onClick={() => setMode("table")}><div className="sheet" onClick={(e) => e.stopPropagation()} style={{ maxHeight: "92vh", overflow: "auto", width: "100%", maxWidth: 760 }}>
+          <button className="ghost" style={{ width: "auto", margin: "0 0 8px" }} onClick={() => setMode("table")}>✕ 表にもどる</button>
           <>
             <select aria-label="スタッフ" value={personId} onChange={(e) => { setPersonId(e.target.value); setPicked(new Set()); }}>
               {roster.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -209,10 +210,11 @@ export default function ShiftsPage() {
               </div>
             )}
           </>
+          </div></div>
         )}
 
         {/* ------------------------------------------------ 一覧表 */}
-        {mode === "table" && (
+        {(
           <div className="scroll">
             <table className="shifttable">
               <thead><tr><th style={{ position: "sticky", left: 0, background: "#fff", zIndex: 2 }}>名前</th>{days.map((d) => <th key={d} title="押すと、この日の全員を一括・個別で直せます" style={{ cursor: "pointer" }} onClick={() => { setDay(d); setMode("day"); window.scrollTo({ top: 0, behavior: "smooth" }); }} className={dow(d) === 0 || holidayName(d) ? "su" : dow(d) === 6 ? "sa" : ""}>{md(d)}<br /><small>{WEEKDAYS[dow(d)]}</small>{holidayName(d) && <><br /><small className="holname" style={{ fontSize: 9 }}>{holidayName(d)}</small></>}</th>)}</tr></thead>
