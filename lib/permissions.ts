@@ -19,6 +19,7 @@ export const LEVEL_PERMISSIONS: ReadonlyArray<readonly [Level, string, Scope]> =
   [4, "period.create", "all"],
   [2, "period.manage", "own"], [3, "period.manage", "own"], [4, "period.manage", "all"],
   [4, "shift.acknowledge", "all"],
+  [3, "period.acknowledge", "own"], [4, "period.acknowledge", "all"],
   [2, "request.view", "own"], [3, "request.view", "all"], [4, "request.view", "all"],
   [3, "request.manage", "own"], [4, "request.manage", "all"],
   [2, "shift.view", "own"], [3, "shift.view", "all"], [4, "shift.view", "all"],

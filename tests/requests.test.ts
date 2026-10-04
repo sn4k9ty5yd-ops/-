@@ -64,15 +64,24 @@ describe("シフト期間の作成と進行", () => {
     });
   });
 
-  it("店長は、押しまちがえを1つ戻せる。確認済みにはできず、確認済みからも戻せない。オフィスはできる。履歴が残る", async () => {
+  it("店長は自店を確認済みにでき、確認済みからも戻せる。シフト担当は確認済みにできない（ひとつ戻すはできる）。履歴が残る", async () => {
     await as(U.mgr1, async () => {
       expect(await fails(setStatus(S1, "submitted"))).toBe(false);
       expect(await fails(setStatus(S1, "drafting"))).toBe(false);       // 確認済みの前なら戻せる
       expect(await fails(setStatus(S1, "submitted"))).toBe(false);
-      expect(await fails(setStatus(S1, "acknowledged"))).toBe(true);    // 確認済みは不可
     });
-    await as(U.office, async () => expect(await fails(setStatus(S1, "acknowledged"))).toBe(false));
-    await as(U.mgr1, async () => expect(await fails(setStatus(S1, "submitted"))).toBe(true));   // 確認済みから戻せるのはオフィスだけ
+    await as(U.shift1, async () => {
+      expect(await fails(setStatus(S1, "acknowledged"))).toBe(true);    // シフト担当は確認済みにできない
+      expect(await fails(setStatus(S1, "published"))).toBe(false);      // ひとつ戻す（再提出のため）
+      expect(await fails(setStatus(S1, "submitted"))).toBe(false);
+    });
+    await as(U.mgr1, async () => {
+      expect(await fails(setStatus(S1, "acknowledged"))).toBe(false);   // 店長も確認済みにできる
+      expect(await fails(setStatus(S1, "submitted"))).toBe(false);      // ダメなら戻せる
+      expect(await fails(setStatus(S1, "acknowledged"))).toBe(false);
+    });
+    await as(U.shift1, async () => expect(await fails(setStatus(S1, "submitted"))).toBe(true));   // 確認済みからは、シフト担当は戻せない
+    await as(U.mgr2, async () => expect(await fails(setStatus(S1, "submitted"))).toBe(true));      // 他店の店長は動かせない
     await as(U.office, async () => {
       expect(await fails(setStatus(S1, "collecting"))).toBe(false);     // 後戻りOK（やり直し）
       const logs = await rows(`select detail from audit_logs where action='period.status'`);

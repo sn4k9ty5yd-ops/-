@@ -146,4 +146,13 @@ describe("シフト担当（Lv2）の操作", () => {
     const n = await d.query("select count(*)::int as n from notifications where user_id = $1 and kind = 'feedback'", [u.office]);
     expect(n.rows[0]).toEqual({ n: 2 });
   });
+  it("アプリ制作者の行は、ほかのオフィスでも変えられない（退職・パスコード再発行・名前）", async () => {
+    const co = (await d.query<{ company_id: string; store_id: string }>("select company_id, store_id from memberships where id = $1", [u.office])).rows[0];
+    const o2 = (await d.query<{ id: string }>("insert into memberships (company_id, store_id, employee_code, name, level) values ($1,$2,'99','office2',4) returning id", [co.company_id, co.store_id])).rows[0].id;
+    await expect(svc.reissuePasscode(d, o2, u.office)).rejects.toThrow(svc.ForbiddenError);
+    await expect(svc.disableStaff(d, o2, u.office)).rejects.toThrow();
+    await expect(svc.updateStaffProfile(d, o2, u.office, { name: "のっとり" } as never)).rejects.toThrow();
+    expect((await svc.listStaff(d, o2)).find((x) => x.id === u.office)?.manageable).toBe(false);
+    expect(typeof (await svc.reissuePasscode(d, u.office, u.maker))).toBe("string");   // 制作者本人は、ほかの人を変えられる
+  });
 });

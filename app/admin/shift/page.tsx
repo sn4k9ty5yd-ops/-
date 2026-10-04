@@ -55,7 +55,7 @@ export default function ShiftHub() {
         const s = p.stores.find((x) => x.storeId === storeId);
         const rel = relationLabel(p.start, curStart);
         const next = s ? NEXT_ACTION[s.status] : undefined;
-        const blocked = next?.to === "acknowledged";
+        const blocked = next?.to === "acknowledged" && me.level < 3;
         return (
           <div key={p.id} className="card" style={{ marginTop: 12 }}>
             <span className={`badge2 ${rel.kind}`}>{rel.label}</span> <b style={{ fontSize: 18 }}>{p.label}</b> <span className="sub">{reiwaRange(p.start, p.end)}</span>
@@ -72,7 +72,13 @@ export default function ShiftHub() {
                     }
                   })}>次は：{next.label}</button>
                 )}
-                {next && blocked && <p className="sub">次は「{next.label}」です（オフィスが行います）。</p>}
+                {canManage && s.status !== "preparing" && (me.level >= 3 || s.status !== "acknowledged") && (
+                  <button className="ghost" style={{ color: "var(--sub)" }}
+                    onClick={() => confirm("ひとつ前の状態に戻しますか？") && run(() => api("/api/periods", { periodId: p.id, storeId, status: STATUS_ORDER[STATUS_ORDER.indexOf(s.status) - 1] }))}>
+                    ひとつ戻す（やり直し）
+                  </button>
+                )}
+                {next && blocked && <p className="sub">次は「{next.label}」です（店長かオフィスが行います）。</p>}
                 {!canManage && <p className="sub">他のお店です（見るだけ）。</p>}
               </>
             )}

@@ -18,7 +18,7 @@ export type Presence = "online" | "idle" | "loggedout" | "never";
 export const ONLINE_SECONDS = 120; // これ以内に開いていれば「オンライン」
 export interface StaffRow {
   presence?: Presence; seenAgoSec?: number | null; retireOn?: string | null;
-  id: string; name: string; employeeCode: string; storeId: string; level: Level; status: "active" | "disabled"; manageable: boolean; onShift: boolean; displayOnly: boolean; canEvaluate?: boolean; materialManager?: boolean; eduLead?: boolean; rank?: "assistant" | "stylist" | null; shortName?: string | null;
+  id: string; name: string; employeeCode: string; storeId: string; level: Level; status: "active" | "disabled"; manageable: boolean; onShift: boolean; displayOnly: boolean; canEvaluate?: boolean; materialManager?: boolean; eduLead?: boolean; appOwner?: boolean; rank?: "assistant" | "stylist" | null; shortName?: string | null;
 }
 
 export class ForbiddenError extends Error {
@@ -116,7 +116,7 @@ export async function listStaff(db: Database, userId: string): Promise<StaffRow[
   if (!me) return [];
   const { rows } = await asUser(db, userId, (q) =>
     q.query<StaffRow>(
-      `select id, name, employee_code as "employeeCode", store_id as "storeId", level, status, on_shift as "onShift", display_only as "displayOnly", can_evaluate as "canEvaluate", material_manager as "materialManager", edu_lead as "eduLead", rank, short_name as "shortName" from memberships order by store_id, level desc, name`));
+      `select id, name, employee_code as "employeeCode", store_id as "storeId", level, status, on_shift as "onShift", display_only as "displayOnly", app_owner as "appOwner", can_evaluate as "canEvaluate", material_manager as "materialManager", edu_lead as "eduLead", rank, short_name as "shortName" from memberships order by store_id, level desc, name`));
   // ログインの状況は管理者(Lv4)だけに見せる（管理用接続で読む）
   const pres = new Map<string, { presence: Presence; seenAgoSec: number | null; retireOn: string | null }>();
   if (me.level === 4 && rows.length > 0) {
@@ -138,7 +138,7 @@ export async function listStaff(db: Database, userId: string): Promise<StaffRow[
   return rows.map((r) => ({
     ...r,
     ...(pres.get(r.id) ?? {}),
-    manageable: me.level === 4 || (me.level === 3 && r.storeId === me.storeId && r.level < me.level),
+    manageable: (me.level === 4 || (me.level === 3 && r.storeId === me.storeId && r.level < me.level)) && (!r.appOwner || r.id === userId),
   })).sort(compareEmployeeCode);
 }
 
@@ -172,8 +172,17 @@ export async function addStaff(
 
 /** 「この人に対して更新できるか」をDBの権限ルールで確かめる（実際には何も変えない） */
 async function assertCanManage(db: Database, userId: string, targetId: string) {
+  await assertNotOwnerTarget(db, userId, targetId);
   const { rows } = await asUser(db, userId, (q) => q.query("update memberships set name = name where id = $1 returning id", [targetId]));
   if (rows.length === 0) throw new ForbiddenError();
+  await assertNotOwnerTarget(db, userId, targetId);
+}
+
+/** アプリ制作者の行は、本人以外（オフィスでも）は変えられない */
+async function assertNotOwnerTarget(db: Database, userId: string, targetId: string) {
+  if (targetId === userId) return;
+  const r = await asUser(db, userId, (q) => q.query<{ o: boolean }>("select app_owner as o from memberships where id = $1", [targetId]));
+  if (r.rows[0]?.o) throw new ForbiddenError("この人は、アプリ制作者です。ほかの人は変更できません");
 }
 
 export async function disableStaff(db: Database, userId: string, targetId: string): Promise<void> {
@@ -228,6 +237,7 @@ export async function setRetireDate(db: Database, userId: string, targetId: stri
   if (date !== null && !/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error("日付が正しくありません");
   const visible = await asUser(db, userId, (q) => q.query("select 1 from memberships where id = $1 and status = 'active'", [targetId]));
   if (visible.rows.length === 0) throw new ForbiddenError();
+  await assertNotOwnerTarget(db, userId, targetId);
   if (date !== null) {
     const other = await db.query(
       `select 1 from memberships t join memberships o on o.company_id = t.company_id

@@ -48,7 +48,7 @@ export default function PeriodsPage() {
                         onBlur={(e) => e.target.value && run(() => api("/api/periods", { periodId: p.id, storeId: s.storeId, closeAt: `${e.target.value}:00+09:00` }))} />
                     </label>
                   )}
-                  {next && canManage(s.storeId) && (!needOffice || me.level === 4) && (
+                  {next && canManage(s.storeId) && (!needOffice || me.level >= 3) && (
                     <button style={{ width: "auto", margin: 0, padding: "10px 14px", fontSize: 14 }}
                       onClick={() => confirm(`${name(s.storeId)}：「${next.label}」でよいですか？`) && run(async () => {
                         try { await api("/api/periods", { periodId: p.id, storeId: s.storeId, status: next.to }); }
@@ -60,7 +60,7 @@ export default function PeriodsPage() {
                       {next.label}
                     </button>
                   )}
-                  {canManage(s.storeId) && s.status !== "preparing" && (me.level === 4 || s.status !== "acknowledged") && (
+                  {canManage(s.storeId) && s.status !== "preparing" && (me.level >= 3 || s.status !== "acknowledged") && (
                     <button className="ghost" style={{ color: "var(--sub)" }}
                       onClick={() => confirm("ひとつ前の状態に戻しますか？") && run(() => api("/api/periods", { periodId: p.id, storeId: s.storeId, status: STATUS_ORDER[STATUS_ORDER.indexOf(s.status as PeriodStatus) - 1] }))}>
                       ひとつ戻す
