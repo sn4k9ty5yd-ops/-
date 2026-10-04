@@ -7,11 +7,11 @@ export default function GuidePage() {
   const [GUIDES, setGuides] = useState<Guide[]>([]);
   const [id, setId] = useState("");
   const [err, setErr] = useState("");
+  const [done, setDone] = useState(false);
   useEffect(() => { api<Guide[]>("/api/guide").then((g) => { setGuides(g); setId(g[0]?.id ?? ""); }).catch((e) => setErr((e as Error).message)); }, []);
   const g = GUIDES.find((x) => x.id === id);
   if (!g) return <><h1>アプリの説明書</h1><p className="hint">{err || "読み込み中…"}</p></>;
   const text = `${g.title}\n\n${g.lead}\n\n` + g.sections.map((s) => `■ ${s.h}\n${s.p.join("\n")}${s.list ? "\n" + s.list.map((l) => `・${l}`).join("\n") : ""}`).join("\n\n");
-  const [done, setDone] = useState(false);
   const copy = async () => { try { await navigator.clipboard.writeText(text); setDone(true); setTimeout(() => setDone(false), 2500); } catch { /* 何もしない */ } };
   return (
     <>
