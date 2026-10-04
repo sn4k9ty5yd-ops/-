@@ -30,7 +30,7 @@ beforeAll(async () => {
   await svc.setOnShift(db, id.office, id.office, false);
   await svc.createNextPeriod(db, id.office, "2026-11-20");
   periodId = (await svc.listPeriods(db, id.office))[0].id;
-  await svc.setPeriodStatus(db, id.office, { periodId, storeId: st["ATENA"], status: "drafting" });
+  await db.query("update store_period_status set status = \'drafting\' where period_id = $1 and store_id = $2", [periodId, st["ATENA"]]);   // 自動の下書きなしで「作成中」にする
 });
 beforeEach(() => { sent.length = 0; });
 

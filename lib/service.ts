@@ -5,7 +5,7 @@ import { calcHours, DEFAULT_BREAK_RULE, validateBreakRule, type BreakRule } from
 import { periodFor, upcomingPeriods } from "./periods";
 import { asUser } from "./db/user-context";
 import type { Database, Queryable } from "./db/types";
-import { md, shortNames } from "./labels";
+import { daysOf, hoursOn, md, shortNames } from "./labels";
 import { pushToUsers, vapidKeys } from "./push";
 import type { Level } from "./permissions";
 
@@ -390,6 +390,7 @@ export async function setPeriodStatus(
          input.openAt !== undefined, input.openAt ?? null, input.closeAt !== undefined, input.closeAt ?? null]))).rows.length;
   } catch { throw new ForbiddenError(); }
   if (n === 0) throw new ForbiddenError();
+  if (input.status === "drafting") await autoDraftShifts(db, userId, input.periodId, input.storeId).catch(() => 0);   // 出勤簿づくりを始めたら、シフトカレンダーの内容を自動で反映
   if (input.status === "published") await notifyShiftPublished(db, input.periodId, input.storeId).catch(() => 0);   // 通知が失敗しても、公開は成功
 }
 
@@ -552,22 +553,41 @@ export async function applyRequests(db: Database, userId: string, periodId: stri
  */
 export async function fillDefault(
   db: Database, userId: string,
-  input: { periodId: string; storeId: string; days: string[]; membershipIds?: string[]; start: string; end: string; overwrite?: boolean },
+  input: { periodId: string; storeId: string; days: string[]; membershipIds?: string[]; start: string; end: string; overwrite?: boolean; keepOff?: boolean },
 ): Promise<number> {
   if (!TIME.test(input.start) || !TIME.test(input.end) || input.end <= input.start) throw new Error("入店と退店の時間が正しくありません");
   const roster = (await listRoster(db, userId, input.storeId)).map((r) => r.id).filter((id) => !input.membershipIds || input.membershipIds.includes(id));
-  const existing = new Set((await listShifts(db, userId, input.periodId, input.storeId)).map((s) => `${s.membershipId}|${s.day}`));
+  const existingRows = await listShifts(db, userId, input.periodId, input.storeId);
+  const existing = new Set(existingRows.map((s) => `${s.membershipId}|${s.day}`));
+  const offCells = new Set(existingRows.filter((s) => s.kind !== "work").map((s) => `${s.membershipId}|${s.day}`));
   const reqs = new Map((await listRequests(db, userId, input.periodId)).map((r) => [`${r.membershipId}|${r.day}`, r.kind]));
   const entries: ShiftEntry[] = [];
   for (const day of input.days) for (const id of roster) {
     const k = `${id}|${day}`;
     if (!input.overwrite && existing.has(k)) continue;
+    if (input.overwrite && input.keepOff && offCells.has(k)) continue;   // 休み・有給の人は、そのまま
     const req = reqs.get(k);
     entries.push(req ? { membershipId: id, day, kind: req === "paid" ? "paid" : "holiday" } : { membershipId: id, day, kind: "work", start: input.start, end: input.end });
   }
   return saveShifts(db, userId, input.periodId, input.storeId, entries);
 }
 
+
+/**
+ * シフトカレンダー（希望休・有給）の内容を、出勤簿に全部まとめて反映する。
+ * 休み・有給は希望どおり、ほかの日は、お店の営業時間（土曜は土曜の時間）で出勤にする。すでに入っている人・日は変えない。
+ */
+export async function autoDraftShifts(db: Database, userId: string, periodId: string, storeId: string): Promise<number> {
+  if (!(await canEditShifts(db, userId, periodId, storeId))) throw new ForbiddenError(NOT_EDITABLE);
+  const per = (await asUser(db, userId, (q) => q.query<{ s: string; e: string }>("select start_date::text as s, end_date::text as e from shift_periods where id = $1", [periodId]))).rows[0];
+  const store = (await listStores(db, userId)).find((x) => x.id === storeId);
+  if (!per || !store) throw new ForbiddenError();
+  let n = await applyRequests(db, userId, periodId, storeId);
+  const groups = new Map<string, string[]>();
+  for (const d of daysOf(per.s, per.e)) { const h = hoursOn(store, d); const k = `${h.start}-${h.end}`; groups.set(k, [...(groups.get(k) ?? []), d]); }
+  for (const [k, days] of groups) { const [start, end] = k.split("-"); n += await fillDefault(db, userId, { periodId, storeId, days, start, end }); }
+  return n;
+}
 
 // ------------------------------------------------------------------ 出勤簿
 export interface AttendanceRow {

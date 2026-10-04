@@ -97,7 +97,7 @@ export default function ShiftsPage() {
       <p className="sub" style={{ margin: "0 0 8px" }}>{store?.name}：{loading ? "読み込み中…" : pstatus ? STATUS_LABEL[pstatus] : "未作成"}　{readOnlyReason && <b style={{ color: "#b45309" }}>{readOnlyReason}</b>}</p>
       {editable && !loading && (
         <div className="actions" style={{ marginBottom: 8 }}>
-          <button className="ghost" style={{ color: "var(--blue)" }} onClick={async () => { const n = await post({ action: "applyRequests" }); setNote(`希望休を${n}件、シフトに反映しました`); }}>希望休をシフトに反映</button>
+          <button className="ghost" style={{ color: "var(--blue)" }} onClick={async () => { const n = await post({ action: "autoDraft" }); setNote(`シフトカレンダー（休み・有給）の内容を、出勤簿に${n}件、反映しました（すでに入っているところは、そのままです）`); }}>シフトカレンダーから出勤簿に反映</button>
           {note && <span className="sub">{note}</span>}
           {dbPeriod && <LimitAll periodId={dbPeriod.id} storeId={storeId} days={daysOf(view.start, view.end)} onDone={() => {}} />}
           <PasteOff roster={roster} start={view.start} end={view.end} onApply={save} />
@@ -127,9 +127,9 @@ export default function ShiftsPage() {
                       <label>入店<input type="time" step={300} value={t.start} onChange={(e) => setFillTime({ ...t, start: e.target.value })} /></label>
                       <label>退店<input type="time" step={300} value={t.end} onChange={(e) => setFillTime({ ...t, end: e.target.value })} /></label>
                     </div>
-                    <div className="sub" style={{ margin: "6px 0" }}>{hoursText(t.start, t.end, me.breakRule)}（この日だけの時間です。日によって変えられます）</div>
-                    <button style={{ padding: 12, fontSize: 15 }} disabled={!t.start || !t.end || t.end <= t.start} onClick={async () => { const n = await post({ action: "fill", days: [dd], start: t.start, end: t.end }); setNote(`${n}人分を入れました`); }}>
-                      全員を {t.start}〜{t.end} で入れる
+                    <div className="sub" style={{ margin: "6px 0" }}>{hoursText(t.start, t.end, me.breakRule)}（この日だけの時間です。休み・有給の人は変わりません。ちがう時間の人は、名前を押して、ひとりずつ直せます）</div>
+                    <button style={{ padding: 12, fontSize: 15 }} disabled={!t.start || !t.end || t.end <= t.start} onClick={async () => { const n = await post({ action: "fill", days: [dd], start: t.start, end: t.end, overwrite: true, keepOff: true }); setNote(`${n}人分を、${t.start}〜${t.end} に直しました（休み・有給の人は、そのままです）`); }}>
+                      この日の出勤の人を、全員 {t.start}〜{t.end} に直す
                     </button>
                   </div>
                 );

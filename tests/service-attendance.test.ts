@@ -23,7 +23,7 @@ beforeAll(async () => {
   await svc.setOnShift(db, id.office, id.office, false);
   await svc.createNextPeriod(db, id.office, "2026-11-20");           // 11/16〜12/15
   periodId = (await svc.listPeriods(db, id.office))[0].id;
-  for (const s of [st.s1, st.s2]) await svc.setPeriodStatus(db, id.office, { periodId, storeId: s, status: "drafting" });
+  for (const s of [st.s1, st.s2]) await db.query("update store_period_status set status = \'drafting\' where period_id = $1 and store_id = $2", [periodId, s]);   // 自動の下書きなしで「作成中」にする
   // シフト: 11/16〜11/17 を全員 10-19、b の 11/17 は有給
   await svc.fillDefault(db, id.shift1, { periodId, storeId: st.s1, days: ["2026-11-16", "2026-11-17"], start: "10:00", end: "19:00" });
   await svc.saveShifts(db, id.shift1, periodId, st.s1, [{ membershipId: id.b, day: "2026-11-17", kind: "paid" }]);

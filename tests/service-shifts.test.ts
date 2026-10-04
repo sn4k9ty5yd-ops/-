@@ -46,7 +46,7 @@ describe("シフト作成サービス", () => {
   it("希望休を提出 → シフトに一括反映（休み/有給）。すでにあるシフトは上書きしない", async () => {
     await svc.toggleMyRequest(db, id.a, periodId, "2026-11-18");
     await svc.toggleMyRequest(db, id.a, periodId, "2026-11-19", "paid");
-    await svc.setPeriodStatus(db, id.mgr1, { periodId, storeId: st.s1, status: "drafting" });
+    await db.query("update store_period_status set status = \'drafting\' where period_id = $1 and store_id = $2", [periodId, st.s1]);   // 自動の下書きなしで「作成中」にする
     expect(await svc.applyRequests(db, id.shift1, periodId, st.s1)).toBe(2);
     expect(await svc.applyRequests(db, id.shift1, periodId, st.s1)).toBe(0);  // 2回目は何も増えない
     const rows = await svc.listShifts(db, id.shift1, periodId, st.s1);
@@ -90,7 +90,7 @@ describe("シフト作成サービス", () => {
     await expect(svc.saveShifts(db, id.mgr1, periodId, st.s2, [{ membershipId: id.c, day: "2026-11-25", kind: "off" }])).rejects.toThrow(svc.ForbiddenError);
     expect(await svc.canEditShifts(db, id.mgr1, periodId, st.s2)).toBe(false);
     expect(await svc.canEditShifts(db, id.mgr1, periodId, st.s1)).toBe(true);
-    await svc.setPeriodStatus(db, id.office, { periodId, storeId: st.s2, status: "drafting" });
+    await db.query("update store_period_status set status = \'drafting\' where period_id = $1 and store_id = $2", [periodId, st.s2]);   // 自動の下書きなしで「作成中」にする
     await svc.saveShifts(db, id.office, periodId, st.s2, [{ membershipId: id.c, day: "2026-11-25", kind: "off" }]);
     expect((await svc.listShifts(db, id.mgr1, periodId, st.s2))).toHaveLength(1);
   });
@@ -142,7 +142,7 @@ describe("休みの上限・かぶりの知らせ・話し合い", () => {
   it("シフト担当が上限を決め、超えた日が分かり、かぶっている人にお知らせが届き、話し合える。確定は、かぶりがあると止まる", async () => {
     await svc.createNextPeriod(db, id.office, "2026-12-20");                    // 12/16〜1/15（まだ確定していない新しい期間）
     const periodId = (await svc.listPeriods(db, id.office))[0].id;
-    await svc.setPeriodStatus(db, id.office, { periodId, storeId: st.s1, status: "drafting" });
+    await db.query("update store_period_status set status = \'drafting\' where period_id = $1 and store_id = $2", [periodId, st.s1]);   // 自動の下書きなしで「作成中」にする
     const day = "2026-12-24";
     await svc.saveShifts(db, id.shift1, periodId, st.s1, [{ membershipId: id.a, day, kind: "holiday" }, { membershipId: id.b, day, kind: "paid" }]);
     await expect(svc.setDayLimits(db, id.a, periodId, st.s1, [day], 1)).rejects.toThrow(svc.ForbiddenError);           // スタッフは決められない
@@ -173,5 +173,28 @@ describe("休みの上限・かぶりの知らせ・話し合い", () => {
     await expect(svc.setPeriodStatus(db, id.mgr1, { periodId, storeId: st.s1, status: "confirmed" })).rejects.toThrow("休みがかぶっている日があります");
     await svc.setDayLimits(db, id.shift1, periodId, st.s1, [day], 2);
     await svc.setPeriodStatus(db, id.mgr1, { periodId, storeId: st.s1, status: "confirmed" });
+  });
+
+  it("出勤簿づくりを始めると、シフトカレンダー（休み・有給）が自動で反映され、ほかの日は営業時間で出勤になる。一括の直しは休みの人を変えない", async () => {
+    const sp = (await db.query<{ id: string }>("insert into stores (company_id, name, default_open, default_close, sat_open, sat_close) select company_id, 'auto', '10:00','19:00','10:00','20:00' from stores where id = $1 returning id", [st.s1])).rows[0].id;
+    const mem = (await db.query<{ id: string }>("insert into memberships (company_id, store_id, employee_code, name, level) select company_id, $1, '77', 'auto1', 1 from stores where id = $1 returning id", [sp])).rows[0].id;
+    await db.query("update store_period_status set status = 'collecting' where period_id = $1 and store_id = $2", [periodId, sp]);
+    await svc.setMyRequest(db, mem, periodId, "2026-11-18", "hope");
+    await svc.setMyRequest(db, mem, periodId, "2026-11-19", "paid");
+    await svc.setPeriodStatus(db, id.office, { periodId, storeId: sp, status: "closed" });
+    await svc.setPeriodStatus(db, id.office, { periodId, storeId: sp, status: "drafting" });   // 自動で反映される
+    const rows = await svc.listShifts(db, id.office, periodId, sp);
+    expect(rows.length).toBe(30);                                                               // 11/16〜12/15 の全日
+    const at = (d: string) => rows.find((r) => r.day === d)!;
+    expect(at("2026-11-18").kind).toBe("holiday");
+    expect(at("2026-11-19").kind).toBe("paid");
+    expect(at("2026-11-20")).toMatchObject({ kind: "work", start: "10:00", end: "19:00" });     // 平日
+    expect(at("2026-11-21")).toMatchObject({ kind: "work", start: "10:00", end: "20:00" });     // 土曜は土曜の時間
+    // 一括の直し（休み・有給の人は変えない）
+    await svc.fillDefault(db, id.office, { periodId, storeId: sp, days: ["2026-11-18", "2026-11-20"], start: "11:00", end: "20:00", overwrite: true, keepOff: true });
+    const after = await svc.listShifts(db, id.office, periodId, sp);
+    expect(after.find((r) => r.day === "2026-11-20")).toMatchObject({ start: "11:00", end: "20:00" });
+    expect(after.find((r) => r.day === "2026-11-18")?.kind).toBe("holiday");
+    expect(await svc.autoDraftShifts(db, id.office, periodId, sp)).toBe(0);                     // 2回目は何も増えない
   });
 });

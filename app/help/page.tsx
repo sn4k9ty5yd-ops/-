@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { api, MeProvider, useMe } from "@/lib/client";
-import { GLOSSARY, HELP, HELP_INTRO } from "@/lib/help";
+import { HELP, HELP_INTRO } from "@/lib/help";
 import type { FeedbackRow } from "@/lib/service";
 
 const ST = { new: "届きました", read: "読みました", done: "対応しました" } as const;
@@ -25,10 +25,6 @@ function Inner() {
       <h1>ヘルプ</h1>
       <p className="hint">{HELP_INTRO}</p>
       <p className="sub">いまの自分（{me.name}）が使える機能だけを出しています。</p>
-      <details className="card" style={{ marginBottom: 10 }}>
-        <summary style={{ cursor: "pointer", fontSize: 17 }}><b>🔰 はじめに：言葉の説明</b></summary>
-        <dl style={{ lineHeight: 1.8 }}>{GLOSSARY.map(([k, v]) => <div key={k} style={{ marginBottom: 6 }}><dt><b>{k}</b></dt><dd style={{ margin: "0 0 0 1em" }}>{v}</dd></div>)}</dl>
-      </details>
       <nav className="actions" style={{ flexWrap: "wrap", margin: "8px 0 16px" }}>
         {topics.map((t) => <a key={t.id} href={`#h-${t.id}`} onClick={() => setOpen(t.id)} className="badge2" style={{ textDecoration: "none" }}>{t.icon} {t.title.split("（")[0]}</a>)}
       </nav>
