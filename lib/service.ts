@@ -2429,3 +2429,39 @@ export async function exportRecords(db: Database, userId: string, o: RecordsOpti
   await db.query("insert into audit_logs (company_id, actor_id, action, detail) values ($1,$2,'records.export',$3::jsonb)", [me.companyId, userId, JSON.stringify({ from: o.from, to: o.to, sections, detail: !!o.detail, hash: hash.slice(0, 16) })]);
   return { meta: { company: co, from: o.from, to: o.to, generatedAt, by: me.name, sections, detail: !!o.detail, hash }, ...doc };
 }
+
+// ---------------------------------------------------------------- ご要望（こうしてほしい）
+export interface FeedbackRow { id: string; body: string; status: "new" | "read" | "done"; reply: string; createdAt: string; fromName: string }
+
+/** ご要望を送る。アプリ制作者にお知らせ＋スマホ通知が届く */
+export async function sendFeedback(db: Database, userId: string, body: string): Promise<void> {
+  const me = await getMe(db, userId);
+  if (!me || me.displayOnly) throw new ForbiddenError();
+  const text = body.trim();
+  if (!text) throw new Error("内容を書いてください");
+  if (text.length > 2000) throw new Error("長すぎます（2000字まで）");
+  await asUser(db, userId, (q) => q.query("insert into feedback (company_id, from_id, body) values ($1,$2,$3)", [me.companyId, userId, text]));
+  const owners = (await db.query<{ id: string }>("select id from memberships where company_id = $1 and app_owner and status = 'active'", [me.companyId])).rows.map((r) => r.id);
+  for (const o of owners) await db.query("insert into notifications (company_id, user_id, kind, title, body, link) values ($1,$2,'feedback',$3,$4,'/admin/feedback')", [me.companyId, o, `ご要望が届きました（${me.name}）`, text.slice(0, 80)]);
+  await pushToUsers(db, owners, { title: `ご要望（${me.name}）`, body: text.slice(0, 80), url: "/admin/feedback", tag: "feedback" }).catch(() => 0);
+}
+
+/** 自分が送ったご要望（制作者は全員分） */
+export async function listFeedback(db: Database, userId: string): Promise<FeedbackRow[]> {
+  return (await asUser(db, userId, (q) => q.query<FeedbackRow>(
+    `select f.id, f.body, f.status, f.reply, f.created_at::text as "createdAt", m.name as "fromName"
+       from feedback f join memberships m on m.id = f.from_id order by f.created_at desc limit 200`))).rows;
+}
+
+/** 制作者だけ: 状態を変える・返事を書く */
+export async function updateFeedback(db: Database, userId: string, id: string, input: { status?: "new" | "read" | "done"; reply?: string }): Promise<void> {
+  const me = await getMe(db, userId);
+  if (!me?.appOwner) throw new ForbiddenError();
+  const n = (await asUser(db, userId, (q) => q.query(
+    "update feedback set status = coalesce($2, status), reply = coalesce($3, reply), updated_at = now() where id = $1 returning from_id",
+    [id, input.status ?? null, input.reply ?? null]))).rows;
+  if (n.length === 0) throw new ForbiddenError();
+  if (input.reply && input.reply.trim()) {
+    await db.query("insert into notifications (company_id, user_id, kind, title, body, link) values ($1,$2,'feedback',$3,$4,'/help')", [me.companyId, (n[0] as { from_id: string }).from_id, "ご要望に返事が届きました", input.reply.slice(0, 80)]);
+  }
+}

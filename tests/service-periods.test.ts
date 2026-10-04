@@ -122,4 +122,18 @@ describe("シフト担当（Lv2）の操作", () => {
     expect((await svc.getMe(d, u.office))?.appOwner).toBe(true);
     expect((await svc.getMe(d, u.maker))?.appOwner).toBe(false);
   });
+  it("ご要望: だれでも送れる。見えるのは本人と制作者だけ。返事は制作者だけ。制作者にお知らせが届く", async () => {
+    await svc.sendFeedback(d, u.staff, "もっと見やすくしてほしい");
+    await svc.sendFeedback(d, u.maker, "別の要望");
+    await expect(svc.sendFeedback(d, u.staff, "   ")).rejects.toThrow();
+    expect((await svc.listFeedback(d, u.staff)).map((f) => f.body)).toEqual(["もっと見やすくしてほしい"]);
+    expect((await svc.listFeedback(d, u.maker)).length).toBe(1);
+    expect((await svc.listFeedback(d, u.office)).length).toBe(2);   // office は制作者の印を付けたアカウント
+    const fid = (await svc.listFeedback(d, u.staff))[0].id;
+    await expect(svc.updateFeedback(d, u.staff, fid, { status: "done" })).rejects.toThrow(svc.ForbiddenError);
+    await svc.updateFeedback(d, u.office, fid, { status: "read", reply: "ありがとう！" });
+    expect((await svc.listFeedback(d, u.staff))[0]).toMatchObject({ status: "read", reply: "ありがとう！" });
+    const n = await d.query("select count(*)::int as n from notifications where user_id = $1 and kind = 'feedback'", [u.office]);
+    expect(n.rows[0]).toEqual({ n: 2 });
+  });
 });

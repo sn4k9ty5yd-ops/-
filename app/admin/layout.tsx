@@ -22,6 +22,7 @@ const TABS: { href: string; label: string; min: number; sub?: boolean; owner?: b
   { href: "/admin/notices", label: "お知らせ文", min: 4 },
   { href: "/admin/records", label: "税務署用の書面", min: 4 },
   { href: "/admin/guide", label: "説明書", min: 4, owner: true },
+  { href: "/admin/feedback", label: "ご要望", min: 4, owner: true },
 ];
 
 const SHIFT_PATHS = ["/admin/shift", "/admin/attendance", "/admin/requests", "/admin/periods", "/requests"];
