@@ -106,10 +106,12 @@ describe("提出と確認", () => {
     await as(U.mgr2, async () => {
       expect(await fails(`update store_period_status set attendance_status='acknowledged' where period_id='${P}' and store_id='${S2}'`)).toBe(true);
       expect(await fails(`update store_period_status set attendance_status='submitted' where period_id='${P}' and store_id='${S2}'`)).toBe(false);
-      expect(await fails(`update store_period_status set attendance_status='open' where period_id='${P}' and store_id='${S2}'`)).toBe(true);
+      expect(await fails(`update store_period_status set attendance_status='open' where period_id='${P}' and store_id='${S2}'`)).toBe(false);   // 確認済みの前なら戻せる
+      expect(await fails(`update store_period_status set attendance_status='submitted' where period_id='${P}' and store_id='${S2}'`)).toBe(false);
     });
+    await as(U.office, async () => expect(await fails(`update store_period_status set attendance_status='acknowledged' where period_id='${P}' and store_id='${S2}'`)).toBe(false));
+    await as(U.mgr2, async () => expect(await fails(`update store_period_status set attendance_status='open' where period_id='${P}' and store_id='${S2}'`)).toBe(true));   // 確認済みから戻せるのはオフィスだけ
     await as(U.office, async () => {
-      expect(await fails(`update store_period_status set attendance_status='acknowledged' where period_id='${P}' and store_id='${S2}'`)).toBe(false);
       expect(await fails(`update store_period_status set attendance_status='open' where period_id='${P}' and store_id='${S2}'`)).toBe(false);
       expect((await rows("select 1 from audit_logs where action = 'attendance.status'")).length).toBeGreaterThanOrEqual(4);
     });

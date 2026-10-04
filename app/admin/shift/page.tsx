@@ -13,7 +13,6 @@ const TILES = [
   { href: "/admin/shifts", t: "② 出勤簿", s: "日ごと・人ごと・一覧表で、入店・退店を入力", min: 2 },
   { href: "/shifts", t: "シフトを見る", s: "今日の出勤・月のシフト", min: 1 },
   { href: "/requests", t: "自分の希望休を出す", s: "休みたい日をえらぶ", min: 1 },
-  { href: "/admin/periods", t: "シフト期間（くわしく）", s: "次の期間を作る・締切の日時・進める", min: 2 },
 ];
 
 export default function ShiftHub() {

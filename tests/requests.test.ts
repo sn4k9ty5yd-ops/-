@@ -64,14 +64,16 @@ describe("シフト期間の作成と進行", () => {
     });
   });
 
-  it("店長は後戻り・確認済みにできない。オフィスはできる。履歴が残る", async () => {
+  it("店長は、押しまちがえを1つ戻せる。確認済みにはできず、確認済みからも戻せない。オフィスはできる。履歴が残る", async () => {
     await as(U.mgr1, async () => {
       expect(await fails(setStatus(S1, "submitted"))).toBe(false);
-      expect(await fails(setStatus(S1, "drafting"))).toBe(true);        // 後戻り不可
+      expect(await fails(setStatus(S1, "drafting"))).toBe(false);       // 確認済みの前なら戻せる
+      expect(await fails(setStatus(S1, "submitted"))).toBe(false);
       expect(await fails(setStatus(S1, "acknowledged"))).toBe(true);    // 確認済みは不可
     });
+    await as(U.office, async () => expect(await fails(setStatus(S1, "acknowledged"))).toBe(false));
+    await as(U.mgr1, async () => expect(await fails(setStatus(S1, "submitted"))).toBe(true));   // 確認済みから戻せるのはオフィスだけ
     await as(U.office, async () => {
-      expect(await fails(setStatus(S1, "acknowledged"))).toBe(false);
       expect(await fails(setStatus(S1, "collecting"))).toBe(false);     // 後戻りOK（やり直し）
       const logs = await rows(`select detail from audit_logs where action='period.status'`);
       expect(logs.length).toBeGreaterThanOrEqual(3);

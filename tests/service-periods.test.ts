@@ -115,8 +115,15 @@ describe("シフト担当（Lv2）の操作", () => {
     await expect(svc.setPeriodStatus(d, u.maker, { periodId: p.id, storeId: s2.b, status: "collecting" })).rejects.toThrow(svc.ForbiddenError);
     for (const st of ["closed", "drafting", "confirmed", "published", "submitted"] as const) await svc.setPeriodStatus(d, u.maker, { periodId: p.id, storeId: s2.a, status: st });   // 公開もオフィスへの提出も、シフト担当が押せる
     await expect(svc.setPeriodStatus(d, u.maker, { periodId: p.id, storeId: s2.a, status: "acknowledged" })).rejects.toThrow();
+    await svc.setPeriodStatus(d, u.maker, { periodId: p.id, storeId: s2.a, status: "published" });   // 押しまちがえたら、ひとつ戻せる
+    await expect(svc.setPeriodStatus(d, u.staff, { periodId: p.id, storeId: s2.a, status: "confirmed" })).rejects.toThrow(svc.ForbiddenError);
+    await svc.setPeriodStatus(d, u.maker, { periodId: p.id, storeId: s2.a, status: "submitted" });
+    await svc.setPeriodStatus(d, u.office, { periodId: p.id, storeId: s2.a, status: "acknowledged" });
+    await expect(svc.setPeriodStatus(d, u.maker, { periodId: p.id, storeId: s2.a, status: "submitted" })).rejects.toThrow();   // 確認済みから戻せるのはオフィスだけ
+    await svc.setPeriodStatus(d, u.office, { periodId: p.id, storeId: s2.a, status: "submitted" });
     await svc.setAttendanceStatus(d, u.maker, p.id, s2.a, "submitted");
     await expect(svc.setAttendanceStatus(d, u.maker, p.id, s2.a, "acknowledged")).rejects.toThrow();
+    await svc.setPeriodStatus(d, u.maker, { periodId: p.id, storeId: s2.a, closeAt: "2026-12-01T12:00:00+09:00" });   // 締切の日時も入れられる
   });
   it("アプリ制作者の印は、画面（アプリ用の接続）からは付けられない。管理者でも付かない", async () => {
     expect((await svc.getMe(d, u.office))?.appOwner).toBe(false);

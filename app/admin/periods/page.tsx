@@ -42,9 +42,9 @@ export default function PeriodsPage() {
                   <div className="steps2">{STATUS_ORDER.map((x) => <i key={x} className={x === s.status ? "now" : STATUS_ORDER.indexOf(x) < STATUS_ORDER.indexOf(s.status) ? "done" : ""} />)}</div>
                 </div>
                 <div className="actions">
-                  {canManage(s.storeId) && s.status === "preparing" && (
-                    <label className="sub" style={{ margin: 0 }}>締切
-                      <input type="datetime-local" defaultValue={s.closeAt ? s.closeAt.slice(0, 16).replace(" ", "T") : ""} style={{ fontSize: 14, padding: 8 }}
+                  {canManage(s.storeId) && (s.status === "preparing" || s.status === "collecting") && (
+                    <label className="sub" style={{ margin: 0 }}>希望休の締切（いつまでに出してもらうか）
+                      <input type="datetime-local" key={s.closeAt ?? "none"} defaultValue={s.closeAt ? s.closeAt.slice(0, 16).replace(" ", "T") : ""} style={{ fontSize: 14, padding: 8 }}
                         onBlur={(e) => e.target.value && run(() => api("/api/periods", { periodId: p.id, storeId: s.storeId, closeAt: `${e.target.value}:00+09:00` }))} />
                     </label>
                   )}
@@ -60,7 +60,7 @@ export default function PeriodsPage() {
                       {next.label}
                     </button>
                   )}
-                  {me.level === 4 && s.status !== "preparing" && (
+                  {canManage(s.storeId) && s.status !== "preparing" && (me.level === 4 || s.status !== "acknowledged") && (
                     <button className="ghost" style={{ color: "var(--sub)" }}
                       onClick={() => confirm("ひとつ前の状態に戻しますか？") && run(() => api("/api/periods", { periodId: p.id, storeId: s.storeId, status: STATUS_ORDER[STATUS_ORDER.indexOf(s.status as PeriodStatus) - 1] }))}>
                       ひとつ戻す
