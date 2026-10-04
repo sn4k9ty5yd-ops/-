@@ -1541,6 +1541,8 @@ export async function getMaterialImage(db: Database, userId: string, id: string)
 
 export interface MaterialMemory {
   suppliers: string[];
+  /** よく使う商品（ボタンにする）。発注先ごとに、回数の多い順。単価=最後に入れた金額÷数量 */
+  frequent?: { name: string; supplier: string; unit: number; count: number }[];
   /** 今まで入れた商品名（よく使う順） */
   items: string[];
   /** 読み取った文字 → 直した商品名（学習） */
@@ -1559,11 +1561,18 @@ export async function getMaterialMemory(db: Database, userId: string, storeId: s
          from material_orders o, jsonb_array_elements(o.lines) l
         where o.store_id = $1 and o.deleted_at is null and coalesce(l->>'name','') <> ''
         group by 1, 2 order by n desc limit 1500`, [storeId])).rows;
+    const freq = (await q.query<{ name: string; supplier: string; unit: number; count: number }>(
+      `select name, supplier, (array_agg(unit order by at desc))[1]::int as unit, count(*)::int as count from (
+         select l->>'name' as name, o.supplier, o.created_at as at,
+                round(coalesce((l->>'amount')::numeric, 0) / greatest(coalesce((l->>'qty')::numeric, 1), 1)) as unit
+           from material_orders o, jsonb_array_elements(o.lines) l
+          where o.store_id = $1 and o.deleted_at is null and coalesce(l->>'name','') <> '') t
+        group by name, supplier order by count desc, name limit 60`, [storeId])).rows;
     const items = [...new Set(lines.map((l) => l.name))].slice(0, 500);
     const aliases = lines.filter((l) => l.raw && l.raw !== l.name).map((l) => ({ raw: l.raw as string, name: l.name }));
     const st = (await q.query<{ supplier: string; tax_mode: "ex" | "in" }>(
       `select distinct on (supplier) supplier, tax_mode from material_orders where store_id = $1 and deleted_at is null and supplier <> '' order by supplier, created_at desc`, [storeId])).rows;
-    return { suppliers, items, aliases, supplierTax: Object.fromEntries(st.map((r) => [r.supplier, r.tax_mode])) };
+    return { suppliers, frequent: freq, items, aliases, supplierTax: Object.fromEntries(st.map((r) => [r.supplier, r.tax_mode])) };
   });
 }
 

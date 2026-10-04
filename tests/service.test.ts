@@ -266,6 +266,7 @@ describe("材料費（発注額）", () => {
     expect(mem.suppliers).toContain("学習商事");
     expect(mem.items).toEqual(expect.arrayContaining(["シャンプー", "カラー剤"]));
     expect(mem.aliases).toContainEqual({ raw: "シャンプ一", name: "シャンプー" });
+    expect(mem.frequent).toContainEqual({ name: "シャンプー", supplier: "学習商事", unit: 5000, count: 1 });
     expect((await svc.getMaterialMemory(db, id.staff2, store.a1)).items).toEqual([]);   // 他店の人には見えない
   });
   it("材料担当: 管理者が決めると、他店でも全店の材料費を見て書ける。統括は管理者と材料担当だけ", async () => {

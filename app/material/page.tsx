@@ -195,6 +195,27 @@ function Page() {
               {reading && <p className="sub">{reading}</p>}
               {form.id && (data?.images ?? []).some((i) => i.orderId === form.id) && <p className="sub">すでに付いている画像は、一覧に出ています（手では消せません）。</p>}
             </div>
+            {form.lines !== null && (() => {
+              const fq = (memory.frequent ?? []).filter((f) => !form.supplier || f.supplier === form.supplier).slice(0, 24);
+              if (fq.length === 0) return null;
+              return (
+                <div>
+                  <b>よく使う商品（ポチッと押すと明細に入ります。もう1回押すと数量が増えます）</b>
+                  <div className="actions" style={{ flexWrap: "wrap" }}>
+                    {fq.map((f) => (
+                      <button key={f.supplier + f.name} className="ghost" style={{ width: "auto", color: "var(--ink)", border: "1px solid var(--line, #ddd)", borderRadius: 20 }}
+                        onClick={() => setForm((cur) => {
+                          if (!cur) return cur;
+                          const ls = cur.lines ?? [];
+                          const i = ls.findIndex((x) => x.name === f.name);
+                          const lines = i >= 0 ? ls.map((x, j) => (j === i ? { ...x, qty: x.qty + 1, amount: x.amount + f.unit } : x)) : [...ls, { name: f.name, qty: 1, amount: f.unit }];
+                          return { ...cur, supplier: cur.supplier || f.supplier, lines };
+                        })}>{f.name}</button>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
             {form.lines !== null && (form.lines.length > 0 || form.pics.length > 0) && (
               <div>
                 <b>明細（読み取った結果。まちがいは直してください。直した名前は次から自動で覚えます）</b>
