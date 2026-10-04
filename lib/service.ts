@@ -2637,7 +2637,8 @@ export async function deleteCheckAttempt(db: Database, userId: string, attemptId
 }
 
 /** 表を直す・足す（事務員さん・教育担当）。items の並びが、そのまま順番 */
-export async function saveCheckSheet(db: Database, userId: string, input: { id?: string; grade: string; name: string; memo: string; maxPoints: number; passPoints: number; maxAttempts: number; active: boolean; items: { id?: string; name: string }[] }): Promise<string> {
+export async function saveCheckSheet(db: Database, userId: string, input: { id?: string; grade: string; name: string; memo: string; maxPoints?: number; passPoints: number; maxAttempts: number; active: boolean; items: { id?: string; name: string }[] }): Promise<string> {
+  input = { ...input, maxPoints: input.items.filter((i) => i.name.trim()).length * 5 };   // 満点は、項目の数×5（採点の点数の合計）
   try {
     return (await asUser(db, userId, (q) => q.query<{ id: string }>("select public.check_sheet_save($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb) as id",
       [input.id ?? null, input.grade, input.name, input.memo, input.maxPoints, input.passPoints, input.maxAttempts, input.active, JSON.stringify(input.items)]))).rows[0].id;

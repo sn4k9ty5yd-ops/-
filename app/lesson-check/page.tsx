@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, MeProvider, useAutoRefresh, useMe } from "@/lib/client";
-import { isPassed, maxMismatch, nextAttemptNo, SCORE_CHOICES, SCORE_HINT, sheetStatus, totalOfScores } from "@/lib/lesson-check";
+import { isPassed, itemsMax, nextAttemptNo, SCORE_CHOICES, SCORE_HINT, sheetStatus, totalOfScores } from "@/lib/lesson-check";
 import type { CheckAttempt, CheckData, CheckSheet } from "@/lib/service";
 
 const bg = { position: "fixed", inset: 0, background: "rgba(0,0,0,.4)", zIndex: 50, display: "flex", alignItems: "flex-end", justifyContent: "center" } as const;
@@ -65,7 +65,6 @@ function Page() {
       {open && (() => {
         const s = data.sheets.find((x) => x.id === open)!; const items = s.items.filter((i) => i.active); const at = attOf(s.id);
         const cols = Math.max(s.maxAttempts, 1);
-        const warn = maxMismatch(s);
         return (
           <div style={bg} onClick={() => setOpen(null)}><div style={box} onClick={(e) => e.stopPropagation()}>
             <div className="toolbar" style={{ justifyContent: "space-between" }}>
@@ -73,7 +72,6 @@ function Page() {
               <span>{data.canEditSheets && <button className="ghost" onClick={() => { setOpen(null); setEdit(s); }}>採点表を編集</button>} <button className="ghost" onClick={() => setOpen(null)}>閉じる</button></span>
             </div>
             {s.memo && <p className="sub" style={{ whiteSpace: "pre-wrap" }}>{s.memo}</p>}
-            {warn && data.canEditSheets && <p className="hint">⚠ {warn}</p>}
             <div style={{ overflowX: "auto" }}>
               <table className="tbl">
                 <thead><tr><th style={{ position: "sticky", left: 0, background: "inherit" }}>項目</th>{Array.from({ length: cols }, (_, i) => <th key={i}>{i + 1}回</th>)}</tr></thead>
@@ -141,7 +139,6 @@ function SheetEditor({ sheet, grade, onClose, onDone }: { sheet: CheckSheet | nu
   const [items, setItems] = useState<{ id?: string; name: string }[]>((sheet?.items.filter((i) => i.active) ?? []).map((i) => ({ id: i.id, name: i.name })));
   const [msg, setMsg] = useState("");
   const num = (k: "maxPoints" | "passPoints" | "maxAttempts") => <input type="number" value={f[k]} onChange={(e) => setF({ ...f, [k]: Number(e.target.value) })} />;
-  const warn = maxMismatch({ ...f, items: items.map((i) => ({ id: i.id ?? "", active: true })) });
   const save = async () => { try { await api("/api/lesson-check", { method: "POST", body: JSON.stringify({ action: "sheet", id: sheet?.id, ...f, items: items.filter((i) => i.name.trim()) }) }); onDone(); } catch (e) { setMsg((e as Error).message); } };
   return (
     <div style={{ ...bg, zIndex: 60 }} onClick={onClose}><div style={box} onClick={(e) => e.stopPropagation()}>
@@ -149,8 +146,8 @@ function SheetEditor({ sheet, grade, onClose, onDone }: { sheet: CheckSheet | nu
       <label>学年（1年目・2年目など）<input value={f.grade} onChange={(e) => setF({ ...f, grade: e.target.value })} /></label>
       <label>名前<input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></label>
       <label>メモ（制限時間など）<textarea rows={3} value={f.memo} onChange={(e) => setF({ ...f, memo: e.target.value })} /></label>
-      <div className="grid2"><label>満点{num("maxPoints")}</label><label>合格点{num("passPoints")}</label><label>回数{num("maxAttempts")}</label></div>
-      {warn && <p className="hint">⚠ {warn}</p>}
+      <div className="grid2"><label>満点（項目×5・自動）<input value={itemsMax({ items: items.map((i) => ({ id: i.id ?? "", active: i.name.trim() !== "" })) })} readOnly /></label><label>合格点{num("passPoints")}</label><label>回数{num("maxAttempts")}</label></div>
+      <p className="sub">満点は、項目の点数（各5点）の合計です。合格点の目安（8割）は {Math.ceil(itemsMax({ items: items.map((i) => ({ id: i.id ?? "", active: i.name.trim() !== "" })) }) * 0.8)}点です。</p>
       <h3>項目</h3>
       {items.map((it, i) => (
         <div key={i} className="toolbar">
