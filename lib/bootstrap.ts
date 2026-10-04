@@ -2,7 +2,7 @@ import { generatePasscode, hashPasscode } from "./auth/passcode";
 import type { Database } from "./db/types";
 
 /** 最初に登録するお店（正式名称）。あとからアプリの「店舗の編集」でいつでも追加・変更・閉店できる */
-export const DEFAULT_STORE_NAMES = ["ATENA", "ATENA六本松", "ATENA福津", "Organ", "ATENA AVEDA SAKURAMACHI"] as const;
+export const DEFAULT_STORE_NAMES = ["ATENA天神", "ATENA六本松", "ATENA福津", "Organ", "ATENA AVEDA SAKURAMACHI"] as const;
 
 export interface BootstrapResult { companyId: string; storeIds: string[]; office: { id: string; employeeCode: string; passcode: string } }
 

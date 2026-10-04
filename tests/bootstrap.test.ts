@@ -11,7 +11,7 @@ beforeAll(async () => { db = await newDb(); await migrate(db); });
 
 describe("最初の設定（会社・5店舗・管理者）", () => {
   it("教えていただいた5店舗が、この順番で作られる", () => {
-    expect([...DEFAULT_STORE_NAMES]).toEqual(["ATENA", "ATENA六本松", "ATENA福津", "Organ", "ATENA AVEDA SAKURAMACHI"]);
+    expect([...DEFAULT_STORE_NAMES]).toEqual(["ATENA天神", "ATENA六本松", "ATENA福津", "Organ", "ATENA AVEDA SAKURAMACHI"]);
   });
   it("会社・5店舗・管理者(レベル4)ができ、管理者はそのパスコードでログインできる", async () => {
     const r = await bootstrapCompany(db, { companyCode: "album", companyName: "株式会社ALBUM", officeName: "管理者", officeCode: "9000" });

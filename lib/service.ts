@@ -377,6 +377,10 @@ export async function setPeriodStatus(
     const cs = await listConflicts(db, userId, input.periodId, input.storeId).catch(() => []);
     if (cs.length > 0) throw new Error(`休みがかぶっている日があります（${cs.slice(0, 6).map((c) => `${jpDay(c.day)} ${c.count}人／上限${c.maxOff}人`).join("、")}${cs.length > 6 ? " ほか" : ""}）。先に、かぶっている人に知らせて、話し合ってください。`);
   }
+  // 「出勤簿づくり」より前から進めるときだけ、自動の下書きを入れる（ひとつ戻したときは、入っている内容をそのままにする）
+  const before = input.status === "drafting"
+    ? (await asUser(db, userId, (q) => q.query<{ s: PeriodStatus }>("select status as s from store_period_status where period_id = $1 and store_id = $2", [input.periodId, input.storeId]))).rows[0]?.s
+    : undefined;
   let n = 0;
   try {
     n = (await asUser(db, userId, (q) =>
@@ -390,7 +394,7 @@ export async function setPeriodStatus(
          input.openAt !== undefined, input.openAt ?? null, input.closeAt !== undefined, input.closeAt ?? null]))).rows.length;
   } catch { throw new ForbiddenError(); }
   if (n === 0) throw new ForbiddenError();
-  if (input.status === "drafting") await autoDraftShifts(db, userId, input.periodId, input.storeId).catch(() => 0);   // 出勤簿づくりを始めたら、シフトカレンダーの内容を自動で反映
+  if (input.status === "drafting" && before && STATUS_ORDER.indexOf(before) < STATUS_ORDER.indexOf("drafting")) await autoDraftShifts(db, userId, input.periodId, input.storeId).catch(() => 0);   // 出勤簿づくりを始めたら、シフトカレンダーの内容を自動で反映
   if (input.status === "published") await notifyShiftPublished(db, input.periodId, input.storeId).catch(() => 0);   // 通知が失敗しても、公開は成功
 }
 

@@ -44,7 +44,7 @@ export default function SetupPage() {
         <input id="on" value={f.officeName} onChange={(e) => setF({ ...f, officeName: e.target.value })} required />
         <label htmlFor="oc">管理者の社員番号（英数字）</label>
         <input id="oc" value={f.officeCode} onChange={(e) => setF({ ...f, officeCode: e.target.value })} required />
-        <p className="hint">お店は、ATENA／ATENA六本松／ATENA福津／Organ／ATENA AVEDA SAKURAMACHI の5つが、最初に作られます。</p>
+        <p className="hint">お店は、ATENA天神／ATENA六本松／ATENA福津／Organ／ATENA AVEDA SAKURAMACHI の5つが、最初に作られます。</p>
         <button type="submit" disabled={busy}>{busy ? "作成中…" : "初期設定をする"}</button>
       </form>
       {err && <p className="err">{err}</p>}
