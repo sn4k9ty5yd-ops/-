@@ -7,7 +7,7 @@ import { holidayName } from "@/lib/holidays";
 import { daysOf, dow, KIND_LABEL, md, shortNames, WEEKDAYS } from "@/lib/labels";
 import { PeriodNav, periodFor, todayJst, tintStyle } from "@/lib/period-nav";
 import type { Period } from "@/lib/periods";
-import type { PeriodRow, RequestRow } from "@/lib/service";
+import type { PeriodRow, RequestRow, ShiftRow } from "@/lib/service";
 
 export default function RequestsOverview() {
   const { me } = useMe();
@@ -17,6 +17,7 @@ export default function RequestsOverview() {
   const [stores, setStores] = useState<{ id: string; name: string; status: string }[]>([]);
   const [reqs, setReqs] = useState<RequestRow[]>([]);
   const [storeId, setStoreId] = useState(me.storeId);
+  const [shiftOff, setShiftOff] = useState<ShiftRow[]>([]);
   const [mode, setMode] = useState<"cal" | "table">("cal");
   useEffect(() => {
     Promise.all([api<PeriodRow[]>("/api/periods"), api<typeof names>("/api/names"), api<typeof stores>("/api/stores")]).then(([p, n, s]) => {
@@ -28,12 +29,15 @@ export default function RequestsOverview() {
   }, []);
   const db = periods.find((p) => p.start === view.start);
   const loadReqs = useCallback(() => { if (db) api<RequestRow[]>(`/api/requests?periodId=${db.id}`).then(setReqs).catch(() => {}); else setReqs([]); }, [db]);
-  useEffect(() => { loadReqs(); }, [loadReqs]);
-  useAutoRefresh(loadReqs);
-  const days = daysOf(view.start, view.end);
-  const key = new Map(reqs.map((r) => [`${r.membershipId}|${r.day}`, r.kind]));
   const activeStores = stores.filter((x) => x.status === "active" && names.some((n) => n.storeId === x.id));
   const sid = activeStores.some((x) => x.id === storeId) ? storeId : (activeStores.find((x) => x.id === me.storeId) ?? activeStores[0])?.id ?? "";
+  // 出勤簿（シフト）に入っている休み・有給も、このカレンダーに出す
+  const loadShifts = useCallback(() => { if (db && sid) api<{ shifts: ShiftRow[] }>(`/api/shifts?periodId=${db.id}&storeId=${sid}`).then((r) => setShiftOff(r.shifts.filter((x) => x.kind !== "work"))).catch(() => setShiftOff([])); else setShiftOff([]); }, [db, sid]);
+  const loadAll = useCallback(() => { loadReqs(); loadShifts(); }, [loadReqs, loadShifts]);
+  useEffect(() => { loadAll(); }, [loadAll]);
+  useAutoRefresh(loadAll);
+  const days = daysOf(view.start, view.end);
+  const key = new Map<string, string>([...reqs.map((r) => [`${r.membershipId}|${r.day}`, r.kind] as [string, string]), ...shiftOff.map((x) => [`${x.membershipId}|${x.day}`, x.kind === "paid" ? "paid" : "hope"] as [string, string])]);
   const people = names.filter((n) => n.storeId === sid);
   const short = shortNames(people);
   const today = todayJst();
