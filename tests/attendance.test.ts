@@ -35,8 +35,15 @@ beforeAll(async () => {
 });
 
 describe("出勤簿を書ける人・見られる人", () => {
-  it("スタッフ・シフト担当は書けない／見えない（自分の分も）", async () => {
-    for (const u of [U.staff1, U.shift1]) await as(u, async () => expect(await fails(work(U.staff1, S1, "2026-11-20"))).toBe(true));
+  it("スタッフは書けない／見えない（自分の分も）", async () => {
+    await as(U.staff1, async () => expect(await fails(work(U.staff1, S1, "2026-11-20"))).toBe(true));
+  });
+  it("シフト担当は自店だけ書ける・見られる。他店は書けない", async () => {
+    await as(U.shift1, async () => {
+      expect(await fails(work(U.staff1, S1, "2026-11-23"))).toBe(false);
+      expect(await fails(work(U.staff2, S2, "2026-11-23"))).toBe(true);
+    });
+    await as(U.mgr1, async () => { await fails(`delete from attendance_records where day='2026-11-23'`); });
   });
   it("店長は自店を書ける・直せる。他店は書けない（見るだけ）", async () => {
     await as(U.mgr1, async () => {
@@ -54,7 +61,7 @@ describe("出勤簿を書ける人・見られる人", () => {
       expect(await fails(work(U.staff1, S1, "2026-11-22"))).toBe(true);
     });
     await as(U.staff1, async () => expect(await rows("select 1 from attendance_records")).toHaveLength(0));
-    await as(U.shift1, async () => expect(await rows("select 1 from attendance_records")).toHaveLength(0));
+    await as(U.shift1, async () => expect((await rows("select distinct store_id from attendance_records")).length).toBe(1)); // 自店だけ
   });
 });
 

@@ -15,7 +15,7 @@ beforeAll(async () => {
   for (const n of ["s1", "s2"]) st[n] = (await db.query<{ id: string }>("insert into stores (company_id, name) values ($1,$2) returning id", [co, n])).rows[0].id;
   const mk = async (k: string, code: string, level: number, s: string) =>
     (id[k] = (await db.query<{ id: string }>("insert into memberships (company_id, store_id, employee_code, name, level) values ($1,$2,$3,$4,$5) returning id", [co, s, code, k, level])).rows[0].id);
-  await mk("office", "1", 4, st.s1); await mk("mgr1", "2", 3, st.s1); await mk("staff1", "3", 1, st.s1); await mk("staff2", "4", 1, st.s2);
+  await mk("office", "1", 4, st.s1); await mk("mgr1", "2", 3, st.s1); await mk("staff1", "3", 1, st.s1); await mk("staff2", "4", 1, st.s2); await mk("maker", "5", 2, st.s1);
 });
 
 describe("期間と希望休のサービス", () => {
@@ -88,5 +88,30 @@ describe("お店の追加・名前変更・並べ替え・閉店", () => {
   });
   it("空の名前は登録できない", async () => {
     await expect(svc.addStore(db, id.office, "  ")).rejects.toThrow("名前を入力");
+  });
+});
+
+describe("シフト担当（Lv2）の操作", () => {
+  let d: Database; const u: Record<string, string> = {}; const s2: Record<string, string> = {};
+  beforeAll(async () => {
+    d = await newDb(); await migrate(d);
+    const co = (await d.query<{ id: string }>("insert into companies (code, name) values ('y-co','Y') returning id")).rows[0].id;
+    for (const n of ["a", "b"]) s2[n] = (await d.query<{ id: string }>("insert into stores (company_id, name) values ($1,$2) returning id", [co, n])).rows[0].id;
+    const mk = async (k: string, code: string, level: number, s: string) =>
+      (u[k] = (await d.query<{ id: string }>("insert into memberships (company_id, store_id, employee_code, name, level) values ($1,$2,$3,$4,$5) returning id", [co, s, code, k, level])).rows[0].id);
+    await mk("office", "1", 4, s2.a); await mk("maker", "2", 2, s2.a); await mk("staff", "3", 1, s2.a);
+  });
+  it("「次のシフトを作る」を押せる。先の期間がすでにあれば二重には作らない。スタッフは押せない", async () => {
+    await expect(svc.ensureNextPeriod(d, u.staff, "2026-10-20")).rejects.toThrow(svc.ForbiddenError);
+    expect(await svc.ensureNextPeriod(d, u.maker, "2026-10-20")).toMatchObject({ created: true, label: "10/16〜11/15" });
+    expect(await svc.ensureNextPeriod(d, u.maker, "2026-10-20")).toMatchObject({ created: true, label: "11/16〜12/15" });
+    expect(await svc.ensureNextPeriod(d, u.maker, "2026-10-20")).toMatchObject({ created: false, label: "11/16〜12/15" });
+    expect((await svc.listPeriods(d, u.office)).length).toBe(2);
+  });
+  it("自店のシフトを進められるが、他店は動かせない・確認済みにはできない", async () => {
+    const p = (await svc.listPeriods(d, u.office))[0];
+    await svc.setPeriodStatus(d, u.maker, { periodId: p.id, storeId: s2.a, status: "collecting" });
+    await expect(svc.setPeriodStatus(d, u.maker, { periodId: p.id, storeId: s2.b, status: "collecting" })).rejects.toThrow(svc.ForbiddenError);
+    await expect(svc.setPeriodStatus(d, u.maker, { periodId: p.id, storeId: s2.a, status: "acknowledged" })).rejects.toThrow();
   });
 });

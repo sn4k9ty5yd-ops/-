@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { issuePasscode } from "./auth/login";
 import { generatePasscode, hashPasscode } from "./auth/passcode";
 import { calcHours, DEFAULT_BREAK_RULE, validateBreakRule, type BreakRule } from "./hours";
-import { upcomingPeriods } from "./periods";
+import { periodFor, upcomingPeriods } from "./periods";
 import { asUser } from "./db/user-context";
 import type { Database, Queryable } from "./db/types";
 import { md, shortNames } from "./labels";
@@ -336,6 +336,26 @@ export async function createNextPeriod(db: Database, userId: string, today: stri
         "insert into store_period_status (period_id, store_id, company_id) select $1, id, company_id from stores where status = 'active' and company_id = $2", [id, me.companyId]);
     });
   } catch { throw new ForbiddenError(); }
+}
+
+/** シフト担当（Lv2以上）が押す「次のシフトを作る」。次の期間がまだ無ければ作る（あれば何もしない）。作った期間の名前を返す */
+export async function ensureNextPeriod(db: Database, userId: string, today: string): Promise<{ created: boolean; label: string }> {
+  const me = await getMe(db, userId);
+  if (!me || me.level < 2) throw new ForbiddenError();
+  const startDay = (await db.query<{ d: number }>("select closing_start_day as d from companies where id = $1", [me.companyId])).rows[0].d;
+  const cur = periodFor(today, startDay);
+  // 「いまの期間」より先の期間がすでにあれば、新しくは作らない（押し間違い・二重作成の防止）
+  const ahead = (await db.query<{ label: string }>(
+    "select label from shift_periods where company_id = $1 and start_date > $2 order by start_date limit 1", [me.companyId, cur.start])).rows[0];
+  if (ahead) return { created: false, label: ahead.label };
+  const last = (await db.query<{ e: string | null }>("select max(end_date)::text as e from shift_periods where company_id = $1", [me.companyId])).rows[0].e;
+  let from = today;
+  if (last) { const d = new Date(last + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() + 1); from = d.toISOString().slice(0, 10); }
+  const p = upcomingPeriods(from, startDay, 1)[0];
+  const id = (await db.query<{ id: string }>(
+    "insert into shift_periods (company_id, start_date, end_date, label) values ($1,$2,$3,$4) returning id", [me.companyId, p.start, p.end, p.label])).rows[0].id;
+  await db.query("insert into store_period_status (period_id, store_id, company_id) select $1, id, company_id from stores where status = 'active' and company_id = $2", [id, me.companyId]);
+  return { created: true, label: p.label };
 }
 
 export async function setPeriodStatus(

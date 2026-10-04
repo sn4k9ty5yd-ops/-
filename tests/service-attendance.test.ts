@@ -72,8 +72,8 @@ describe("出勤簿の入力", () => {
 });
 
 describe("見られる人・直せる人", () => {
-  it("シフト担当・スタッフは見えない・書けない", async () => {
-    for (const u of [id.shift1, id.a]) {
+  it("スタッフは見えない・書けない", async () => {
+    for (const u of [id.a]) {
       expect(await get(u)).toEqual([]);
       await expect(svc.saveAttendance(db, u, periodId, st.s1, [{ membershipId: id.a, day: "2026-11-19", kind: "off" }])).rejects.toThrow(svc.ForbiddenError);
     }
