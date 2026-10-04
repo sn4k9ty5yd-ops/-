@@ -40,7 +40,7 @@ describe("商品マスターの登録", () => {
   });
   it("見える範囲: シフト担当は自店の商品だけ。スタッフは見えない。店長は全部", async () => {
     expect((await svc.listProducts(db, id.shift1, "retail")).map((p) => p.name).sort()).toEqual(["ｼｬﾝﾌﾟｰ", "ﾄﾘｰﾄﾒﾝﾄ"]);
-    expect(await svc.listProducts(db, id.staff, "retail")).toEqual([]);
+    expect((await svc.listProducts(db, id.staff, "retail")).map((p) => p.name).sort()).toEqual(["ｼｬﾝﾌﾟｰ", "ﾄﾘｰﾄﾒﾝﾄ"]);   // 棚卸しはみんなでやる: 自店の商品は見られる
     expect((await svc.listProducts(db, id.mgr1, "retail")).length).toBe(3);
   });
   it("編集（値上げ・名前変更）・使うお店の変更・取扱い終了ができる", async () => {
@@ -62,9 +62,9 @@ describe("棚卸し", () => {
     expect(d.items.map((i) => i.name).sort()).toEqual(["ｼｬﾝﾌﾟｰ", "ﾄﾘｰﾄﾒﾝﾄ"]);
     expect(d).toMatchObject({ status: "open", counted: 0, total: 0, editable: true, canManage: true });
   });
-  it("同じ日・同じ種類は二重に作れない。始められるのは店長(自店)とオフィス", async () => {
+  it("同じ日・同じ種類は二重に作れない。始められるのは自店のみんなとオフィス。他店は不可", async () => {
     await expect(svc.startStocktake(db, id.mgr1, st.s1, "retail", "2026-10-31")).rejects.toThrow("すでに作られています");
-    await expect(svc.startStocktake(db, id.shift1, st.s1, "supply", "2026-10-31")).rejects.toThrow(svc.ForbiddenError);
+    await expect(svc.startStocktake(db, id.shift1, st.s2, "supply", "2026-10-31")).rejects.toThrow(svc.ForbiddenError);
     await expect(svc.startStocktake(db, id.mgr1, st.s2, "retail", "2026-10-31")).rejects.toThrow(svc.ForbiddenError);
   });
   it("数量は整数・0以上のみ。小数やマイナスは断る。シフト担当も入れられる", async () => {

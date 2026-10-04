@@ -44,7 +44,8 @@ describe("指名売上", () => {
     expect((await svc.listSalesMonth(db, id.mgrB, st["A店"], "2026-10")).rows.every((r) => r.total === 0)).toBe(true);        // 他店は見えない
     const mine = await svc.getMySales(db, id.a, "2026-10");
     expect(mine.mine?.total).toBe(500000);
-    expect(mine.store).toEqual({ total: 820000, customers: 132 });
+    expect(mine.store).toEqual({ total: 0, customers: 0 });                                                      // 一般のスタッフには、お店の合計は見せない
+    expect((await svc.getMySales(db, id.mgr, "2026-10")).store).toEqual({ total: 820000, customers: 132 });      // 店長には見える
     expect((await svc.getMySales(db, id.a2, "2026-10")).mine?.total).toBe(320000);
   });
 
@@ -52,12 +53,12 @@ describe("指名売上", () => {
     await svc.saveSales(db, id.mgr, st["A店"], "2025-10", [{ membershipId: id.a, values: V(400000, 70) }, { membershipId: id.a2, values: V(350000, 60) }], "import");
     const m = await svc.getMySales(db, id.a, "2026-10");
     expect(m.prev?.total).toBe(400000);
-    expect(m.storePrev.total).toBe(750000);
+    expect((await svc.getMySales(db, id.mgr, "2026-10")).storePrev.total).toBe(750000);
     await svc.setSalesTarget(db, id.mgr, st["A店"], "2026-10", null, 1000000);
     await svc.setSalesTarget(db, id.mgr, st["A店"], "2026-10", id.a, 600000);
     await svc.setSalesTarget(db, id.mgr, st["A店"], "2026-10", id.a2, 300000);
     const m2 = await svc.getMySales(db, id.a, "2026-10");
-    expect([m2.storeTarget, m2.target]).toEqual([1000000, 600000]);                                  // 他の人の目標は見えない
+    expect([m2.storeTarget, m2.target]).toEqual([null, 600000]);                                  // 他の人の目標は見えない
     await expect(svc.setSalesTarget(db, id.a, st["A店"], "2026-10", id.a, 1)).rejects.toThrow(svc.ForbiddenError);
     await svc.setSalesTarget(db, id.mgr, st["A店"], "2026-10", id.a, null);
     expect((await svc.getMySales(db, id.a, "2026-10")).target).toBeNull();
@@ -66,10 +67,10 @@ describe("指名売上", () => {
   });
 
   it("店内ランキング: 順位がつく。お店の設定でスタッフには見せなくできる（店長・管理者にはいつでも）", async () => {
-    const b = (await svc.getMySales(db, id.a, "2026-10")).board;
+    const b = (await svc.getMySales(db, id.mgr, "2026-10")).board;
     expect(b.map((x) => [x.rank, x.name, x.total])).toEqual([[1, "山田", 500000], [2, "佐藤", 320000]]);
     await svc.setSalesBoardPublic(db, id.office, st["A店"], false);
-    expect((await svc.getMySales(db, id.a, "2026-10")).board).toHaveLength(0);
+    expect((await svc.getMySales(db, id.a, "2026-10")).board).toHaveLength(0);                                    // 一般のスタッフには、いつも見せない
     expect((await svc.getMySales(db, id.mgr, "2026-10")).board).toHaveLength(2);
     await expect(svc.setSalesBoardPublic(db, id.mgr, st["A店"], true)).rejects.toThrow(svc.ForbiddenError);                // 切りかえは管理者だけ
     await svc.setSalesBoardPublic(db, id.office, st["A店"], true);
@@ -98,13 +99,13 @@ describe("指名売上", () => {
     await svc.saveMySales(db, id.a, M, V(480000, 75, { free: 100000, nominated: 330000, retail: 50000, newCustomers: 15, repeatCustomers: 60 }));
     let mine = await svc.getMySales(db, id.a, M);
     expect(mine.status).toBe("draft");
-    expect((await svc.getMySales(db, id.a2, M)).board).toHaveLength(0);                                   // 下書きは数えない
+    expect((await svc.getMySales(db, id.mgr, M)).board).toHaveLength(0);                                   // 下書きは数えない
     await expect(svc.reviewSales(db, id.mgr, id.a, M, "manager_ok")).rejects.toThrow("できません");           // 提出前は確認できない
     expect(await svc.submitMySales(db, id.a, M)).toBe("submitted");
     expect((await svc.listNotifications(db, id.mgr)).items.some((n) => n.title.includes("売上が提出されました"))).toBe(true);
     await expect(svc.saveMySales(db, id.a, M, V(1, 1))).rejects.toThrow("直せません");                       // 提出後は本人は直せない
     await expect(svc.submitMySales(db, id.a, M)).rejects.toThrow("すでに");
-    expect((await svc.getMySales(db, id.a2, M)).board.map((b) => b.name)).toEqual(["山田"]);                 // 提出したら数える
+    expect((await svc.getMySales(db, id.mgr, M)).board.map((b) => b.name)).toEqual(["山田"]);                 // 提出したら数える
     // 順番: 事務員さんは、店長確認のあと。店長は事務員の分はできない・他店・自分の分はできない
     await expect(svc.reviewSales(db, id.office, id.a, M, "office_ok")).rejects.toThrow("店長の確認");
     await expect(svc.reviewSales(db, id.mgrB, id.a, M, "manager_ok")).rejects.toThrow(svc.ForbiddenError);

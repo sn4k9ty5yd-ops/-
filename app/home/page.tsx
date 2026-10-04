@@ -31,7 +31,7 @@ function Cards() {
     { href: "/admin/stocktake", title: "棚卸し", sub: "店販・業務の棚卸し（みんなで数量を入れます）", show: !me.displayOnly },
     { href: "/admin/products", title: "商品一覧", sub: "店販・業務の商品と仕入値", show: me.level >= 3 },
     { href: "/admin/shifts", title: "出勤簿", sub: "日ごと・人ごと・一覧表で入力します", show: false },
-    { big: true, href: "/register-sales", title: "売上", sub: "レジ売上を入れる（シフト担当）・事務員さんの確認・エクセル", show: me.level >= 2 && !me.displayOnly },
+    { big: true, href: me.level === 4 ? "/register-sales" : "/my-sales", title: "売上", sub: me.level === 4 ? "レジ売上の確認・エクセル" : me.level >= 2 ? "自分の売上を店長に提出・レジ売上を入れる（シフト担当）" : "自分の売上を、店長に提出します", show: !me.displayOnly },
     { href: "/admin/periods", title: "シフト期間", sub: "受付・締切・確定・提出", show: false },
     { href: "/admin/staff", title: "スタッフ", sub: "登録・退職・パスコード", show: me.level >= 3 },
     { href: "/security", title: "セキュリティ", sub: "パスコードを変える・ログインの記録", show: true },

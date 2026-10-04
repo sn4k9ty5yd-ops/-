@@ -49,7 +49,7 @@ describe("商品マスター", () => {
     await as(U.office, async () => expect(await fails(newProduct("d0000000-0000-0000-0000-0000000000ff", "retail", "シャンプー"))).toBe(true));
   });
   it("見える範囲: スタッフは見えない。シフト担当は自店で使う商品だけ。店長・オフィスは全部。他社は見えない", async () => {
-    await as(U.staff1, async () => expect(await rows("select 1 from products")).toHaveLength(0));
+    await as(U.staff1, async () => expect((await rows("select 1 from products")).length).toBeGreaterThan(0));   // 棚卸しはみんなでやる: 自店で使う商品は見られる
     await as(U.shift1, async () => expect((await rows("select name from products order by name")).map((r) => r.name)).toEqual(["シャンプー", "トリートメント"]));
     await as(U.mgr1, async () => expect(await rows("select 1 from products")).toHaveLength(3));
     await as(U.officeB, async () => { expect(await rows("select 1 from products")).toHaveLength(0); expect(await rows("select 1 from product_stores")).toHaveLength(0); });
@@ -67,25 +67,27 @@ describe("商品マスター", () => {
 });
 
 describe("棚卸しを始める・数量を入れる", () => {
-  it("始められるのは店長(自店)とオフィス。シフト担当・スタッフは不可。他店は不可", async () => {
+  it("始められるのは自店のみんな（スタッフも）とオフィス。他店は不可", async () => {
     const ins = (i: string, s: string) => `insert into stocktakes (id, company_id, store_id, kind, taken_on) values ('${i}','${CO_A}','${s}','retail','2026-10-31')`;
-    for (const u of [U.shift1, U.staff1]) await as(u, async () => expect(await fails(ins(ST1, S1))).toBe(true));
+    const ins2 = (i: string, s: string, d: string) => `insert into stocktakes (id, company_id, store_id, kind, taken_on) values ('${i}','${CO_A}','${s}','retail','${d}')`;
+    await as(U.shift1, async () => expect(await fails(ins2("e0000000-0000-0000-0000-0000000000b1", S1, "2026-09-30"))).toBe(false));
+    await as(U.staff1, async () => expect(await fails(ins2("e0000000-0000-0000-0000-0000000000b2", S1, "2026-09-29"))).toBe(false));
+    for (const u of [U.shift1, U.staff1]) await as(u, async () => expect(await fails(ins2("e0000000-0000-0000-0000-0000000000b3", S2, "2026-09-28"))).toBe(true));   // 他店は不可
+    await admin(); await db.exec("delete from stocktakes where taken_on < '2026-10-01'");
     await as(U.mgr1, async () => { expect(await fails(ins(ST1, S1))).toBe(false); expect(await fails(ins(ST2, S2))).toBe(true); });
     await as(U.office, async () => expect(await fails(ins(ST2, S2))).toBe(false));
     await as(U.mgr1, async () => expect(await fails(ins("e0000000-0000-0000-0000-0000000000aa", S1))).toBe(true));  // 同じ店・種類・日は1つだけ
   });
-  it("行は管理権限のある人が追加。数量はシフト担当も入れられる。整数・0以上のみ", async () => {
+  it("数量は、みんなが入れられる。整数・0以上のみ。仕入値・名前は変えられない", async () => {
     await as(U.mgr1, async () => {
       expect(await fails(line(ST1, S1, P1, "シャンプー", 1000))).toBe(false);
       expect(await fails(line(ST1, S1, P2, "トリートメント", 1500))).toBe(false);
     });
     await as(U.shift1, async () => {
-      expect(await fails(line(ST1, S1, P1, "別の行", 1))).toBe(true);                                // 行の追加は不可
       expect(await fails(`update stocktake_lines set quantity = 3 where product_id='${P1}'`)).toBe(false);
       expect(await fails(`update stocktake_lines set quantity = -1 where product_id='${P1}'`)).toBe(true);
       expect(await fails(`update stocktake_lines set cost_price = 1 where product_id='${P1}'`)).toBe(true);  // 仕入値は変えられない
       expect(await fails(`update stocktake_lines set name = '改名' where product_id='${P1}'`)).toBe(true);
-      expect(await fails(`delete from stocktake_lines where product_id='${P1}'`)).toBe(true);
     });
     await as(U.staff1, async () => { expect((await rows("select 1 from stocktake_lines")).length).toBeGreaterThan(0); expect(await fails(`update stocktake_lines set quantity = quantity`)).toBe(false); });   // みんなでやる: 一般のスタッフも見られて、数量を入れられる
   });
@@ -119,7 +121,7 @@ describe("提出と確認", () => {
   it("数量が未入力の商品があると提出できない。全部入れたら提出できる（シフト担当は提出できない）", async () => {
     await as(U.mgr1, async () => expect(await fails(status(ST1, "submitted"))).toBe(true));
     await as(U.shift1, async () => expect(await fails(`update stocktake_lines set quantity = 4 where product_id='${P2}'`)).toBe(false));
-    await as(U.shift1, async () => expect(await fails(status(ST1, "submitted"))).toBe(true));
+    await as(U.shift1, async () => expect(await fails(status(ST1, "submitted"))).toBe(false));   // 全部入っていれば、シフト担当も提出できる
     await as(U.mgr1, async () => expect(await fails(status(ST1, "submitted"))).toBe(false));
   });
   it("提出後は店長・シフト担当は直せない。オフィスは直せる", async () => {

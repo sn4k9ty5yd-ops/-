@@ -2252,9 +2252,10 @@ export async function getMySales(db: Database, userId: string, month: string): P
   if (!me) throw new ForbiddenError();
   return asUser(db, userId, async (q) => {
     const one = async (mm: string) => (await q.query<SalesValues & { source: string; status: SalesStatus; rc: string | null; ca: number | null }>(`select x.source, x.status, x.return_comment as rc, x.commission_amount as ca, ${SALES_COLS} from sales_stats x where x.membership_id = $1 and x.month = $2`, [userId, mm])).rows[0] ?? null;
-    const tot = async (mm: string) => (await q.query<{ total: number; customers: number }>("select total_sales as total, customers from public.sales_store_total($1, $2::date)", [me.storeId, mm])).rows[0] ?? { total: 0, customers: 0 };
+    const restricted = me.level < 2;   // 一般のスタッフは、自分の分の記入と提出だけ（お店の合計・順位・目標は見せない）
+    const tot = async (mm: string) => restricted ? { total: 0, customers: 0 } : (await q.query<{ total: number; customers: number }>("select total_sales as total, customers from public.sales_store_total($1, $2::date)", [me.storeId, mm])).rows[0] ?? { total: 0, customers: 0 };
     const tg = (await q.query<{ membership_id: string | null; target: number }>("select membership_id, target from sales_targets where store_id = $1 and month = $2 and (membership_id is null or membership_id = $3)", [me.storeId, m, userId])).rows;
-    const board = (await q.query<{ membership_id: string; name: string; total_sales: number; customers: number; rank: number }>("select * from public.sales_board($1, $2::date)", [me.storeId, m])).rows;
+    const board = restricted ? [] : (await q.query<{ membership_id: string; name: string; total_sales: number; customers: number; rank: number }>("select * from public.sales_board($1, $2::date)", [me.storeId, m])).rows;
     const series = (await q.query<{ month: string; total: number; customers: number }>(
       "select to_char(month, 'YYYY-MM') as month, total_sales as total, customers from sales_stats where membership_id = $1 and month >= ($2::date - interval '23 months') and month <= $2::date order by month", [userId, m])).rows;
     const prevRow = await one(prevYear(m));
@@ -2264,7 +2265,7 @@ export async function getMySales(db: Database, userId: string, month: string): P
     const dl = (await q.query<{ due_on: string }>("select due_on::text as due_on from sales_deadlines where store_id = $1 and month = $2", [me.storeId, m])).rows[0];
     return {
       month: m, status: mineRow?.status ?? null, returnComment: mineRow?.rc ?? null, commission: mineRow?.ca ?? null, rates, dueOn: dl?.due_on ?? lastDayOf(m), mine: mineRow, prev: prevRow, store: await tot(m), storePrev: await tot(prevYear(m)),
-      target: tg.find((t) => t.membership_id === userId)?.target ?? null, storeTarget: tg.find((t) => t.membership_id === null)?.target ?? null,
+      target: tg.find((t) => t.membership_id === userId)?.target ?? null, storeTarget: restricted ? null : tg.find((t) => t.membership_id === null)?.target ?? null,
       board: board.map((b) => ({ membershipId: b.membership_id, name: b.name, total: b.total_sales, customers: b.customers, rank: b.rank })), series,
     };
   });

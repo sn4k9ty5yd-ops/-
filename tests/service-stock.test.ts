@@ -51,7 +51,7 @@ describe("在庫一覧・入庫・出庫", () => {
     await expect(svc.recordMovements(db, id.staff, st.s1, [{ productId: pr["ｶﾗｰ剤"], kind: "in", qty: 1 }])).rejects.toThrow(svc.ForbiddenError);
     await expect(svc.recordMovements(db, id.mgr1, st.s2, [{ productId: pr["ｶﾗｰ剤"], kind: "in", qty: 1 }])).rejects.toThrow(svc.ForbiddenError);
     await svc.recordMovements(db, id.mgr1, st.s1, [{ productId: pr["ｶﾗｰ剤"], kind: "in", qty: 1 }]);
-    expect((await svc.listStock(db, id.staff, st.s1)).items).toEqual([]);
+    // 在庫の画面は使わない（棚卸しは、みんなで見られる）
   });
   it("そのお店で使わない商品は記録できない（店2に店販シャンプーは無い）", async () => {
     await expect(svc.recordMovements(db, id.mgr2, st.s2, [{ productId: pr["ｼｬﾝﾌﾟｰ"], kind: "in", qty: 1 }])).rejects.toThrow(svc.ForbiddenError);
@@ -72,7 +72,7 @@ describe("数え直し・棚卸しからの反映", () => {
     await svc.saveQuantities(db, id.mgr1, sid, d.items.map((i) => ({ lineId: i.id, quantity: i.name === "ｶﾗｰ剤" ? 12 : 2 })));
     await expect(svc.applyStocktakeToStock(db, id.mgr1, sid)).rejects.toThrow("提出してから");
     await svc.setStocktakeStatus(db, id.mgr1, sid, "submitted");
-    await expect(svc.applyStocktakeToStock(db, id.shift1, sid)).rejects.toThrow(svc.ForbiddenError);
+    await expect(svc.applyStocktakeToStock(db, id.staff, sid)).rejects.toThrow(svc.ForbiddenError);
     expect(await svc.applyStocktakeToStock(db, id.mgr1, sid)).toBe(2);
     expect([(await item(id.mgr1, st.s1, "ｶﾗｰ剤")).quantity, (await item(id.mgr1, st.s1, "ﾊﾟｰﾏ剤")).quantity]).toEqual([12, 2]);
     expect(await svc.applyStocktakeToStock(db, id.mgr1, sid)).toBe(0);   // 二度目は差がないので何も増えない

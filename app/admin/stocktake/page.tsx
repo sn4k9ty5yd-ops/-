@@ -26,7 +26,7 @@ export default function StocktakePage() {
   const [takenOn, setTakenOn] = useState(monthEnd());
   const [msg, setMsg] = useState("");
   const store = stores.find((s) => s.id === storeId);
-  const canStart = me.level === 4 || (me.level === 3 && storeId === me.storeId);
+  const canStart = !me.displayOnly && (me.level === 4 || storeId === me.storeId);
 
   useEffect(() => { api<StoreRow[]>("/api/stores").then((s) => setStores(s.filter((x) => x.status === "active"))); }, []);
   const loadList = useCallback(async () => { setList(await api<StocktakeRow[]>(`/api/stocktakes?storeId=${storeId}&kind=${kind}`)); }, [storeId, kind]);

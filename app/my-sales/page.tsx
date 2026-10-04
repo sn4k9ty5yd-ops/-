@@ -119,7 +119,7 @@ function Page() {
             <div className="card"><b>内わけ</b>
               <p className="sub" style={{ margin: "6px 0" }}>フリー {yen(d.mine.free)}　／　指名技術 {yen(d.mine.nominated)}</p>
               <p className="sub" style={{ margin: "6px 0" }}>新規 {d.mine.newCustomers}人（{newRate(d.mine.newCustomers, d.mine.repeatCustomers) ?? "－"}%）／ 再来 {d.mine.repeatCustomers}人（{repeatRate(d.mine.newCustomers, d.mine.repeatCustomers) ?? "－"}%）</p></div>
-            <div className="card"><b>お店の中で</b>
+            <div className="card" hidden={me.level < 2}><b>お店の中で</b>
               <p style={{ margin: "6px 0" }}>お店の売上 {yen(d.store.total)} のうち、あなたは <b style={{ fontSize: 22 }}>{share ?? "－"}%</b></p>
               {myRank && <p style={{ margin: 0 }}>店内 <b style={{ fontSize: 22 }}>{myRank.rank}位</b> / {d.board.length}人</p>}</div>
           </div>
@@ -141,7 +141,6 @@ function Page() {
 }
 function Gate() {
   const { me } = useMe();
-  if (me.level < 2) return <main><Link href="/home" className="back">← ホーム</Link><h1>売上</h1><p className="hint">売上は、シフト担当が出勤簿と一緒に事務員さんへ提出します。この画面は使いません。</p></main>;
   return <Page />;
 }
 export default function MySalesPage() { return <MeProvider><Gate /></MeProvider>; }
