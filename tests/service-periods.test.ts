@@ -245,3 +245,64 @@ describe("商品の追加・このお店で使わない・全体から消す", (
     expect((await svc.listProducts(d, u.office, "retail")).find((x) => x.id === p.id)!.status).toBe("active");
   });
 });
+
+describe("レッスンチェック表（採点）", () => {
+  let d: Database; const u: Record<string, string> = {}; const sid: Record<string, string> = {}; let sheetId = ""; let items: string[] = [];
+  beforeAll(async () => {
+    d = await newDb(); await migrate(d);
+    const co = (await d.query<{ id: string }>("insert into companies (code, name) values ('c-co','C') returning id")).rows[0].id;
+    for (const n of ["a", "b"]) sid[n] = (await d.query<{ id: string }>("insert into stores (company_id, name) values ($1,$2) returning id", [co, n])).rows[0].id;
+    const mk = async (k: string, code: string, level: number, s: string, extra = "") =>
+      (u[k] = (await d.query<{ id: string }>("insert into memberships (company_id, store_id, employee_code, name, level) values ($1,$2,$3,$4,$5) returning id", [co, s, code, k, level])).rows[0].id, extra && await d.query(`update memberships set ${extra} where id = $1`, [u[k]]));
+    await mk("office", "1", 4, sid.a); await mk("mgrA", "2", 3, sid.a); await mk("edu", "3", 1, sid.a, "edu_lead = true"); await mk("evalr", "4", 1, sid.a, "can_evaluate = true");
+    await mk("traineeA", "5", 1, sid.a, "rank = 'assistant'"); await mk("plainA", "6", 1, sid.a); await mk("traineeB", "7", 1, sid.b, "rank = 'assistant'"); await mk("mgrB", "8", 3, sid.b);
+  });
+  it("表を直せるのは、事務員さんと教育担当だけ。店長でも不可", async () => {
+    const input = { grade: "1年目", name: "シャンプー", memo: "", maxPoints: 15, passPoints: 12, maxAttempts: 10, active: true, items: [{ name: "声掛け" }, { name: "力加減" }, { name: "すすぎ" }] };
+    await expect(svc.saveCheckSheet(d, u.mgrA, input)).rejects.toThrow(svc.ForbiddenError);
+    await expect(svc.saveCheckSheet(d, u.plainA, input)).rejects.toThrow(svc.ForbiddenError);
+    sheetId = await svc.saveCheckSheet(d, u.edu, input);
+    const cur = (await svc.getCheckData(d, u.traineeA)).sheets[0].items.map((i) => ({ id: i.id, name: i.name }));
+    expect(await svc.saveCheckSheet(d, u.office, { ...input, id: sheetId, memo: "メモ", items: cur })).toBe(sheetId);
+    const data = await svc.getCheckData(d, u.traineeA);
+    expect(data.sheets).toHaveLength(1);
+    items = data.sheets[0].items.map((i) => i.id);
+    expect(items).toHaveLength(3);
+    expect(data.sheets[0]).toMatchObject({ memo: "メモ", passPoints: 12 });
+    await expect(svc.saveCheckSheet(d, u.office, { ...input, passPoints: 99 })).rejects.toThrow();   // 合格点が満点より大きい
+  });
+  it("採点できるのは、自店の店長・教育担当・技術評価をつけられる人と事務員さん。本人・ふつうのスタッフ・他店は不可", async () => {
+    const sc = (a: number, b: number, c: number) => [{ itemId: items[0], score: a }, { itemId: items[1], score: b }, { itemId: items[2], score: c }];
+    const base = { sheetId, traineeId: u.traineeA, attemptNo: 1, time: "4:30", comment: "よい", scores: sc(5, 4, 4) };
+    await expect(svc.saveCheckAttempt(d, u.plainA, base)).rejects.toThrow(svc.ForbiddenError);
+    await expect(svc.saveCheckAttempt(d, u.mgrB, base)).rejects.toThrow(svc.ForbiddenError);       // 他店の店長
+    await expect(svc.saveCheckAttempt(d, u.traineeA, base)).rejects.toThrow();                      // 自分
+    expect(await svc.saveCheckAttempt(d, u.mgrA, base)).toEqual({ total: 13, passed: true });       // 13点 ≥ 合格12点
+    expect(await svc.saveCheckAttempt(d, u.evalr, { ...base, attemptNo: 2, scores: sc(1, 1, 1) })).toEqual({ total: 3, passed: false });
+    await svc.saveCheckAttempt(d, u.edu, { ...base, attemptNo: 3, scores: sc(3, 3, 3) });
+    await expect(svc.saveCheckAttempt(d, u.mgrA, { ...base, scores: sc(6, 0, 0) })).rejects.toThrow();   // 点数は0〜5
+    await expect(svc.saveCheckAttempt(d, u.mgrA, { ...base, attemptNo: 11 })).rejects.toThrow();         // 回数オーバー
+  });
+  it("見られるのは、本人と、採点できる人。他店・ふつうのスタッフには見えない。同じ回の入れ直しは、おきかわる", async () => {
+    const mine = await svc.getCheckData(d, u.traineeA);
+    expect(mine.trainee?.id).toBe(u.traineeA);
+    expect(mine.attempts.map((a) => [a.attemptNo, a.total])).toEqual([[1, 13], [2, 3], [3, 9]]);
+    expect(mine.attempts[0]).toMatchObject({ assessorName: "mgrA", time: "4:30" });
+    expect(mine.canAssess).toBe(false);
+    expect((await svc.getCheckData(d, u.mgrA, u.traineeA)).canAssess).toBe(true);
+    expect((await svc.getCheckData(d, u.mgrA, u.traineeA)).trainees.map((t) => t.name)).not.toContain("traineeB");   // 自店だけ
+    expect((await svc.getCheckData(d, u.office, u.traineeB)).trainee?.id).toBe(u.traineeB);                             // 事務員さんは全店
+    expect((await svc.getCheckData(d, u.mgrB, u.traineeA)).trainee).toBeNull();                                         // 他店は見えない
+    expect((await svc.getCheckData(d, u.plainA, u.traineeA)).trainee).toBeNull();                                       // ふつうのスタッフは、人のを見られない
+    await svc.saveCheckAttempt(d, u.mgrA, { sheetId, traineeId: u.traineeA, attemptNo: 2, scores: [{ itemId: items[0], score: 5 }, { itemId: items[1], score: 5 }, { itemId: items[2], score: 5 }] });
+    expect((await svc.getCheckData(d, u.traineeA)).attempts.find((a) => a.attemptNo === 2)?.total).toBe(15);
+  });
+  it("採点を取り消せる（採点できる人）。本人には、採点のお知らせが届く", async () => {
+    const a3 = (await svc.getCheckData(d, u.traineeA)).attempts.find((a) => a.attemptNo === 3)!;
+    await expect(svc.deleteCheckAttempt(d, u.plainA, a3.id)).rejects.toThrow(svc.ForbiddenError);
+    await svc.deleteCheckAttempt(d, u.mgrA, a3.id);
+    expect((await svc.getCheckData(d, u.traineeA)).attempts.map((a) => a.attemptNo)).toEqual([1, 2]);
+    const n = await d.query("select count(*)::int as n from notifications where user_id = $1 and kind = 'lesson'", [u.traineeA]);
+    expect(n.rows[0].n).toBeGreaterThanOrEqual(3);
+  });
+});

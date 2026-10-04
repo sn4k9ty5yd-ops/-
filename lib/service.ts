@@ -2571,3 +2571,78 @@ export async function confirmRegisterSales(db: Database, userId: string, storeId
     await registerNotify(db, me.companyId, staff, `レジ売上が確認されました（${store}）`, `${month.replace("-", "年")}月ぶん。エクセルに出せます`).catch(() => undefined);
   }
 }
+
+// ---------------------------------------------------------------- レッスンチェック表（採点）
+export interface CheckItem { id: string; name: string; sortOrder: number; active: boolean }
+export interface CheckSheet { id: string; grade: string; name: string; memo: string; maxPoints: number; passPoints: number; maxAttempts: number; sortOrder: number; active: boolean; items: CheckItem[] }
+export interface CheckAttempt { id: string; sheetId: string; attemptNo: number; assessorName: string | null; time: string; comment: string; total: number; updatedAt: string; scores: Record<string, number> }
+export interface CheckTrainee { id: string; name: string; rank: string | null; storeId: string; storeName: string }
+export interface CheckData { sheets: CheckSheet[]; attempts: CheckAttempt[]; trainee: CheckTrainee | null; trainees: CheckTrainee[]; canAssess: boolean; canEditSheets: boolean }
+
+/** 表と、受ける人の採点。受ける人を指定しなければ、自分（採点できる人は、お店の人の一覧つき） */
+export async function getCheckData(db: Database, userId: string, traineeId?: string): Promise<CheckData> {
+  const me = await getMe(db, userId);
+  if (!me || me.displayOnly) throw new ForbiddenError();
+  return asUser(db, userId, async (q) => {
+    const sheetRows = (await q.query<Omit<CheckSheet, "items">>(
+      `select id, grade, name, memo, max_points as "maxPoints", pass_points as "passPoints", max_attempts as "maxAttempts", sort_order as "sortOrder", active from check_sheets order by sort_order, name`)).rows;
+    const itemRows = (await q.query<CheckItem & { sheetId: string }>(`select id, sheet_id as "sheetId", name, sort_order as "sortOrder", active from check_items order by sort_order`)).rows;
+    const sheets: CheckSheet[] = sheetRows.map((s) => ({ ...s, items: itemRows.filter((i) => i.sheetId === s.id).map(({ sheetId: _s, ...i }) => i) }));
+    // 採点できる人は、お店のスタッフの一覧（見えるのは、自店・事務員さんは全店）
+    const canEditSheets = (await q.query<{ ok: boolean }>("select app.can_edit_checks() as ok")).rows[0].ok;
+    const staff = (await q.query<CheckTrainee & { canAssess: boolean }>(
+      `select m.id, m.name, m.rank, m.store_id as "storeId", s.name as "storeName", app.can_assess(m.store_id) as "canAssess"
+         from memberships m join stores s on s.id = m.store_id
+        where m.status = 'active' and not m.display_only order by s.sort_order, (m.rank = 'assistant') desc, m.name`)).rows;
+    const assessable = staff.filter((x) => x.canAssess);
+    const trainees: CheckTrainee[] = assessable.map(({ canAssess: _c, ...t }) => t);
+    const targetId = traineeId ?? userId;
+    const t = staff.find((x) => x.id === targetId) ?? null;
+    if (!t || (t.id !== userId && !t.canAssess)) return { sheets, attempts: [], trainee: null, trainees, canAssess: false, canEditSheets };
+    const attempts = (await q.query<Omit<CheckAttempt, "scores">>(
+      `select a.id, a.sheet_id as "sheetId", a.attempt_no as "attemptNo", m.name as "assessorName", a.time_text as time, a.comment, a.total, a.updated_at::text as "updatedAt"
+         from check_attempts a left join memberships m on m.id = a.assessor_id where a.trainee_id = $1 order by a.sheet_id, a.attempt_no`, [t.id])).rows;
+    const sc = (await q.query<{ attemptId: string; itemId: string; score: number }>(
+      `select s.attempt_id as "attemptId", s.item_id as "itemId", s.score from check_scores s join check_attempts a on a.id = s.attempt_id where a.trainee_id = $1`, [t.id])).rows;
+    const { canAssess: ca, ...trainee } = t;
+    return { sheets, attempts: attempts.map((a) => ({ ...a, scores: Object.fromEntries(sc.filter((x) => x.attemptId === a.id).map((x) => [x.itemId, x.score])) })), trainee, trainees, canAssess: ca, canEditSheets };
+  });
+}
+
+export async function saveCheckAttempt(db: Database, userId: string, input: { sheetId: string; traineeId: string; attemptNo: number; time?: string; comment?: string; scores: { itemId: string; score: number }[] }): Promise<{ total: number; passed: boolean }> {
+  const me = await getMe(db, userId);
+  if (!me || me.displayOnly) throw new ForbiddenError();
+  let r: { id: string; total: number; passed: boolean; store: string };
+  try {
+    r = (await asUser(db, userId, (q) => q.query<{ r: typeof r }>("select public.check_attempt_save($1,$2,$3,$4,$5,$6::jsonb) as r",
+      [input.sheetId, input.traineeId, input.attemptNo, input.time ?? "", input.comment ?? "", JSON.stringify(input.scores)]))).rows[0].r;
+  } catch (e) {
+    const m = (e as Error).message ?? "";
+    if (m.includes("self")) throw new Error("自分の採点は、自分ではつけられません");
+    if (m.includes("bad")) throw new Error("点数が正しくありません（0〜5）");
+    throw new ForbiddenError();
+  }
+  const sh = (await db.query<{ name: string; pass: number; max: number }>("select name, pass_points as pass, max_points as max from check_sheets where id = $1", [input.sheetId])).rows[0];
+  await pushNotifyOne(db, me.companyId, input.traineeId, `レッスンチェックの採点が入りました`, `${sh?.name ?? ""} ${input.attemptNo}回目：${r.total}点${r.passed ? "（合格！）" : `（合格は${sh?.pass ?? 0}点）`}`, "/lesson-check").catch(() => undefined);
+  return { total: r.total, passed: r.passed };
+}
+
+async function pushNotifyOne(db: Database, companyId: string, userId: string, title: string, body: string, link: string): Promise<void> {
+  await db.query("insert into notifications (company_id, user_id, kind, title, body, link) values ($1,$2,'lesson',$3,$4,$5)", [companyId, userId, title, body, link]);
+  await pushToUsers(db, [userId], { title, body, url: link, tag: "lesson-check" }).catch(() => 0);
+}
+
+export async function deleteCheckAttempt(db: Database, userId: string, attemptId: string): Promise<void> {
+  try { await asUser(db, userId, (q) => q.query("select public.check_attempt_delete($1)", [attemptId])); } catch { throw new ForbiddenError(); }
+}
+
+/** 表を直す・足す（事務員さん・教育担当）。items の並びが、そのまま順番 */
+export async function saveCheckSheet(db: Database, userId: string, input: { id?: string; grade: string; name: string; memo: string; maxPoints: number; passPoints: number; maxAttempts: number; active: boolean; items: { id?: string; name: string }[] }): Promise<string> {
+  try {
+    return (await asUser(db, userId, (q) => q.query<{ id: string }>("select public.check_sheet_save($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb) as id",
+      [input.id ?? null, input.grade, input.name, input.memo, input.maxPoints, input.passPoints, input.maxAttempts, input.active, JSON.stringify(input.items)]))).rows[0].id;
+  } catch (e) {
+    if (((e as Error).message ?? "").includes("bad")) throw new Error("表の内容が正しくありません（満点・合格点・回数を見直してください）");
+    throw new ForbiddenError();
+  }
+}

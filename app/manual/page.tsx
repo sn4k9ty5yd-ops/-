@@ -47,6 +47,7 @@ function Page() {
     <main style={{ maxWidth: 900 }}>
       <Link href="/home" className="back">← ホーム</Link>
       <h1>マニュアル</h1>
+      <p><Link href="/lesson-check"><b>📝 レッスンチェック表（採点）</b></Link></p>
       <input placeholder="🔍 さがす（題名・本文）" value={q} onChange={(e) => setQ(e.target.value)} style={{ marginBottom: 12 }} />
       {found ? (
         found.length === 0 ? <p className="hint">見つかりませんでした。</p> : (
