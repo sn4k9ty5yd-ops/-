@@ -12,6 +12,7 @@ export default function PeriodsPage() {
   const [periods, setPeriods] = useState<PeriodRow[]>([]);
   const [stores, setStores] = useState<{ id: string; name: string; status: string }[]>([]);
   const [msg, setMsg] = useState("");
+  const [note, setNote] = useState("");
   const load = useCallback(async () => {
     const [p, s] = await Promise.all([api<PeriodRow[]>("/api/periods"), api<{ id: string; name: string; status: string }[]>("/api/stores")]);
     setPeriods(p); setStores(s);
@@ -20,13 +21,13 @@ export default function PeriodsPage() {
   useAutoRefresh(load);
   const run = async (fn: () => Promise<unknown>) => { try { await fn(); setMsg(""); await load(); } catch (e) { setMsg((e as Error).message); } };
   const name = (id: string) => stores.find((s) => s.id === id)?.name ?? "";
-  const canManage = (storeId: string) => me.level === 4 || (me.level === 3 && storeId === me.storeId);
+  const canManage = (storeId: string) => me.level === 4 || (me.level >= 2 && storeId === me.storeId);
 
   return (
     <>
       <h1>シフト期間</h1>
-      {me.level === 4 && <button onClick={() => run(() => api("/api/periods", { action: "create" }))}>次の期間を作る</button>}
-      {periods.length === 0 && <p className="hint">まだ期間がありません。{me.level === 4 ? "「次の期間を作る」を押してください。" : "オフィスが作成します。"}</p>}
+      {me.level >= 2 && <button onClick={() => run(async () => { const r = await api<{ created: boolean; label: string }>("/api/periods", { action: "next" }); setNote(r.created ? `「${r.label}」を作りました` : `「${r.label}」は、もう作ってあります`); })}>次の期間を作る</button>}
+      {periods.length === 0 && <p className="hint">まだ期間がありません。「次の期間を作る」を押してください。</p>}
       {periods.map((p) => {
         const rel = relationLabel(p.start, periodFor(todayJst(), me.closingStartDay).start);
         return (
@@ -47,7 +48,7 @@ export default function PeriodsPage() {
                         onBlur={(e) => e.target.value && run(() => api("/api/periods", { periodId: p.id, storeId: s.storeId, closeAt: `${e.target.value}:00+09:00` }))} />
                     </label>
                   )}
-                  {next && canManage(s.storeId) && (!needOffice || me.level === 4) && (
+                  {next && canManage(s.storeId) && (!needOffice || me.level === 4) && !(me.level < 3 && next.to === "submitted") && (
                     <button style={{ width: "auto", margin: 0, padding: "10px 14px", fontSize: 14 }}
                       onClick={() => confirm(`${name(s.storeId)}：「${next.label}」でよいですか？`) && run(async () => {
                         try { await api("/api/periods", { periodId: p.id, storeId: s.storeId, status: next.to }); }
@@ -72,6 +73,7 @@ export default function PeriodsPage() {
         </div>
         );
       })}
+      {note && <p className="hint">{note}</p>}
       {msg && <p className="err">{msg}</p>}
     </>
   );

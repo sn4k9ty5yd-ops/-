@@ -14,7 +14,7 @@ const TILES = [
   { href: "/admin/attendance", t: "③ 出勤簿", s: "出勤・退勤・休憩・実働", min: 2 },
   { href: "/shifts", t: "シフトを見る", s: "今日の出勤・月のシフト", min: 1 },
   { href: "/requests", t: "自分の希望休を出す", s: "休みたい日をえらぶ", min: 1 },
-  { href: "/admin/periods", t: "シフト期間（くわしく）", s: "締切の日時・ひとつ戻す", min: 3 },
+  { href: "/admin/periods", t: "シフト期間（くわしく）", s: "次の期間を作る・締切の日時・進める", min: 2 },
 ];
 
 export default function ShiftHub() {

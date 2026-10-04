@@ -17,7 +17,7 @@ const TABS: { href: string; label: string; min: number; sub?: boolean; owner?: b
   { href: "/admin/stocktake", label: "棚卸し", min: 2 },
   { href: "/admin/products", label: "商品", min: 3 },
   { href: "/admin/stores", label: "店舗の編集", min: 4 },
-  { href: "/admin/periods", label: "シフト期間", min: 3, sub: true },
+  { href: "/admin/periods", label: "シフト期間", min: 2, sub: true },
   { href: "/admin/settings", label: "設定", min: 3 },
   { href: "/admin/notices", label: "お知らせ文", min: 4 },
   { href: "/admin/records", label: "税務署用の書面", min: 4 },
