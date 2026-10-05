@@ -17,6 +17,8 @@ function Cards() {
   const [leaveTodo, setLeaveTodo] = useState(0);
   useEffect(() => { if (me.level >= 3) api<{ todo: unknown[] }>("/api/paid-leave?review=1").then((r) => setLeaveTodo(r.todo.length)).catch(() => {}); }, [me.level]);
   const [push, setPush] = useState<PushState | null>(null);
+  const [myStore, setMyStore] = useState("");
+  useEffect(() => { api<{ id: string; name: string }[]>("/api/stores").then((l) => setMyStore(l.find((x) => x.id === me.storeId)?.name ?? "")).catch(() => {}); }, [me.storeId]);
   useEffect(() => { pushState().then(setPush).catch(() => {}); }, []);
   useEffect(() => { if (!me.displayOnly) api<{ unread: number }>("/api/notifications").then((r) => setUnread(r.unread)).catch(() => {}); }, [me.displayOnly]);
   if (me.displayOnly) return null;
@@ -58,7 +60,7 @@ function Cards() {
     <main className="home">
       <p className="eyebrow">{hello}</p>
       <h1 className="hero">{me.name}</h1>
-      <p className="role">{LEVEL_NAMES[me.level]}{me.appOwner ? "・アプリ制作者" : ""}　·　株式会社ALBUM</p>
+      <p className="role">{myStore && <b>{myStore}</b>}{myStore && "　·　"}{me.rank && <><b>{me.rank === "stylist" ? "スタイリスト" : "アシスタント"}</b>{"　·　"}</>}{LEVEL_NAMES[me.level]}{me.appOwner ? "・アプリ制作者" : ""}　·　株式会社ALBUM</p>
       {push && push !== "on" && push !== "unsupported" && !me.displayOnly && (
         <Link href="/notify" className="pushbanner"><span className="ic" style={{ ["--h" as string]: 8 }} aria-hidden>📣</span><span><b>スマホに通知を届けましょう（1分）</b><small>シフトの公開や、毎朝の「今日の出勤メンバー」が届きます。やり方を絵で案内します。</small></span><i>›</i></Link>
       )}
