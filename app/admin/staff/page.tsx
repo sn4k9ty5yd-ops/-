@@ -30,6 +30,10 @@ export default function StaffPage() {
   const [stores, setStores] = useState<Store[]>([]);
   const [form, setForm] = useState({ name: "", employeeCode: "", storeId: me.storeId, level: 1 as Level, displayOnly: false });
   const [msg, setMsg] = useState("");
+  // 見ているお店（毎回えらびなおさなくていいように、おぼえておく）。"" = すべて
+  const [pickStore, setPickStore] = useState<string>("");
+  useEffect(() => { try { const v = localStorage.getItem("staffStore"); if (v) setPickStore(v); } catch { /* ブラウザが保存を許さないとき */ } }, []);
+  const choose = (v: string) => { setPickStore(v); try { localStorage.setItem("staffStore", v); } catch { /* 保存できなくても動く */ } };
   const [bulk, setBulk] = useState<{ text: string; storeId: string } | null>(null);
   const [bulkDone, setBulkDone] = useState<BulkStaffResult[] | null>(null);
   const [bulkMsg, setBulkMsg] = useState(""); const [bulkBusy, setBulkBusy] = useState(false); const [bulkNote, setBulkNote] = useState("");
@@ -48,6 +52,12 @@ export default function StaffPage() {
   const storeName = (id: string) => stores.find((s) => s.id === id)?.name ?? "";
   const canRegister = me.level >= 3;
   const registrableStores = (me.level === 4 ? stores : stores.filter((s) => s.id === me.storeId)).filter((s) => s.status === "active");
+  const viewStores = me.level === 4 ? stores : stores.filter((s) => s.id === me.storeId);
+  const selStore = viewStores.some((s) => s.id === pickStore) ? pickStore : "";     // 保存した店がなくなっていたら「すべて」
+  const shownStaff = selStore ? staff.filter((x) => x.storeId === selStore) : staff;
+  // 追加するときのお店は、見ているお店（すべてのときは、自分のお店）
+  const addStoreId = registrableStores.some((s) => s.id === selStore) ? selStore : (registrableStores.find((s) => s.id === me.storeId)?.id ?? registrableStores[0]?.id ?? me.storeId);
+  useEffect(() => { setForm((f) => (f.storeId === addStoreId ? f : { ...f, storeId: addStoreId })); }, [addStoreId]);
 
   const parsed = bulk ? parseStaffPaste(bulk.text, registrableStores, { defaultStoreId: bulk.storeId, canAssignLevel: me.level === 4 }) : null;
   const okRows = parsed?.rows.filter((r) => !r.error) ?? [];
@@ -57,6 +67,16 @@ export default function StaffPage() {
     <>
       <h1>スタッフ</h1>
       <p className="hint">あなたが見られる人だけが表示されます。</p>
+      {viewStores.length > 1 && (
+        <div className="toolbar">
+          <label htmlFor="stf-store" style={{ margin: 0 }}>お店</label>
+          <select id="stf-store" value={selStore} onChange={(e) => choose(e.target.value)}>
+            <option value="">すべてのお店</option>
+            {viewStores.map((s) => <option key={s.id} value={s.id}>{s.name}{s.status === "closed" ? "（閉店）" : ""}</option>)}
+          </select>
+          <span className="sub">えらんだお店は、おぼえておきます。追加するスタッフも、このお店に入ります。</span>
+        </div>
+      )}
 
       {issued && (
         <div className="notice">
@@ -72,7 +92,7 @@ export default function StaffPage() {
         return <p className="hint">オンライン <b>{n("online")}</b> 人 ／ ログイン済み（開いていない） <b>{n("idle")}</b> 人 ／ ログアウト済み <b>{n("loggedout")}</b> 人 ／ まだログインしていない <b>{n("never")}</b> 人（社員番号の小さい順）</p>;
       })()}
       <ul className="list">
-        {staff.map((s) => (
+        {shownStaff.map((s) => (
           <li key={s.id} className={s.status === "disabled" ? "off" : ""}>
             <div>
               <b>{s.name}</b> <span className="sub">{storeName(s.storeId)}</span>{s.displayOnly && <span className="chip warn">表示専用（お店の端末）</span>}
@@ -93,6 +113,12 @@ export default function StaffPage() {
                   const short = prompt("カレンダーに出す短い名前（例：苗字。空にすると自動で決めます）", s.shortName ?? ""); if (short === null) return;
                   run(() => api(`/api/staff/${s.id}/profile`, { name, employeeCode: code, shortName: short }));
                 }}>名前・番号を変える</button>
+              )}
+              {me.level === 4 && s.status === "active" && (
+                <select aria-label="異動（お店を変える）" value="" onChange={(e) => { const to = e.target.value; if (!to) return; const nm = storeName(to); if (!confirm(`${s.name} さんを ${nm} に異動しますか？\n（これまでのシフトなどの記録は、もとのお店に残ります）`)) return; run(() => api(`/api/staff/${s.id}/move`, { storeId: to })); }}>
+                  <option value="">異動（お店を変える）</option>
+                  {registrableStores.filter((x) => x.id !== s.storeId).map((x) => <option key={x.id} value={x.id}>→ {x.name}</option>)}
+                </select>
               )}
               {me.level === 4 && s.status === "active" && !s.displayOnly && (
                 <select aria-label="ランク" value={s.rank ?? ""} onChange={(e) => run(() => api(`/api/staff/${s.id}/rank`, { rank: e.target.value || null }))}>
@@ -161,8 +187,8 @@ export default function StaffPage() {
         ))}
       </ul>
 
-      <h2>スタッフを追加</h2>
-      {canRegister && <button className="ghost" style={{ color: "var(--blue)", width: "auto", margin: "8px 0" }} disabled={registrableStores.length === 0} onClick={() => { setBulk({ text: "", storeId: registrableStores[0]?.id ?? me.storeId }); setBulkMsg(""); }}>Excelからまとめて登録</button>}
+      <h2>スタッフを追加{registrableStores.length > 1 && <span className="sub">　（{storeName(addStoreId)} に入ります）</span>}</h2>
+      {canRegister && <button className="ghost" style={{ color: "var(--blue)", width: "auto", margin: "8px 0" }} disabled={registrableStores.length === 0} onClick={() => { setBulk({ text: "", storeId: addStoreId }); setBulkMsg(""); }}>Excelからまとめて登録</button>}
       {!canRegister ? <p className="hint">スタッフの登録ができるのは、レベル3（店長）以上です。</p> : (
         <form onSubmit={(e) => {
           e.preventDefault();

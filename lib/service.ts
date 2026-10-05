@@ -2631,3 +2631,17 @@ export async function addPurchase(db: Database, userId: string, input: { members
 export async function cancelStockEntry(db: Database, userId: string, kind: "tester" | "purchase", id: string): Promise<void> {
   try { await asUser(db, userId, (q) => q.query("select public.stock_entry_cancel($1,$2)", [kind, id])); } catch { throw new ForbiddenError(); }
 }
+
+/** 異動（お店を変える）。事務員さんだけ。過去の記録（シフト・出勤簿など）は、もとのお店のまま残る */
+export async function moveStaff(db: Database, userId: string, targetId: string, storeId: string): Promise<void> {
+  const me = await getMe(db, userId);
+  if (!me || me.level < 4) throw new ForbiddenError();
+  const t = (await db.query<{ store_id: string; name: string; company_id: string; display_only: boolean }>("select store_id, name, company_id, display_only from memberships where id = $1", [targetId])).rows[0];
+  if (!t || t.company_id !== me.companyId) throw new ForbiddenError();
+  const dest = (await db.query<{ name: string; status: string }>("select name, status from stores where id = $1 and company_id = $2", [storeId, me.companyId])).rows[0];
+  if (!dest || dest.status !== "active") throw new Error("異動先のお店が見つかりません（閉店中のお店には異動できません）");
+  if (t.store_id === storeId) throw new Error("いまと同じお店です");
+  await assertNotOwnerTarget(db, userId, targetId);
+  await asUser(db, userId, (q) => q.query("update memberships set store_id = $2 where id = $1", [targetId, storeId]));
+  await db.query("insert into audit_logs (company_id, actor_id, action, target_id, detail) values ($1,$2,'staff.move',$3,$4::jsonb)", [me.companyId, userId, targetId, JSON.stringify({ from: t.store_id, to: storeId })]);
+}

@@ -61,3 +61,20 @@ describe("在庫の見える範囲・テスター・スタッフ購入", () => {
     expect(await qty()).toBe(10);
   });
 });
+
+describe("異動（お店を変える）", () => {
+  it("事務員さんだけができる。閉店中のお店・同じお店は不可。記録が残る", async () => {
+    const d = await newDb(); await migrate(d);
+    const co = (await d.query<{ id: string }>("insert into companies (code, name) values ('m-co','M') returning id")).rows[0].id;
+    const sid: string[] = [];
+    for (const n of ["a", "b", "c"]) sid.push((await d.query<{ id: string }>("insert into stores (company_id, name, status) values ($1,$2,$3) returning id", [co, n, n === "c" ? "closed" : "active"])).rows[0].id);
+    const mk = async (k: string, code: string, level: number, s: string) => (await d.query<{ id: string }>("insert into memberships (company_id, store_id, employee_code, name, level) values ($1,$2,$3,$4,$5) returning id", [co, s, code, k, level])).rows[0].id;
+    const office = await mk("office", "1", 4, sid[0]); const mgr = await mk("mgr", "2", 3, sid[0]); const st = await mk("st", "3", 1, sid[0]);
+    await expect(svc.moveStaff(d, mgr, st, sid[1])).rejects.toThrow(svc.ForbiddenError);
+    await expect(svc.moveStaff(d, office, st, sid[2])).rejects.toThrow();
+    await expect(svc.moveStaff(d, office, st, sid[0])).rejects.toThrow();
+    await svc.moveStaff(d, office, st, sid[1]);
+    expect((await d.query<{ store_id: string }>("select store_id from memberships where id = $1", [st])).rows[0].store_id).toBe(sid[1]);
+    expect((await d.query("select 1 from audit_logs where action = 'staff.move' and target_id = $1", [st])).rows).toHaveLength(1);
+  });
+});
