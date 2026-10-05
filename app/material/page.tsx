@@ -4,7 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { SubTabs } from "@/app/SubTabs";
 import { api, MeProvider, useAutoRefresh, useMe } from "@/lib/client";
 import { materialTabs } from "@/lib/material-tabs";
-import { applyMemory, findSupplier, parseOrderText, type OrderLine } from "@/lib/material-ocr";
+import { applyMemory, findSupplier, parseOrderText, similarity, type OrderLine } from "@/lib/material-ocr";
+import { itemsByMonthTable, monthItems } from "@/lib/material-items";
 import { todayJst } from "@/lib/period-nav";
 import { MATERIAL_KIND_LABEL, toExTax, type MaterialImage, type MaterialMemory, type MaterialKind, type MaterialLogRow, type MaterialOrder, type ProductRow, type StoreRow } from "@/lib/service";
 
@@ -35,6 +36,8 @@ function Page() {
   const [ym, setYm] = useState(todayJst().slice(0, 7));
   const [data, setData] = useState<{ orders: MaterialOrder[]; suppliers: string[]; budget: number | null; images: MaterialImage[] } | null>(null);
   const [products, setProducts] = useState<ProductRow[]>([]);
+  const [hist, setHist] = useState<MaterialOrder[] | null>(null);
+  useEffect(() => { setHist(null); }, [storeId, ym]);
   const [pq, setPq] = useState("");
   const [newP, setNewP] = useState<{ kind: "retail" | "supply"; maker: string; name: string; spec: string; cost: string } | null>(null);
   const [form, setForm] = useState<Form | null>(null);
@@ -49,8 +52,8 @@ function Page() {
   const month = `${ym}-01`;
 
   useEffect(() => { api<StoreRow[]>("/api/stores").then((s) => setStores(s.filter((x) => x.status === "active"))).catch(() => {}); }, []);
-  const loadProducts = useCallback(async () => {
-    try { const [a, b] = await Promise.all([api<ProductRow[]>("/api/products?kind=supply"), api<ProductRow[]>("/api/products?kind=retail")]); setProducts([...b, ...a].filter((p) => p.status === "active" && p.storeIds.includes(storeId))); } catch { setProducts([]); }
+  const loadProducts = useCallback(async (): Promise<ProductRow[]> => {
+    try { const [a, b] = await Promise.all([api<ProductRow[]>("/api/products?kind=supply"), api<ProductRow[]>("/api/products?kind=retail")]); const l = [...b, ...a].filter((p) => p.status === "active" && p.storeIds.includes(storeId)); setProducts(l); return l; } catch { setProducts([]); return []; }
   }, [storeId]);
   const load = useCallback(async () => {
     const r = await api<{ orders: MaterialOrder[]; suppliers: string[]; budget: number | null; images: MaterialImage[] }>(`/api/material?storeId=${storeId}&from=${ym}-01&to=${ym}-${lastDay(ym)}&month=${month}`);
@@ -97,6 +100,13 @@ function Page() {
       await w.terminate();
       const r = parseOrderText(data.text);
       r.lines = applyMemory(r.lines, memory);                  // 今までに入れた商品名・直し方に合わせる（学習）
+      // 商品の登録（商品一覧）にある商品なら、その名前に合わせる（月ごとの集計で、同じ商品としてまとまる）
+      const prods = products.length > 0 ? products : await loadProducts();
+      r.lines = r.lines.map((l) => {
+        let best: { p: ProductRow; s: number } | null = null;
+        for (const p of prods) { const s = Math.max(similarity(l.name, p.name), similarity(l.name, `${p.maker}${p.name}`), similarity(l.name, `${p.maker}${p.name}${p.spec}`)); if (!best || s > best.s) best = { p, s }; }
+        return best && best.s >= 0.75 ? { ...l, name: `${best.p.maker ? best.p.maker + " " : ""}${best.p.name}${best.p.spec ? " " + best.p.spec : ""}`, raw: l.raw ?? l.name } : l;
+      });
       const sup = findSupplier(data.text, memory.suppliers);   // 知っている発注先なら、自動で入れる
       if (r.lines.length === 0) setMsg("商品の行を読み取れませんでした。画像を大きく・まっすぐ撮り直すか、下の「＋行を足す」で入れてください。");
       setForm((cur) => (cur ? { ...cur, supplier: cur.supplier || sup || "", tax: !cur.supplier && sup && memory.supplierTax[sup] ? memory.supplierTax[sup] : cur.tax, lines: [...(cur.lines ?? []), ...r.lines], amount: cur.amount === "" && (r.total ?? 0) > 0 ? String(r.total) : cur.amount } : cur));
@@ -139,6 +149,32 @@ function Page() {
         {byKind.length > 0 && <div className="sub">{byKind.map(([k, v]) => `${MATERIAL_KIND_LABEL[k]} ${yen(v)}`).join("　／　")}</div>}
         {bySupplier.length > 0 && <div className="sub">発注先ごと: {bySupplier.map(([s, v]) => `${s} ${yen(v)}`).join("　／　")}</div>}
       </div>
+
+      {(() => {
+        const items = monthItems(live, ym);
+        if (items.length === 0 && !hist) return null;
+        const months = [5, 4, 3, 2, 1, 0].map((n) => shiftMonth(ym, -n));
+        const table = hist ? itemsByMonthTable(hist, months) : null;
+        const itemsTsv = () => ["商品\t個数\t金額（税抜）\t回数", ...items.map((x) => [x.name, x.qty, x.amount, x.orders].join("\t"))].join("\n");
+        return (
+          <div className="card" style={{ marginBottom: 12 }}>
+            <b>この月に発注した商品（何を何個）</b>
+            {items.length === 0 ? <p className="sub">この月の発注は、まだありません。</p> : (
+              <div style={{ overflowX: "auto" }}><table className="tbl"><thead><tr><th>商品</th><th style={{ textAlign: "right" }}>個数</th><th style={{ textAlign: "right" }}>金額</th><th style={{ textAlign: "right" }}>回数</th></tr></thead>
+                <tbody>{items.map((x) => <tr key={x.name}><td>{x.name}</td><td style={{ textAlign: "right" }}><b>{x.qty}</b></td><td style={{ textAlign: "right" }}>{yen(x.amount)}</td><td style={{ textAlign: "right" }}>{x.orders}</td></tr>)}</tbody></table></div>
+            )}
+            <div className="toolbar">
+              {items.length > 0 && <button className="ghost" onClick={async () => { setNote((await copyText(itemsTsv())) ? "商品の表をコピーしました" : "コピーできませんでした"); }}>表をコピー</button>}
+              {!hist ? <button className="ghost" onClick={async () => { try { const r = await api<{ orders: MaterialOrder[] }>(`/api/material?storeId=${storeId}&from=${months[0]}-01&to=${ym}-${String(lastDay(ym)).padStart(2, "0")}`); setHist(r.orders); } catch (e) { setMsg((e as Error).message); } }}>よく発注している商品（6か月）を見る</button>
+                : <button className="ghost" onClick={() => setHist(null)}>6か月の表を閉じる</button>}
+            </div>
+            {table && (table.rows.length === 0 ? <p className="sub">6か月の記録がありません。</p> : (
+              <div style={{ overflowX: "auto" }}><table className="tbl"><thead><tr><th>商品（個数の多い順）</th>{months.map((m) => <th key={m} style={{ textAlign: "right" }}>{Number(m.slice(5))}月</th>)}<th style={{ textAlign: "right" }}>合計</th></tr></thead>
+                <tbody>{table.rows.slice(0, 40).map((r) => <tr key={r.name}><td>{r.name}</td>{r.byMonth.map((n, i) => <td key={i} style={{ textAlign: "right", color: n ? undefined : "#bbb" }}>{n || "－"}</td>)}<td style={{ textAlign: "right" }}><b>{r.qty}</b></td></tr>)}</tbody></table></div>
+            ))}
+          </div>
+        );
+      })()}
 
       <div className="toolbar">
         {canEdit && <button onClick={() => { setMsg(""); setForm({ orderedOn: todayJst(), supplier: "", item: "", kind: "supply", amount: "", note: "", pics: [], lines: [], tax: "ex" }); }}>＋ 発注を記録する</button>}

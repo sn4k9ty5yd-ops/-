@@ -19,7 +19,7 @@ function shares(rows: SummaryOrder[], keyOf: (o: SummaryOrder) => [string, strin
   return [...m.values()].map((s) => ({ ...s, pct: pct(s.amount, total) })).sort((a, b) => b.amount - a.amount);
 }
 
-function itemRows(entries: { name: string; qty: number; amount: number; orderId: string }[]): ItemRow[] {
+export function itemRows(entries: { name: string; qty: number; amount: number; orderId: string }[]): ItemRow[] {
   const m = new Map<string, { name: string; qty: number; amount: number; ids: Set<string> }>();
   for (const e of entries) { const r = m.get(e.name) ?? { name: e.name, qty: 0, amount: 0, ids: new Set<string>() }; r.qty += e.qty; r.amount += e.amount; r.ids.add(e.orderId); m.set(e.name, r); }
   const all = [...m.values()]; const t = all.reduce((s, r) => s + r.amount, 0);
