@@ -248,7 +248,8 @@ describe("レッスンチェック表（採点）", () => {
     expect(mine.canAssess).toBe(false);
     expect((await svc.getCheckData(d, u.mgrA, u.traineeA)).canAssess).toBe(true);
     expect((await svc.getCheckData(d, u.mgrA, u.traineeA)).trainees.map((t) => t.name)).not.toContain("traineeB");   // 自店だけ
-    expect((await svc.getCheckData(d, u.office, u.traineeB)).trainee?.id).toBe(u.traineeB);                             // 事務員さんは全店
+    expect((await svc.getCheckData(d, u.office, u.traineeB)).trainee).toBeNull();                                       // 事務員さんも、えらべるのは自分の店舗のアシスタントだけ
+    expect((await svc.getCheckData(d, u.office, u.traineeA)).trainee?.id).toBe(u.traineeA);
     expect((await svc.getCheckData(d, u.mgrB, u.traineeA)).trainee).toBeNull();                                         // 他店は見えない
     expect((await svc.getCheckData(d, u.plainA, u.traineeA)).trainee).toBeNull();                                       // ふつうのスタッフは、人のを見られない
     await svc.saveCheckAttempt(d, u.mgrA, { sheetId, traineeId: u.traineeA, attemptNo: 2, scores: [{ itemId: items[0], score: 5 }, { itemId: items[1], score: 5 }, { itemId: items[2], score: 5 }] });
