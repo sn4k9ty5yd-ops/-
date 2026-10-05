@@ -2585,7 +2585,7 @@ export async function saveCheckSheet(db: Database, userId: string, input: { id?:
   }
 }
 
-// ---------------------------------------------------------------- テスター（店販→業務に回した分）・スタッフ購入（給料から天引き）
+// ---------------------------------------------------------------- 業務に回した分（店販→業務。旧「テスター」）・スタッフ購入（給料から天引き）
 export interface TesterRow { id: string; storeId: string; productId: string; maker: string; name: string; spec: string; qty: number; unitCost: number; amount: number; day: string; note: string | null; stockApplied: boolean; createdBy: string | null; byName: string | null }
 export interface PurchaseRow { id: string; storeId: string; membershipId: string; buyer: string; productId: string; maker: string; name: string; spec: string; qty: number; unitPrice: number; amount: number; day: string; note: string | null; stockApplied: boolean; createdBy: string | null }
 const monthEnd = (month: string) => { const [y, m] = month.split("-").map(Number); const t = new Date(Date.UTC(y, m, 1)); return `${t.getUTCFullYear()}-${String(t.getUTCMonth() + 1).padStart(2, "0")}-01`; };
