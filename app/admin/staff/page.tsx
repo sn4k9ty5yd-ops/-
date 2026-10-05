@@ -115,9 +115,9 @@ export default function StaffPage() {
                 }}>名前・番号を変える</button>
               )}
               {me.level === 4 && s.status === "active" && (
-                <select aria-label="異動（お店を変える）" value="" onChange={(e) => { const to = e.target.value; if (!to) return; const nm = storeName(to); if (!confirm(`${s.name} さんを ${nm} に異動しますか？\n（これまでのシフトなどの記録は、もとのお店に残ります）`)) return; run(() => api(`/api/staff/${s.id}/move`, { storeId: to })); }}>
-                  <option value="">異動（お店を変える）</option>
-                  {registrableStores.filter((x) => x.id !== s.storeId).map((x) => <option key={x.id} value={x.id}>→ {x.name}</option>)}
+                <select aria-label="所属店舗" value={s.storeId} onChange={(e) => { const to = e.target.value; if (!to || to === s.storeId) return; const nm = storeName(to); if (!confirm(`${s.name} さんの所属店舗を ${nm} に変えますか？\n（これまでのシフトなどの記録は、もとのお店に残ります）`)) return; run(() => api(`/api/staff/${s.id}/move`, { storeId: to })); }}>
+                  {registrableStores.some((x) => x.id === s.storeId) ? null : <option value={s.storeId}>{storeName(s.storeId)}</option>}
+                  {registrableStores.map((x) => <option key={x.id} value={x.id}>所属：{x.name}</option>)}
                 </select>
               )}
               {me.level === 4 && s.status === "active" && !s.displayOnly && (
