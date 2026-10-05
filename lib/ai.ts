@@ -14,20 +14,32 @@ export class AiUnavailableError extends Error {
 
 type Fetch = typeof fetch;
 
+export interface ChatTurn { role: "user" | "assistant"; content: string }
+
 export async function callAi(prompt: string, opts: { env?: Record<string, string | undefined>; fetchFn?: Fetch; timeoutMs?: number } = {}): Promise<string> {
+  return callAiChat("", [{ role: "user", content: prompt }], opts);
+}
+
+/** 会話（やりとりの続き）を渡して、次の返事をもらう。system は、キャラや決まり */
+export async function callAiChat(system: string, turns: ChatTurn[], opts: { env?: Record<string, string | undefined>; fetchFn?: Fetch; timeoutMs?: number; maxTokens?: number } = {}): Promise<string> {
   const env = opts.env ?? process.env;
   const f = opts.fetchFn ?? fetch;
   const st = aiStatus(env);
   if (!st.available) throw new AiUnavailableError();
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), opts.timeoutMs ?? 120000);
+  const maxTokens = opts.maxTokens ?? 8192;
   try {
     if (st.provider === "gemini") {
       const model = env.AI_MODEL || "gemini-2.5-flash";
       const res = await f(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
         method: "POST", signal: ctl.signal,
         headers: { "content-type": "application/json", "x-goog-api-key": env.GEMINI_API_KEY! },
-        body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: prompt }] }], generationConfig: { temperature: 0.7, maxOutputTokens: 8192 } }),
+        body: JSON.stringify({
+          ...(system ? { systemInstruction: { parts: [{ text: system }] } } : {}),
+          contents: turns.map((t) => ({ role: t.role === "assistant" ? "model" : "user", parts: [{ text: t.content }] })),
+          generationConfig: { temperature: 0.8, maxOutputTokens: maxTokens },
+        }),
       });
       if (!res.ok) throw new Error(aiHttpMessage(res.status));
       const j = (await res.json()) as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
@@ -38,7 +50,7 @@ export async function callAi(prompt: string, opts: { env?: Record<string, string
     const res = await f("https://api.anthropic.com/v1/messages", {
       method: "POST", signal: ctl.signal,
       headers: { "content-type": "application/json", "x-api-key": env.ANTHROPIC_API_KEY!, "anthropic-version": "2023-06-01" },
-      body: JSON.stringify({ model: env.AI_MODEL || "claude-haiku-4-5-20251001", max_tokens: 8192, messages: [{ role: "user", content: prompt }] }),
+      body: JSON.stringify({ model: env.AI_MODEL || "claude-haiku-4-5-20251001", max_tokens: maxTokens, ...(system ? { system } : {}), messages: turns }),
     });
     if (!res.ok) throw new Error(aiHttpMessage(res.status));
     const j = (await res.json()) as { content?: { type: string; text?: string }[] };

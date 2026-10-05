@@ -31,10 +31,10 @@ function Page() {
   const [rows, setRows] = useState<ManualPageRow[] | null>(null);
   const [q, setQ] = useState("");
   const [found, setFound] = useState<ManualPageRow[] | null>(null);
-  useEffect(() => { api<ManualPageRow[]>("/api/manual").then(setRows).catch(() => setRows([])); }, []);
+  useEffect(() => { api<ManualPageRow[]>("/api/manual").then((r) => setRows(r.filter((x) => !/メンター/.test(x.title)))).catch(() => setRows([])); }, []);
   useEffect(() => {
     if (!q.trim()) { setFound(null); return; }
-    const t = setTimeout(() => api<ManualPageRow[]>(`/api/manual?q=${encodeURIComponent(q.trim())}`).then(setFound).catch(() => setFound([])), 300);
+    const t = setTimeout(() => api<ManualPageRow[]>(`/api/manual?q=${encodeURIComponent(q.trim())}`).then((r) => setFound(r.filter((x) => !/メンター/.test(x.title)))).catch(() => setFound([])), 300);
     return () => clearTimeout(t);
   }, [q]);
   const byParent = useMemo(() => {

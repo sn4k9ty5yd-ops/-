@@ -1,7 +1,8 @@
 import type { Database } from "./db/types";
 
 /** バックアップに入れない項目（パスコードのハッシュ・ログイン状態・ロック情報）。流出しても悪用されないようにする */
-const SKIP_TABLES = new Set(["sessions", "schema_migrations"]);
+// メンターの会話・面談シートは、読める人が決まっている（バックアップでも、ほかの人が読めないように入れない）
+const SKIP_TABLES = new Set(["sessions", "schema_migrations", "mentor_messages", "mentor_profiles", "interviews"]);
 const SKIP_COLUMNS = new Set(["passcode_hash", "failed_attempts", "locked_until"]);
 
 /** すべての業務データ（シフト・出勤簿・有給・商品・棚卸し・在庫など）を、1つのJSONにまとめる */

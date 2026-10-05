@@ -1,4 +1,6 @@
-import { callAi } from "./ai";
+import { callAi, callAiChat, type ChatTurn } from "./ai";
+import { findTemplate } from "./interview-sheets";
+import { heavyNote, isMbti, MENTOR_MAX_TURNS, MENTOR_OPENER, mentorSystemPrompt } from "./mentor";
 import { describeActivity, isOfficeReport, NOT_LOGGED } from "./activity";
 import { discussionPrompt, minutesPrompt, mindmapPrompt, parseMindmap, summaryPrompt, themePrompt } from "./meeting-prompts";
 import { createHash } from "node:crypto";
@@ -2817,4 +2819,133 @@ export async function listActivity(db: Database, userId: string, q: { userName?:
   const rows = (await db.query<ActivityRow>(`select id, user_id as "userId", user_name as "userName", user_level as "userLevel", store_name as "storeName", area, what, at::text as at from activity_log where ${where.join(" and ")} order by id desc limit $${vals.length}`, vals)).rows;
   const meta = (await db.query<{ area: string[]; people: string[] }>("select array_agg(distinct area) as area, array_agg(distinct user_name) as people from (select area, user_name from activity_log where company_id = $1 order by id desc limit 3000) x", [me.companyId])).rows[0];
   return { rows, areas: (meta?.area ?? []).sort(), people: (meta?.people ?? []).sort() };
+}
+
+// ---------------------------------------------------------------- メンター（悩み相談のチャット）— 会話は本人だけが読める（DBの権限で守る）
+export interface MentorMessage { id: number; role: "user" | "assistant"; content: string; at: string }
+export interface MentorSessionRow { sessionId: string; first: string; last: string; count: number }
+const mentorUse = new Map<string, number[]>();
+function mentorThrottle(userId: string) {
+  const now = Date.now(); const list = (mentorUse.get(userId) ?? []).filter((t) => now - t < 3600000);
+  if (list.length >= 60) throw new Error("短い時間に、たくさん話しすぎです。少し休んで、またあとで話そう");
+  list.push(now); mentorUse.set(userId, list);
+}
+
+export async function getMentor(db: Database, userId: string, sessionId?: string): Promise<{ mbti: string | null; sessionId: string; messages: MentorMessage[]; sessions: MentorSessionRow[] }> {
+  const me = await getMe(db, userId);
+  if (!me || me.displayOnly) throw new ForbiddenError();
+  return asUser(db, userId, async (q) => {
+    const mbti = (await q.query<{ mbti: string | null }>("select mbti from mentor_profiles where membership_id = $1", [userId])).rows[0]?.mbti ?? null;
+    const sessions = (await q.query<MentorSessionRow>(
+      `select session_id as "sessionId", (array_agg(content order by id) filter (where role = 'user'))[1] as first, max(created_at)::text as last, count(*)::int as count
+         from mentor_messages group by session_id order by max(id) desc limit 30`)).rows;
+    const sid = sessionId ?? sessions[0]?.sessionId ?? crypto.randomUUID();
+    const messages = (await q.query<MentorMessage>(`select id, role, content, created_at::text as at from mentor_messages where session_id = $1 order by id`, [sid])).rows;
+    return { mbti, sessionId: sid, messages, sessions };
+  });
+}
+
+export async function setMentorMbti(db: Database, userId: string, mbti: string | null): Promise<void> {
+  const me = await getMe(db, userId);
+  if (!me || me.displayOnly) throw new ForbiddenError();
+  if (mbti !== null && !isMbti(mbti)) throw new Error("MBTIは、4文字（例：ENFP）で選んでください");
+  await asUser(db, userId, (q) => q.query(
+    "insert into mentor_profiles (membership_id, company_id, mbti) values ($1,$2,$3) on conflict (membership_id) do update set mbti = excluded.mbti, updated_at = now()", [userId, me.companyId, mbti]));
+}
+
+/** メンター（Monday）に話しかける。返事は、AIがつくる。会話は、本人の分として保存される */
+export async function sendMentorMessage(db: Database, userId: string, input: { sessionId: string; text: string }, aiFn: (system: string, turns: ChatTurn[]) => Promise<string> = (s, t) => callAiChat(s, t, { maxTokens: 1024 })): Promise<{ reply: string }> {
+  const me = await getMe(db, userId);
+  if (!me || me.displayOnly) throw new ForbiddenError();
+  const text = input.text.trim();
+  if (!text) throw new Error("メッセージを入れてください");
+  if (text.length > 2000) throw new Error("メッセージが長すぎます（2000文字まで）");
+  if (!/^[0-9a-f-]{36}$/i.test(input.sessionId)) throw new Error("相談が正しくありません");
+  mentorThrottle(userId);
+  const { mbti, history } = await asUser(db, userId, async (q) => ({
+    mbti: (await q.query<{ mbti: string | null }>("select mbti from mentor_profiles where membership_id = $1", [userId])).rows[0]?.mbti ?? null,
+    history: (await q.query<{ role: "user" | "assistant"; content: string }>("select role, content from mentor_messages where session_id = $1 order by id desc limit $2", [input.sessionId, MENTOR_MAX_TURNS])).rows.reverse(),
+  }));
+  const turns: ChatTurn[] = [{ role: "assistant", content: MENTOR_OPENER }, ...history, { role: "user", content: text + heavyNote(text) }];
+  // Geminiは、最初が「user」である必要があるので、はじめの挨拶は、ユーザー側の合図にする
+  const fixed: ChatTurn[] = turns[0].role === "assistant" ? [{ role: "user", content: "（会話をはじめるよ）" }, ...turns] : turns;
+  const reply = await aiFn(mentorSystemPrompt(mbti, me.name.replace(/\s+/g, "").slice(0, 10)), fixed);
+  await asUser(db, userId, async (q) => {
+    await q.query("insert into mentor_messages (company_id, membership_id, session_id, role, content) values ($1,$2,$3,'user',$4)", [me.companyId, userId, input.sessionId, text]);
+    await q.query("insert into mentor_messages (company_id, membership_id, session_id, role, content) values ($1,$2,$3,'assistant',$4)", [me.companyId, userId, input.sessionId, reply.slice(0, 19000)]);
+  });
+  return { reply };
+}
+
+export async function deleteMentorSession(db: Database, userId: string, sessionId: string): Promise<void> {
+  await asUser(db, userId, (q) => q.query("delete from mentor_messages where session_id = $1", [sessionId]));
+}
+
+// ---------------------------------------------------------------- 面談シート（書いた人と、そのお店の店長だけが読める）
+export type InterviewStatus = "draft" | "submitted" | "reviewed";
+export interface InterviewRow { id: string; storeId: string; menteeId: string; menteeName: string; authorId: string; authorName: string; template: string; heldOn: string; answers: Record<string, string>; memo: string; status: InterviewStatus; submittedAt: string | null; reviewComment: string; mine: boolean }
+const IV_COLS = `i.id, i.store_id as "storeId", i.mentee_id as "menteeId", mt.name as "menteeName", i.author_id as "authorId", au.name as "authorName", i.template, i.held_on::text as "heldOn", i.answers, i.memo, i.status, i.submitted_at::text as "submittedAt", i.review_comment as "reviewComment", (i.author_id = app.uid()) as mine`;
+const IV_FROM = "from interviews i join memberships mt on mt.id = i.mentee_id join memberships au on au.id = i.author_id";
+
+export async function listInterviewMentees(db: Database, userId: string): Promise<{ id: string; name: string; rank: string | null }[]> {
+  const me = await getMe(db, userId);
+  if (!me || me.displayOnly) throw new ForbiddenError();
+  return (await asUser(db, userId, (q) => q.query<{ id: string; name: string; rank: string | null }>(
+    "select id, name, rank from memberships where store_id = $1 and status = 'active' and not display_only and id <> $2 order by (rank = 'assistant') desc, name", [me.storeId, userId]))).rows;
+}
+
+export async function listInterviews(db: Database, userId: string): Promise<{ rows: InterviewRow[]; isManager: boolean }> {
+  const me = await getMe(db, userId);
+  if (!me || me.displayOnly) throw new ForbiddenError();
+  const rows = (await asUser(db, userId, (q) => q.query<InterviewRow>(`select ${IV_COLS} ${IV_FROM} order by i.held_on desc, i.created_at desc limit 300`))).rows;
+  return { rows, isManager: me.level === 3 };
+}
+
+export async function createInterview(db: Database, userId: string, input: { menteeId: string; template: string; heldOn: string }): Promise<string> {
+  const me = await getMe(db, userId);
+  if (!me || me.displayOnly) throw new ForbiddenError();
+  if (!findTemplate(input.template)) throw new Error("面談の種類が正しくありません");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.heldOn)) throw new Error("日付が正しくありません");
+  const ok = (await listInterviewMentees(db, userId)).some((m) => m.id === input.menteeId);
+  if (!ok) throw new Error("面談を受けた人は、自分のお店のスタッフから選んでください");
+  try {
+    return (await asUser(db, userId, (q) => q.query<{ id: string }>(
+      "insert into interviews (company_id, store_id, mentee_id, author_id, template, held_on) values ($1,$2,$3,$4,$5,$6) returning id",
+      [me.companyId, me.storeId, input.menteeId, userId, input.template, input.heldOn]))).rows[0].id;
+  } catch { throw new ForbiddenError(); }
+}
+
+export async function saveInterview(db: Database, userId: string, id: string, patch: { answers?: Record<string, string>; memo?: string; heldOn?: string }): Promise<void> {
+  const sets: string[] = []; const vals: unknown[] = [id];
+  if (patch.answers) {
+    const clean: Record<string, string> = {};
+    for (const [k, v] of Object.entries(patch.answers)) if (typeof v === "string" && v.trim()) clean[k.slice(0, 300)] = v.slice(0, 5000);
+    vals.push(JSON.stringify(clean)); sets.push(`answers = $${vals.length}::jsonb`);
+  }
+  if (typeof patch.memo === "string") { vals.push(patch.memo.slice(0, 10000)); sets.push(`memo = $${vals.length}`); }
+  if (patch.heldOn) { if (!/^\d{4}-\d{2}-\d{2}$/.test(patch.heldOn)) throw new Error("日付が正しくありません"); vals.push(patch.heldOn); sets.push(`held_on = $${vals.length}`); }
+  if (sets.length === 0) return;
+  const n = (await asUser(db, userId, (q) => q.query(`update interviews set ${sets.join(", ")}, updated_at = now() where id = $1 returning id`, vals))).rows.length;
+  if (n === 0) throw new ForbiddenError("提出ずみの面談シートは、直せません");
+}
+
+/** 店長に提出する（提出すると、書いた人は直せない）。店長にお知らせ。店長がいないときは、だれにも送らない（事務員さん・社長には届けない） */
+export async function submitInterview(db: Database, userId: string, id: string): Promise<{ notified: number }> {
+  const me = await getMe(db, userId);
+  if (!me) throw new ForbiddenError();
+  const n = (await asUser(db, userId, (q) => q.query("update interviews set status = 'submitted', submitted_at = now(), updated_at = now() where id = $1 and status = 'draft' returning id", [id]))).rows.length;
+  if (n === 0) throw new ForbiddenError("提出できません（すでに提出ずみか、あなたの面談シートではありません）");
+  const mgrs = (await db.query<{ id: string }>("select id from memberships where store_id = $1 and level = 3 and status = 'active' and id <> $2", [me.storeId, userId])).rows.map((r) => r.id);
+  const title = `${me.name}さんが、面談シートを提出しました`;
+  for (const m of mgrs) await db.query("insert into notifications (company_id, user_id, kind, title, body, link) values ($1,$2,'interview',$3,'確認してください（店長だけが見られます）','/interviews')", [me.companyId, m, title]);
+  await pushToUsers(db, mgrs, { title, body: "店長だけが見られます", url: "/interviews", tag: "interview" }).catch(() => 0);
+  return { notified: mgrs.length };
+}
+
+export async function reviewInterview(db: Database, userId: string, id: string, comment: string): Promise<void> {
+  const me = await getMe(db, userId);
+  if (!me) throw new ForbiddenError();
+  try { await asUser(db, userId, (q) => q.query("select public.interview_review($1, $2)", [id, comment])); } catch { throw new ForbiddenError("確認できるのは、そのお店の店長だけです"); }
+  const a = (await db.query<{ author_id: string; mentee: string }>("select i.author_id, m.name as mentee from interviews i join memberships m on m.id = i.mentee_id where i.id = $1", [id])).rows[0];
+  if (a && a.author_id !== userId) await db.query("insert into notifications (company_id, user_id, kind, title, body, link) values ($1,$2,'interview',$3,$4,'/interviews')", [me.companyId, a.author_id, `${a.mentee}さんの面談シートを、店長が確認しました`, comment ? comment.slice(0, 80) : ""]);
 }
