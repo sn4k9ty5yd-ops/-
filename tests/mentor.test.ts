@@ -166,3 +166,17 @@ describe("みんなのMBTI（スタイリストだけ）", () => {
     await expect(svc.listMbtiDirectory(d, u.mgr)).rejects.toThrow(svc.ForbiddenError);
   });
 });
+
+import { readFileSync } from "node:fs";
+describe("マニュアルの空の「◯月面談」ページを消す移行", () => {
+  it("題名が「◯月面談」でレベル4以上のものだけ消える。ほかのページは消えない", async () => {
+    const d = await newDb(); await migrate(d);
+    const co = (await d.query<{ id: string }>("insert into companies (code, name) values ('mp-co','M') returning id")).rows[0].id;
+    const ins = async (title: string, min: number) => (await d.query<{ id: string }>("insert into manual_pages (company_id, title, min_level) values ($1,$2,$3) returning id", [co, title, min])).rows[0].id;
+    const parent = await ins("メンター制度", 1);
+    await d.query("insert into manual_pages (company_id, parent_id, title, min_level) values ($1,$2,'４月面談',4),($1,$2,'10月面談',4),($1,$2,'２月面談',4),($1,$2,'1月面談だよ',4),($1,$2,'6月面談',1)", [co, parent]);
+    await d.query(readFileSync("db/migrations/0054_remove_empty_interview_pages.sql", "utf8"));
+    const left = (await d.query<{ title: string }>("select title from manual_pages order by title")).rows.map((r) => r.title);
+    expect(left).toEqual(["1月面談だよ", "6月面談", "メンター制度"]);
+  });
+});
