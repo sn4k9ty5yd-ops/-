@@ -5,7 +5,6 @@ import { calcHours, DEFAULT_BREAK_RULE, validateBreakRule, type BreakRule } from
 import { periodFor, upcomingPeriods } from "./periods";
 import { asUser } from "./db/user-context";
 import type { Database, Queryable } from "./db/types";
-import type { RegisterRow } from "./register-sales";
 import { daysOf, hoursOn, md, shortNames } from "./labels";
 import { pushToUsers, vapidKeys } from "./push";
 import type { Level } from "./permissions";
@@ -2505,70 +2504,6 @@ export async function updateFeedback(db: Database, userId: string, id: string, i
   if (n.length === 0) throw new ForbiddenError();
   if (input.reply && input.reply.trim()) {
     await db.query("insert into notifications (company_id, user_id, kind, title, body, link) values ($1,$2,'feedback',$3,$4,'/help')", [me.companyId, (n[0] as { from_id: string }).from_id, "ご要望に返事が届きました", input.reply.slice(0, 80)]);
-  }
-}
-
-// ---------------------------------------------------------------- レジ売上（月間スタッフ売上表）
-export interface RegisterSalesData {
-  storeId: string; month: string; status: "none" | "entered" | "confirmed"; days: number;
-  enteredAt: string | null; confirmedAt: string | null;
-  rows: (RegisterRow & { membershipId: string | null })[];
-}
-const REG_COLS = `name, membership_id as "membershipId", tech_before as "techBefore", tech_discount as "techDiscount", tech_tax as "techTax", tech_total as "techTotal",
-  goods_before as "goodsBefore", goods_discount as "goodsDiscount", goods_tax as "goodsTax", goods_total as "goodsTotal",
-  all_before as "allBefore", all_discount as "allDiscount", all_tax as "allTax", all_total as "allTotal",
-  new_count as "newCount", repeat_count as "repeatCount", fixed_count as "fixedCount", gobusata_count as "gobusataCount", guest_count as "guestCount", total_count as "totalCount"`;
-
-/** そのお店・その月のレジ売上。見られるのは、そのお店の人と事務員さんだけ（DBが決める。他店は空） */
-export async function getRegisterSales(db: Database, userId: string, storeId: string, month: string): Promise<RegisterSalesData> {
-  if (!/^\d{4}-\d{2}$/.test(month)) throw new Error("月が正しくありません");
-  const first = `${month}-01`;
-  return asUser(db, userId, async (q) => {
-    const st = (await q.query<{ status: "entered" | "confirmed"; days: number; enteredAt: string; confirmedAt: string | null }>(
-      `select status, days, entered_at::text as "enteredAt", confirmed_at::text as "confirmedAt" from register_sales_status where store_id = $1 and month = $2`, [storeId, first])).rows[0];
-    if (!st) return { storeId, month, status: "none" as const, days: 0, enteredAt: null, confirmedAt: null, rows: [] };
-    const rows = (await q.query<RegisterSalesData["rows"][number]>(`select ${REG_COLS} from register_sales where store_id = $1 and month = $2 order by row_no`, [storeId, first])).rows
-      .map((r) => ({ ...r, techBefore: Number(r.techBefore), techDiscount: Number(r.techDiscount), techTax: Number(r.techTax), techTotal: Number(r.techTotal), goodsBefore: Number(r.goodsBefore), goodsDiscount: Number(r.goodsDiscount), goodsTax: Number(r.goodsTax), goodsTotal: Number(r.goodsTotal), allBefore: Number(r.allBefore), allDiscount: Number(r.allDiscount), allTax: Number(r.allTax), allTotal: Number(r.allTotal) }));
-    return { storeId, month, status: st.status, days: st.days, enteredAt: st.enteredAt, confirmedAt: st.confirmedAt, rows };
-  });
-}
-
-async function registerNotify(db: Database, companyId: string, userIds: string[], title: string, body: string): Promise<void> {
-  const ids = [...new Set(userIds)];
-  for (const uid of ids) await db.query("insert into notifications (company_id, user_id, kind, title, body, link) values ($1,$2,'register',$3,$4,'/register-sales')", [companyId, uid, title, body]);
-  await pushToUsers(db, ids, { title, body, url: "/register-sales", tag: "register" }).catch(() => 0);
-}
-
-/** 入れる（シフト担当以上・自店／事務員さん・全店）。入れると、そのお店の人に見える。事務員さんに知らせが行く */
-export async function saveRegisterSales(db: Database, userId: string, storeId: string, month: string, days: number, rows: RegisterRow[]): Promise<void> {
-  const me = await getMe(db, userId);
-  if (!me || me.displayOnly || me.level < 2) throw new ForbiddenError();
-  if (!/^\d{4}-\d{2}$/.test(month)) throw new Error("月が正しくありません");
-  if (rows.length === 0) throw new Error("表が空です");
-  try {
-    await asUser(db, userId, (q) => q.query("select public.register_save($1, $2, $3, $4::jsonb)", [storeId, `${month}-01`, days, JSON.stringify(rows)]));
-  } catch (e) {
-    const m = (e as Error).message ?? "";
-    if (m.includes("locked")) throw new Error("確認済みです。事務員さんが「入力済みにもどす」を押すと、直せます");
-    if (m.includes("bad")) throw new Error("数字が正しくありません");
-    throw new ForbiddenError();
-  }
-  const store = (await listStores(db, userId)).find((s) => s.id === storeId)?.name ?? "";
-  const office = await officeIds(db, me.companyId);
-  await registerNotify(db, me.companyId, office.filter((x) => x !== userId), `レジ売上が入りました（${store}）`, `${month.replace("-", "年")}月ぶん・${rows.length}行。確認してください`).catch(() => undefined);
-}
-
-/** 事務員さんの確認（on=確認済み／off=入力済みにもどす） */
-export async function confirmRegisterSales(db: Database, userId: string, storeId: string, month: string, on: boolean): Promise<void> {
-  const me = await getMe(db, userId);
-  if (!me || me.level < 4) throw new ForbiddenError();
-  try {
-    await asUser(db, userId, (q) => q.query("select public.register_confirm($1, $2, $3)", [storeId, `${month}-01`, on]));
-  } catch { throw new Error(on ? "確認できません（まだ入っていない、または確認済みです）" : "もどせません"); }
-  if (on) {
-    const store = (await listStores(db, userId)).find((s) => s.id === storeId)?.name ?? "";
-    const staff = (await db.query<{ id: string }>("select id from memberships where store_id = $1 and level >= 2 and status = 'active'", [storeId])).rows.map((r) => r.id);
-    await registerNotify(db, me.companyId, staff, `レジ売上が確認されました（${store}）`, `${month.replace("-", "年")}月ぶん。エクセルに出せます`).catch(() => undefined);
   }
 }
 

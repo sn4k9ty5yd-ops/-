@@ -37,13 +37,6 @@ export default function PeriodsPage() {
   const todayStr = todayJst();
   const addMonth = (ym: string, n: number) => { const [y, m] = ym.split("-").map(Number); const t = new Date(Date.UTC(y, m - 1 + n, 1)); return `${t.getUTCFullYear()}-${String(t.getUTCMonth() + 1).padStart(2, "0")}`; };
   const todo = [...periods].sort((x, y) => x.start.localeCompare(y.start)).filter((x) => x.end >= todayStr).map((x) => ({ p: x, s: x.stores.find((y) => y.storeId === me.storeId) })).find((x) => x.s && x.s.status !== "acknowledged");
-  // 提出のときは、レジ売上も一緒に（その期間の終わりの月の、ひとつ前の月ぶん）
-  const salesMonth = todo?.p ? addMonth(todo.p.end.slice(0, 7), -1) : "";
-  const [reg, setReg] = useState<string>("");
-  useEffect(() => {
-    if (!todo?.p || me.level < 2) { setReg(""); return; }
-    api<{ status: string }>(`/api/register-sales?storeId=${me.storeId}&month=${salesMonth}`).then((r) => setReg(r.status)).catch(() => setReg(""));
-  }, [todo?.p?.id, salesMonth, me.level, me.storeId]);   // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <>
       <SubTabs items={[{ href: "/admin/periods", label: "やること" }, { href: "/admin/shifts", label: "出勤簿" }]} />
@@ -57,11 +50,8 @@ export default function PeriodsPage() {
             <span className="sub">いまの「やること」（{name(s.storeId)}）</span>
             <div><b style={{ fontSize: 18 }}>{p.label}</b>　<span className="sub">いま：{STATUS_LABEL[s.status]}</span></div>
             <div className="steps2">{STATUS_ORDER.map((x) => <i key={x} className={x === s.status ? "now" : STATUS_ORDER.indexOf(x) < STATUS_ORDER.indexOf(s.status) ? "done" : ""} />)}</div>
-            {next?.to === "submitted" && me.level >= 2 && (
-              <p className="sub" style={{ margin: "6px 0" }}>レジ売上（{Number(salesMonth.slice(5))}月ぶん）：<b>{reg === "confirmed" ? "確認済み" : reg === "entered" ? "入力済み" : "まだ入っていません"}</b>　<Link href="/register-sales">レジ売上を入れる ›</Link></p>
-            )}
             {next && canManage(s.storeId) && (next.to !== "acknowledged" || me.level >= 3) && (
-              <button onClick={() => { if (next.to === "submitted" && reg === "none" && !confirm(`レジ売上（${Number(salesMonth.slice(5))}月ぶん）が、まだ入っていません。出勤簿だけを、先に提出しますか？`)) return; advance(p.id, s.storeId, next); }}>次は：{next.label}</button>
+              <button onClick={() => { advance(p.id, s.storeId, next); }}>次は：{next.label}</button>
             )}
             {inKit && <Link href="/admin/shifts" className="ghost" style={{ display: "block", textAlign: "center", padding: 10 }}>出勤簿を開く</Link>}
           </div>

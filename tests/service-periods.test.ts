@@ -157,52 +157,6 @@ describe("シフト担当（Lv2）の操作", () => {
   });
 });
 
-describe("レジ売上（月間スタッフ売上表）", () => {
-  let d: Database; const u: Record<string, string> = {}; const sid: Record<string, string> = {};
-  const row = (name: string, n = 0) => ({ name, techBefore: n, techDiscount: 0, techTax: 0, techTotal: n, goodsBefore: 0, goodsDiscount: 0, goodsTax: 0, goodsTotal: 0, allBefore: n, allDiscount: 0, allTax: 0, allTotal: n, newCount: 0, repeatCount: 0, fixedCount: 1, gobusataCount: 0, guestCount: 0, totalCount: 1 });
-  beforeAll(async () => {
-    d = await newDb(); await migrate(d);
-    const co = (await d.query<{ id: string }>("insert into companies (code, name) values ('r-co','R') returning id")).rows[0].id;
-    for (const n of ["a", "b"]) sid[n] = (await d.query<{ id: string }>("insert into stores (company_id, name) values ($1,$2) returning id", [co, n])).rows[0].id;
-    const mk = async (k: string, code: string, level: number, s: string, name = k) =>
-      (u[k] = (await d.query<{ id: string }>("insert into memberships (company_id, store_id, employee_code, name, level) values ($1,$2,$3,$4,$5) returning id", [co, s, code, name, level])).rows[0].id);
-    await mk("office", "1", 4, sid.a); await mk("maker", "2", 2, sid.a); await mk("staffA", "3", 1, sid.a, "山田 太郎"); await mk("mgrB", "4", 3, sid.b); await mk("staffB", "5", 1, sid.b);
-  });
-  it("入れられるのは、シフト担当以上（自店）と事務員さん。スタッフ・他店は入れられない", async () => {
-    await expect(svc.saveRegisterSales(d, u.staffA, sid.a, "2026-09", 28, [row("山田太郎", 100)])).rejects.toThrow(svc.ForbiddenError);
-    await expect(svc.saveRegisterSales(d, u.mgrB, sid.a, "2026-09", 28, [row("x", 1)])).rejects.toThrow();
-    await svc.saveRegisterSales(d, u.maker, sid.a, "2026-09", 28, [row("山田太郎", 100), row("個室", 0)]);
-    const g = await svc.getRegisterSales(d, u.maker, sid.a, "2026-09");
-    expect(g).toMatchObject({ status: "entered", days: 28 });
-    expect(g.rows).toHaveLength(2);
-    expect(g.rows[0].membershipId).toBe(u.staffA);       // 名前（空白ぬき）が合う人にひもづく
-    expect(g.rows[1].membershipId).toBeNull();
-  });
-  it("見られるのは、そのお店のシフト担当以上と事務員さんだけ。一般のスタッフ・他店の人（店長でも）は見えない", async () => {
-    expect((await svc.getRegisterSales(d, u.staffA, sid.a, "2026-09")).rows).toHaveLength(0);   // 同じお店でも、一般のスタッフには見せない
-    expect((await svc.getRegisterSales(d, u.maker, sid.a, "2026-09")).rows).toHaveLength(2);    // 同じお店のシフト担当
-    expect((await svc.getRegisterSales(d, u.office, sid.a, "2026-09")).rows).toHaveLength(2);   // 事務員さん
-    expect((await svc.getRegisterSales(d, u.mgrB, sid.a, "2026-09")).status).toBe("none");      // 他店の店長
-    expect((await svc.getRegisterSales(d, u.staffB, sid.a, "2026-09")).rows).toHaveLength(0);   // 他店のスタッフ
-  });
-  it("事務員さんが確認する。確認済みのあとは直せない。もどせるのは事務員さんだけ。入れ直しは全部おきかわる", async () => {
-    await expect(svc.confirmRegisterSales(d, u.maker, sid.a, "2026-09", true)).rejects.toThrow(svc.ForbiddenError);
-    await svc.saveRegisterSales(d, u.maker, sid.a, "2026-09", 27, [row("山田太郎", 200)]);        // 入れ直し
-    expect((await svc.getRegisterSales(d, u.maker, sid.a, "2026-09")).rows).toHaveLength(1);
-    await svc.confirmRegisterSales(d, u.office, sid.a, "2026-09", true);
-    expect((await svc.getRegisterSales(d, u.maker, sid.a, "2026-09")).status).toBe("confirmed");
-    await expect(svc.saveRegisterSales(d, u.maker, sid.a, "2026-09", 27, [row("山田太郎", 300)])).rejects.toThrow("確認済み");
-    await expect(svc.confirmRegisterSales(d, u.maker, sid.a, "2026-09", false)).rejects.toThrow(svc.ForbiddenError);
-    await svc.confirmRegisterSales(d, u.office, sid.a, "2026-09", false);
-    await svc.saveRegisterSales(d, u.maker, sid.a, "2026-09", 27, [row("山田太郎", 300)]);
-    expect((await svc.getRegisterSales(d, u.office, sid.a, "2026-09")).rows[0].allTotal).toBe(300);
-  });
-  it("事務員さんに知らせが届く", async () => {
-    const n = await d.query("select count(*)::int as n from notifications where user_id = $1 and kind = 'register'", [u.office]);
-    expect(n.rows[0].n).toBeGreaterThanOrEqual(1);
-  });
-});
-
 describe("商品の追加・このお店で使わない・全体から消す", () => {
   let d: Database; const u: Record<string, string> = {}; const sid: Record<string, string> = {};
   beforeAll(async () => {
