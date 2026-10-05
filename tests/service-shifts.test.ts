@@ -92,7 +92,8 @@ describe("シフト作成サービス", () => {
     expect(await svc.canEditShifts(db, id.mgr1, periodId, st.s1)).toBe(true);
     await db.query("update store_period_status set status = \'drafting\' where period_id = $1 and store_id = $2", [periodId, st.s2]);   // 自動の下書きなしで「作成中」にする
     await svc.saveShifts(db, id.office, periodId, st.s2, [{ membershipId: id.c, day: "2026-11-25", kind: "off" }]);
-    expect((await svc.listShifts(db, id.mgr1, periodId, st.s2))).toHaveLength(1);
+    expect((await svc.listShifts(db, id.mgr1, periodId, st.s2))).toHaveLength(0);   // 他店は見えない
+    expect((await svc.listShifts(db, id.office, periodId, st.s2))).toHaveLength(1);
   });
 
   it("消せる。確定すると、店長・シフト担当は変更も削除もできない", async () => {

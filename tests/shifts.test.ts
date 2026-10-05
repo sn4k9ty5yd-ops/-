@@ -102,7 +102,7 @@ describe("見られる範囲", () => {
   it("公開前: スタッフには見えない。シフト担当・店長・オフィスには見える（他社は見えない）", async () => {
     await as(U.staff1, async () => expect(await rows("select 1 from shifts")).toHaveLength(0));
     await as(U.shift1, async () => expect((await rows("select 1 from shifts")).length).toBeGreaterThan(0));
-    await as(U.mgr1, async () => expect((await rows("select distinct store_id from shifts")).length).toBe(2)); // 他店も見るだけ
+    await as(U.mgr1, async () => expect((await rows("select distinct store_id from shifts")).length).toBe(1)); // 他店は見えない
     await as(U.officeB, async () => expect(await rows("select 1 from shifts")).toHaveLength(0));
   });
   it("公開後: スタッフは自店舗のシフトだけ見える。他店は見えない", async () => {

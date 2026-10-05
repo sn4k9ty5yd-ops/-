@@ -99,7 +99,7 @@ export default function ShiftsPage() {
       <p className="hint">表で直します。<b>日付を押す</b>＝その日の全員をまとめて直す　<b>名前を押す</b>＝その人の日をまとめて直す　<b>マスを押す</b>＝1か所だけ直す</p>
       <div className="toolbar">
         <select aria-label="お店" value={storeId} onChange={(e) => setStoreId(e.target.value)}>
-          {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+          {stores.filter((s) => me.level === 4 || s.id === me.storeId).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
       </div>
       <PeriodNav period={view} startDay={me.closingStartDay} onChange={setView} />

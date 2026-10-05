@@ -85,7 +85,7 @@ function Page() {
       {!me.displayOnly && <p className="hint">ここは「見る」画面です。日にちを押すと、その日の全員が見られます。</p>}
       {(me.level >= 3) && (
         <select aria-label="お店" value={storeId} onChange={(e) => setStoreId(e.target.value)} style={{ marginBottom: 12 }}>
-          {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+          {stores.filter((s) => me.level === 4 || s.id === me.storeId).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
       )}
       {inView && published && (

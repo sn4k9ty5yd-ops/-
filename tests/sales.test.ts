@@ -146,16 +146,17 @@ describe("指名売上", () => {
     const mine = await svc.getMySales(db, id.a, M);
     expect(mine.mine).toMatchObject({ kitsukeCount: 3, kitsukeSales: 60000, spaSales: 25000, retailCount: 9 });
     expect(mine.rates).toEqual({ retail: 10, kitsuke: 25, makeup: 20, spa: 20 });
-    await expect(svc.setSalesCommission(db, id.shift, id.a, M, 1000)).rejects.toThrow("提出されたあと");        // 提出前はつけられない
+    await expect(svc.setSalesCommission(db, id.mgr, id.a, M, 1000)).rejects.toThrow("提出されたあと");        // 提出前はつけられない
     await svc.submitMySales(db, id.a, M);
     await expect(svc.setSalesCommission(db, id.a, id.a, M, 1000)).rejects.toThrow(svc.ForbiddenError);          // 本人はつけられない
     await expect(svc.setSalesCommission(db, id.a2, id.a, M, 1000)).rejects.toThrow(svc.ForbiddenError);         // ふつうのスタッフは不可
     await expect(svc.setSalesCommission(db, id.mgrB, id.a, M, 1000)).rejects.toThrow(svc.ForbiddenError);       // 他店は不可
-    await svc.setSalesCommission(db, id.shift, id.a, M, 27500);                                                 // シフト担当(Lv2)はつけられる
+    await expect(svc.setSalesCommission(db, id.shift, id.a, M, 27500)).rejects.toThrow(svc.ForbiddenError);       // シフト担当(Lv2)はつけられない
+    await svc.setSalesCommission(db, id.mgr, id.a, M, 27500);                                                   // 店長はつけられる
     expect((await svc.getMySales(db, id.a, M)).commission).toBe(27500);
     expect((await svc.listNotifications(db, id.a)).items.some((n) => n.title.includes("歩合が決まりました"))).toBe(true);
-    // シフト担当は見られるが、数字の直しと確認はできない
-    expect((await svc.listSalesMonth(db, id.shift, st["A店"], M)).rows.find((r) => r.membershipId === id.a)?.total).toBe(500000);
+    // シフト担当は、他の人の売上は見えない。数字の直しと確認もできない
+    expect((await svc.listSalesMonth(db, id.shift, st["A店"], M)).rows.find((r) => r.membershipId === id.a)?.total ?? 0).toBe(0);
     await expect(svc.saveSales(db, id.shift, st["A店"], M, [{ membershipId: id.a, values: V(1, 1) }])).rejects.toThrow(svc.ForbiddenError);
     await expect(svc.reviewSales(db, id.shift, id.a, M, "manager_ok")).rejects.toThrow(svc.ForbiddenError);
     await svc.reviewSales(db, id.mgr, id.a, M, "manager_ok"); await svc.reviewSales(db, id.office, id.a, M, "office_ok");

@@ -32,6 +32,7 @@ function Cards() {
     { href: "/admin/stocktake", title: "棚卸し", sub: "店販・業務の棚卸し（みんなで数量を入れます）", show: !me.displayOnly },
     { href: "/admin/products", title: "商品一覧", sub: "店販・業務の商品と仕入値", show: me.level >= 3 },
     { href: "/admin/shifts", title: "出勤簿", sub: "日ごと・人ごと・一覧表で入力します", show: false },
+    { big: true, href: me.level >= 3 ? "/sales" : "/my-sales", title: "売上", sub: me.level === 4 ? "全店の売上を見る・確定する" : me.level === 3 ? "自店の売上を見る・確認する（自分の分は「自分の売上」から提出）" : "自分の売上を、店長に提出します", show: !me.displayOnly },
     { href: "/admin/periods", title: "シフト期間", sub: "受付・締切・確定・提出", show: false },
     { href: "/admin/staff", title: "スタッフ", sub: "登録・退職・パスコード", show: me.level >= 3 },
     { href: "/security", title: "セキュリティ", sub: "パスコードを変える・ログインの記録", show: true },
@@ -44,7 +45,7 @@ function Cards() {
   ].filter((c) => c.show);
   const ICON: Record<string, [string, number, string]> = {
     "/inbox": ["🔔", 8, ""], "/manual": ["📖", 265, ""], "/shifts": ["📅", 212, ""], "/requests": ["🌴", 168, ""], "/material": ["🧴", 28, ""],
-    "/material/summary": ["📊", 28, "材料・在庫"], "/my-lessons": ["🎓", 262, ""], "/leave": ["🏝️", 172, ""], "/lessons": ["🎓", 262, "スタッフ・設定"], "/lesson-check": ["📝", 262, "スタッフ・設定"], "/admin/stock": ["📦", 150, "材料・在庫"], "/admin/stocktake": ["📋", 190, "材料・在庫"], "/admin/products": ["🏷️", 320, "材料・在庫"],
+    "/material/summary": ["📊", 28, "材料・在庫"], "/my-lessons": ["🎓", 262, ""], "/leave": ["🏝️", 172, ""], "/my-sales": ["📈", 140, ""], "/sales": ["💴", 140, "シフト・勤怠"], "/lessons": ["🎓", 262, "スタッフ・設定"], "/lesson-check": ["📝", 262, "スタッフ・設定"], "/admin/stock": ["📦", 150, "材料・在庫"], "/admin/stocktake": ["📋", 190, "材料・在庫"], "/admin/products": ["🏷️", 320, "材料・在庫"],
     "/admin/periods": ["🗂️", 212, "シフト・勤怠"], "/admin/shifts": ["✏️", 212, "シフト・勤怠"], "/admin/requests": ["👥", 168, "シフト・勤怠"], 
     "/admin/staff": ["🧑‍🤝‍🧑", 340, "スタッフ・設定"], "/admin/settings": ["⚙️", 220, "スタッフ・設定"], "/security": ["🔐", 8, "スタッフ・設定"], "/admin/records": ["🧾", 45, "スタッフ・設定"], "/admin/guide": ["📘", 205, "スタッフ・設定"], "/help": ["❓", 200, ""], "/admin/feedback": ["💌", 330, "スタッフ・設定"], "/admin/stores": ["🏬", 280, "スタッフ・設定"],
   };

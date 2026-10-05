@@ -45,14 +45,14 @@ describe("出勤簿を書ける人・見られる人", () => {
     });
     await as(U.mgr1, async () => { await fails(`delete from attendance_records where day='2026-11-23'`); });
   });
-  it("店長は自店を書ける・直せる。他店は書けない（見るだけ）", async () => {
+  it("店長は自店を書ける・直せる。他店は書けない・見えない", async () => {
     await as(U.mgr1, async () => {
       expect(await fails(work(U.staff1, S1, "2026-11-20"))).toBe(false);
       expect(await fails(work(U.staff2, S2, "2026-11-20"))).toBe(true);
       expect(await fails(`update attendance_records set clock_out='20:00', break_minutes=120 where membership_id='${U.staff1}' and day='2026-11-20'`)).toBe(false);
     });
     await as(U.mgr2, async () => expect(await fails(work(U.staff2, S2, "2026-11-20"))).toBe(false));
-    await as(U.mgr1, async () => expect((await rows("select distinct store_id from attendance_records")).length).toBe(2)); // 他店も見られる
+    await as(U.mgr1, async () => expect((await rows("select distinct store_id from attendance_records")).length).toBe(1)); // 他店は見えない
   });
   it("オフィスは全店。他社は何も見えない・書けない", async () => {
     await as(U.office, async () => expect(await fails(work(U.staff2, S2, "2026-11-21"))).toBe(false));

@@ -2251,7 +2251,7 @@ export async function getMySales(db: Database, userId: string, month: string): P
   if (!me) throw new ForbiddenError();
   return asUser(db, userId, async (q) => {
     const one = async (mm: string) => (await q.query<SalesValues & { source: string; status: SalesStatus; rc: string | null; ca: number | null }>(`select x.source, x.status, x.return_comment as rc, x.commission_amount as ca, ${SALES_COLS} from sales_stats x where x.membership_id = $1 and x.month = $2`, [userId, mm])).rows[0] ?? null;
-    const restricted = me.level < 2;   // 一般のスタッフは、自分の分の記入と提出だけ（お店の合計・順位・目標は見せない）
+    const restricted = me.level < 3;   // 一般のスタッフは、自分の分の記入と提出だけ（お店の合計・順位・目標は見せない）
     const tot = async (mm: string) => restricted ? { total: 0, customers: 0 } : (await q.query<{ total: number; customers: number }>("select total_sales as total, customers from public.sales_store_total($1, $2::date)", [me.storeId, mm])).rows[0] ?? { total: 0, customers: 0 };
     const tg = (await q.query<{ membership_id: string | null; target: number }>("select membership_id, target from sales_targets where store_id = $1 and month = $2 and (membership_id is null or membership_id = $3)", [me.storeId, m, userId])).rows;
     const board = restricted ? [] : (await q.query<{ membership_id: string; name: string; total_sales: number; customers: number; rank: number }>("select * from public.sales_board($1, $2::date)", [me.storeId, m])).rows;

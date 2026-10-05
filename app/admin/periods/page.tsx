@@ -64,7 +64,7 @@ export default function PeriodsPage() {
         return (
         <div key={p.id} className="card tint" style={{ marginTop: 16, ...tintStyle(p.start) }}>
           <span className={`badge2 ${rel.kind}`}>{rel.label}</span> <b style={{ fontSize: 18 }}>{p.label}</b> <span className="sub">{reiwaRange(p.start, p.end)}</span>
-          {p.stores.filter((s) => stores.find((x) => x.id === s.storeId)?.status !== "closed").map((s) => {
+          {p.stores.filter((s) => (me.level === 4 || s.storeId === me.storeId) && stores.find((x) => x.id === s.storeId)?.status !== "closed").map((s) => {
             const next = NEXT_ACTION[s.status];
             const needOffice = next?.to === "acknowledged";
             return (

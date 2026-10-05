@@ -6,7 +6,9 @@ describe("画面側の権限表とDB側の権限表が同じ", () => {
   it("level_permissions の中身が一致する", () => {
     const sql = readdirSync("db/migrations").sort().map((f) => readFileSync(`db/migrations/${f}`, "utf8")).join("\n");
     const blocks = [...sql.matchAll(/insert into public\.level_permissions[^;]*;/g)].map((m) => m[0]).join("\n");
-    const fromSql = [...blocks.matchAll(/\((\d), '([a-z._]+)', '(own|all)'\)/g)].map((m) => `${m[1]}|${m[2]}|${m[3]}`).sort();
+    const last = new Map<string, string>();   // あとの移行ファイルで書きかえた分が、新しい
+    for (const m of blocks.matchAll(/\((\d), '([a-z._]+)', '(own|all)'\)/g)) last.set(`${m[1]}|${m[2]}`, m[3]);
+    const fromSql = [...last].map(([k, v]) => `${k}|${v}`).sort();
     const fromTs = LEVEL_PERMISSIONS.map(([l, p, s]) => `${l}|${p}|${s}`).sort();
     expect(fromTs.length).toBeGreaterThan(0);
     expect(fromTs).toEqual(fromSql);

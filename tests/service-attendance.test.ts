@@ -78,9 +78,10 @@ describe("見られる人・直せる人", () => {
       await expect(svc.saveAttendance(db, u, periodId, st.s1, [{ membershipId: id.a, day: "2026-11-19", kind: "off" }])).rejects.toThrow(svc.ForbiddenError);
     }
   });
-  it("店長は他店の出勤簿は見られるが直せない。オフィスは全店", async () => {
+  it("店長は他店の出勤簿は見えない・直せない。オフィスは全店", async () => {
     await svc.saveAttendance(db, id.office, periodId, st.s2, [{ membershipId: id.c, day: "2026-11-16", kind: "work", clockIn: "10:00", clockOut: "19:00" }]);
-    expect((await get(id.mgr1, st.s2)).length).toBe(1);
+    expect((await get(id.mgr1, st.s2)).length).toBe(0);
+    expect((await get(id.office, st.s2)).length).toBe(1);
     await expect(svc.saveAttendance(db, id.mgr1, periodId, st.s2, [{ membershipId: id.c, day: "2026-11-17", kind: "off" }])).rejects.toThrow(svc.ForbiddenError);
     expect((await svc.listAttendance(db, id.mgr1, periodId, st.s2)).editable).toBe(false);
   });

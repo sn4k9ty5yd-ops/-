@@ -2,7 +2,7 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { validateSession } from "./auth/login";
 import { getDb } from "./db";
-import { applyScheduledRetirements, ForbiddenError, purgeOldMaterialImages, runMorningNotices } from "./service";
+import { applyScheduledRetirements, ForbiddenError, purgeOldMaterialImages, runMorningNotices, runSalesReminders } from "./service";
 
 export const COOKIE = "session";
 export const COOKIE_MAX_AGE = 60 * 60 * 24 * 14;
@@ -19,6 +19,7 @@ async function touchPresence(userId: string) {
     await applyScheduledRetirements(await getDb());
     await purgeOldMaterialImages(await getDb());
     await runMorningNotices(await getDb());
+    await runSalesReminders(await getDb());
     await (await getDb()).query(
       "update memberships set last_seen_at = now() where id = $1 and (last_seen_at is null or last_seen_at < now() - interval '30 seconds')", [userId]);
   } catch { /* 印がつけられなくても、本来の処理は続ける */ }

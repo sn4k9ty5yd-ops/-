@@ -141,8 +141,8 @@ describe("希望休を見られる範囲・代理入力", () => {
       expect(r.length).toBeGreaterThan(0);
     });
   });
-  it("店長は全店分が見える。他社は見えない", async () => {
-    await as(U.mgr1, async () => expect((await rows(`select distinct store_id from time_off_requests`)).length).toBe(2));
+  it("店長は自店分だけ見える（他店は見えない）。他社は見えない", async () => {
+    await as(U.mgr1, async () => expect((await rows(`select distinct store_id from time_off_requests`)).length).toBe(1));
     await as(U.officeB, async () => expect(await rows(`select 1 from time_off_requests`)).toHaveLength(0));
   });
   it("代理入力: 店長は自店のスタッフ分を締切後でも入力できる／他店は不可／Lv2・Lv1は不可", async () => {
