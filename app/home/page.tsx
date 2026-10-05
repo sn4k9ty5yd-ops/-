@@ -28,7 +28,6 @@ function Cards() {
     { href: "/material/summary", title: "材料費統括", sub: "月ごと・お店ごと・商品ごとの割合（管理者・材料担当）", show: me.level === 4 || !!me.materialManager },
     { big: true, href: "/my-lessons", title: "自分のレッスン", sub: "何をしたか・何人目か・かかった時間をカレンダーで見る", show: me.rank === "assistant" },
     { href: "/lessons", title: "レッスン記録", sub: "アシスタントが今日何をしたかを、ボタンで記録・報告", show: me.level >= 3 || !!me.eduLead },
-    { href: "/lesson-check", title: "レッスンチェック", sub: "技術のチェック表を採点・合否を見る", show: me.rank === "assistant" || me.level >= 3 || !!me.eduLead },
     { href: "/admin/stocktake", title: "棚卸し", sub: "店販・業務の棚卸し（みんなで数量を入れます）", show: !me.displayOnly },
     { href: "/admin/products", title: "商品一覧", sub: "店販・業務の商品と仕入値", show: me.level >= 3 },
     { href: "/admin/shifts", title: "出勤簿", sub: "日ごと・人ごと・一覧表で入力します", show: false },

@@ -47,7 +47,7 @@ function Page() {
     <main style={{ maxWidth: 900 }}>
       <Link href="/home" className="back">← ホーム</Link>
       <h1>マニュアル</h1>
-      <p><Link href="/lesson-check"><b>📝 レッスンチェック表（採点）</b></Link></p>
+      <Link href="/lesson-check" className="card" style={{ display: "block", textDecoration: "none", color: "var(--ink)", marginBottom: 12 }}><b>📝 レッスンチェック表</b><br /><span className="sub">アシスタントの技術チェック（シャンプー・カット・カラーなど）。項目ごとに1〜5で採点して、合格かどうかを見られます。</span></Link>
       <input placeholder="🔍 さがす（題名・本文）" value={q} onChange={(e) => setQ(e.target.value)} style={{ marginBottom: 12 }} />
       {found ? (
         found.length === 0 ? <p className="hint">見つかりませんでした。</p> : (

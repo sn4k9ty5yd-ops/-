@@ -2531,11 +2531,12 @@ export async function getCheckData(db: Database, userId: string, traineeId?: str
       `select m.id, m.name, m.rank, m.store_id as "storeId", s.name as "storeName", app.can_assess(m.store_id) as "canAssess"
          from memberships m join stores s on s.id = m.store_id
         where m.status = 'active' and not m.display_only order by s.sort_order, (m.rank = 'assistant') desc, m.name`)).rows;
-    const assessable = staff.filter((x) => x.canAssess);
+    const assessable = staff.filter((x) => x.canAssess && x.rank === "assistant");   // 採点の対象は、アシスタント
     const trainees: CheckTrainee[] = assessable.map(({ canAssess: _c, ...t }) => t);
-    const targetId = traineeId ?? userId;
+    const selfRow = staff.find((x) => x.id === userId);
+    const targetId = traineeId ?? (selfRow?.rank === "assistant" ? userId : "");   // 自分がアシスタントでなければ、えらぶまで空
     const t = staff.find((x) => x.id === targetId) ?? null;
-    if (!t || (t.id !== userId && !t.canAssess)) return { sheets, attempts: [], trainee: null, trainees, canAssess: false, canEditSheets };
+    if (!t || (t.id !== userId && !(t.canAssess && t.rank === "assistant"))) return { sheets, attempts: [], trainee: null, trainees, canAssess: false, canEditSheets };
     const attempts = (await q.query<Omit<CheckAttempt, "scores">>(
       `select a.id, a.sheet_id as "sheetId", a.attempt_no as "attemptNo", m.name as "assessorName", a.time_text as time, a.comment, a.total, a.updated_at::text as "updatedAt"
          from check_attempts a left join memberships m on m.id = a.assessor_id where a.trainee_id = $1 order by a.sheet_id, a.attempt_no`, [t.id])).rows;

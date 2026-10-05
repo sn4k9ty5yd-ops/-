@@ -25,7 +25,7 @@ function Page() {
   useAutoRefresh(() => { if (!open) load(); });
 
   const grades = useMemo(() => Array.from(new Set((data?.sheets ?? []).filter((s) => s.active).map((s) => s.grade))), [data]);
-  if (!data) return <main><Link href="/home" className="back">← ホーム</Link><h1>レッスンチェック</h1>{msg && <p className="err">{msg}</p>}</main>;
+  if (!data) return <main><Link href="/manual" className="back">← マニュアル</Link><h1>レッスンチェック</h1>{msg && <p className="err">{msg}</p>}</main>;
   const mine = data.trainee?.id === me.id;
   const attOf = (id: string) => data.attempts.filter((a) => a.sheetId === id);
   const canScore = data.canAssess && !mine;
@@ -44,17 +44,17 @@ function Page() {
 
   return (
     <main className="wide">
-      <Link href="/home" className="back">← ホーム</Link>
+      <Link href="/manual" className="back">← マニュアル</Link>
       <h1>レッスンチェック</h1>
       <p className="sub">技術のチェック表です。項目ごとに 1〜5 の点数をつけて、合計が合格点以上なら合格です。何回でも受け直せます。</p>
       {msg && <p className="err">{msg}</p>}
       {data.trainees.length > 0 && (
         <select value={trainee || me.id} onChange={(e) => setTrainee(e.target.value === me.id ? "" : e.target.value)} style={{ marginBottom: 10 }}>
-          <option value={me.id}>自分</option>
-          {data.trainees.filter((t) => t.id !== me.id).map((t) => <option key={t.id} value={t.id}>{t.storeName}　{t.name}{t.rank === "assistant" ? "（アシスタント）" : ""}</option>)}
+          <option value={me.id}>{me.rank === "assistant" ? "自分" : "（アシスタントをえらぶ）"}</option>
+          {data.trainees.filter((t) => t.id !== me.id).map((t) => <option key={t.id} value={t.id}>{t.storeName}　{t.name}</option>)}
         </select>
       )}
-      {data.trainee ? <h2>{data.trainee.name} さん</h2> : <p className="hint">この人の採点は見られません。</p>}
+      {data.trainee ? <h2>{data.trainee.name} さん</h2> : <p className="hint">{data.trainees.length > 0 ? "上の一覧から、アシスタントをえらんでください。" : "レッスンチェックの対象は、アシスタントです。（アシスタントの人は、自分の結果がここに出ます）"}</p>}
       <div className="toolbar">
         {grades.map((g) => <button key={g} className={g === grade ? "" : "ghost"} onClick={() => setGrade(g)}>{g}</button>)}
         {data.canEditSheets && <button className="ghost" onClick={() => setEdit("new")}>＋ 表を足す</button>}

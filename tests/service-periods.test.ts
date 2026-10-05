@@ -209,7 +209,7 @@ describe("レッスンチェック表（採点）", () => {
     const mk = async (k: string, code: string, level: number, s: string, extra = "") =>
       (u[k] = (await d.query<{ id: string }>("insert into memberships (company_id, store_id, employee_code, name, level) values ($1,$2,$3,$4,$5) returning id", [co, s, code, k, level])).rows[0].id, extra && await d.query(`update memberships set ${extra} where id = $1`, [u[k]]));
     await mk("office", "1", 4, sid.a); await mk("mgrA", "2", 3, sid.a); await mk("edu", "3", 1, sid.a, "edu_lead = true"); await mk("evalr", "4", 1, sid.a, "can_evaluate = true");
-    await mk("traineeA", "5", 1, sid.a, "rank = 'assistant'"); await mk("plainA", "6", 1, sid.a); await mk("traineeB", "7", 1, sid.b, "rank = 'assistant'"); await mk("mgrB", "8", 3, sid.b);
+    await mk("traineeA", "5", 1, sid.a, "rank = 'assistant'"); await mk("plainA", "6", 1, sid.a); await mk("styA", "9", 1, sid.a, "rank = 'stylist'"); await mk("traineeB", "7", 1, sid.b, "rank = 'assistant'"); await mk("mgrB", "8", 3, sid.b);
   });
   it("表を直せるのは、事務員さんと教育担当だけ。店長でも不可", async () => {
     const input = { grade: "1年目", name: "シャンプー", memo: "", maxPoints: 15, passPoints: 12, maxAttempts: 10, active: true, items: [{ name: "声掛け" }, { name: "力加減" }, { name: "すすぎ" }] };
@@ -225,7 +225,7 @@ describe("レッスンチェック表（採点）", () => {
     expect(data.sheets[0]).toMatchObject({ memo: "メモ", passPoints: 12 });
     await expect(svc.saveCheckSheet(d, u.office, { ...input, passPoints: 99 })).rejects.toThrow();   // 合格点が満点より大きい
   });
-  it("採点できるのは、自店の店長・教育担当・技術評価をつけられる人と事務員さん。本人・ふつうのスタッフ・他店は不可", async () => {
+  it("採点できるのは、自店の店長・教育担当・技術評価をつけられる人・スタイリストと事務員さん。本人・ふつうのスタッフ・他店は不可", async () => {
     const sc = (a: number, b: number, c: number) => [{ itemId: items[0], score: a }, { itemId: items[1], score: b }, { itemId: items[2], score: c }];
     const base = { sheetId, traineeId: u.traineeA, attemptNo: 1, time: "4:30", comment: "よい", scores: sc(5, 4, 4) };
     await expect(svc.saveCheckAttempt(d, u.plainA, base)).rejects.toThrow(svc.ForbiddenError);
@@ -233,6 +233,9 @@ describe("レッスンチェック表（採点）", () => {
     await expect(svc.saveCheckAttempt(d, u.traineeA, base)).rejects.toThrow();                      // 自分
     expect(await svc.saveCheckAttempt(d, u.mgrA, base)).toEqual({ total: 13, passed: true });       // 13点 ≥ 合格12点
     expect(await svc.saveCheckAttempt(d, u.evalr, { ...base, attemptNo: 2, scores: sc(1, 1, 1) })).toEqual({ total: 3, passed: false });
+    expect((await svc.getCheckData(d, u.styA, u.traineeA)).canAssess).toBe(true);                                      // 自店のスタイリストも採点できる
+    const lst = await svc.getCheckData(d, u.styA);
+    expect(lst.trainees.map((t) => t.id)).toEqual([u.traineeA]);                                                       // 一覧は、自店のアシスタントだけ
     await svc.saveCheckAttempt(d, u.edu, { ...base, attemptNo: 3, scores: sc(3, 3, 3) });
     await expect(svc.saveCheckAttempt(d, u.mgrA, { ...base, scores: sc(6, 0, 0) })).rejects.toThrow();   // 点数は0〜5
     await expect(svc.saveCheckAttempt(d, u.mgrA, { ...base, attemptNo: 11 })).rejects.toThrow();         // 回数オーバー
