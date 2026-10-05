@@ -30,7 +30,7 @@ function Page() {
   };
   return (
     <main className="wide">
-      <Link href="/manual" className="back">← マニュアル</Link>
+      <Link href="/home" className="back">← ホーム</Link>
       <h1>🎙 ミーティング（議事録）</h1>
       <p className="sub">会議のボイスメモから、文字起こし・議事録・要約・マインドマップをつくります。課題をAIに会議してもらうこともできます。</p>
       {me.level === 4 && <select aria-label="お店" value={storeId} onChange={(e) => setStoreId(e.target.value)} style={{ marginBottom: 10 }}>{stores.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select>}

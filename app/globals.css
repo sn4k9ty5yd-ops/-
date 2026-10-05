@@ -520,3 +520,16 @@ main.login .err{color:var(--bad);font-weight:700}
   .doctable{font-size:8.5px}.doctable thead{display:table-header-group}
   @page{size:A4 landscape;margin:10mm}
 }
+
+/* 棚卸し: スマホは、商品ごとの大きなカード（数を入れやすい）。広い画面は、これまでの表 */
+.stcards{list-style:none;margin:0;padding:0}
+.stcards li{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px;margin:8px 0;background:var(--card);border:1px solid var(--line);border-radius:16px}
+.stcards li.empty{background:color-mix(in srgb,#ffcc00 16%,var(--card))}
+.stcards .stinfo{min-width:0;flex:1;display:flex;flex-direction:column;gap:2px}
+.stcards .stinfo b{font-size:16px;word-break:break-all}
+.stcards .stctl{display:flex;flex-direction:column;align-items:flex-end;gap:2px}
+.stepper.big button{width:46px;height:46px;font-size:24px;border-radius:12px}
+.stepper.big input{width:64px;height:46px;font-size:20px;text-align:center}
+@media (min-width:700px){.stcards{display:none}}
+@media (max-width:699px){.stwide{display:none}}
+@media print{.stcards{display:none !important}.stwide{display:block !important}}

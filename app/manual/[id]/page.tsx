@@ -102,7 +102,6 @@ function Page() {
       <Link href="/manual" className="back">← マニュアル</Link>
       <p className="mn-crumbs">{p.trail.map((t) => <span key={t.id}><Link href={`/manual/${t.id}`}>{t.title}</Link> ／ </span>)}</p>
       <h1>{p.icon} {p.title}</h1>
-      {/ATENA/.test(p.title) && <Link href="/meetings" className="card" style={{ display: "block", textDecoration: "none", color: "var(--ink)", margin: "8px 0 12px" }}><b>🎙 ミーティング（議事録）</b><br /><span className="sub">会議のボイスメモ → 文字起こし・議事録・要約・マインドマップ・AI会議</span></Link>}
       {p.canEdit && !me.displayOnly && hasEditable(p.body) && <p className="hint" style={{ marginTop: -12 }}>このページには書き込めます（チェックや表のマスは、そのまま入力できます。自動で保存されます）。</p>}
       <BlockView blocks={p.body} ctx={{ refs: p.refs, canEdit: p.canEdit, onEdit: async (edit) => { await api(`/api/manual/${p.id}`, { action: "edit", edit }); } }} />
       {p.children.length > 0 && (

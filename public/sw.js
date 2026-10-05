@@ -1,10 +1,10 @@
-/* 株式会社ALBUM: 通知を受け取る（Service Worker） */
+/* ALBUM: 通知を受け取る（Service Worker） */
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (e) => e.waitUntil(self.clients.claim()));
 self.addEventListener("push", (event) => {
   let d = {};
-  try { d = event.data ? event.data.json() : {}; } catch { d = { title: "株式会社ALBUM", body: event.data ? event.data.text() : "" }; }
-  event.waitUntil(self.registration.showNotification(d.title || "株式会社ALBUM", {
+  try { d = event.data ? event.data.json() : {}; } catch { d = { title: "ALBUM", body: event.data ? event.data.text() : "" }; }
+  event.waitUntil(self.registration.showNotification(d.title || "ALBUM", {
     body: d.body || "", icon: "/icon-192.png", badge: "/icon-192.png", tag: d.tag || undefined, data: { url: d.url || "/home" },
   }));
 });

@@ -35,7 +35,7 @@ function Shell({ children }: { children: React.ReactNode }) {
   return (
     <div className="shell">
       <header className="demo">
-        <span><b>株式会社ALBUM</b>　{me.name}（{levelLabel(me, me)}）</span>
+        <span><b>{me.name}</b>（{levelLabel(me, me)}）</span>
         <span className="actions">
           {me.level === 4 && <Link href="/admin/stores" className="storelink">⚙ 店舗の編集</Link>}
           <button className="ghost" style={{ color: "var(--ink)" }} onClick={logout}>ログアウト</button>

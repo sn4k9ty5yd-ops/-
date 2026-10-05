@@ -4,9 +4,9 @@ export interface Announcement { id: string; title: string; to: string; body: (ur
 export const ANNOUNCEMENTS: Announcement[] = [
   {
     id: "login", title: "ログインのご案内", to: "全社員（個別に送る）",
-    body: (url) => `【株式会社ALBUM アプリのログイン方法】
+    body: (url) => `【ALBUM アプリのログイン方法】
 
-お疲れさまです。シフトや休みを確認する「株式会社ALBUM」のアプリが使えるようになりました。
+お疲れさまです。シフトや休みを確認する「ALBUM」のアプリが使えるようになりました。
 下の内容でログインしてください。
 
 ▼ アプリのアドレス

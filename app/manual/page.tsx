@@ -47,7 +47,6 @@ function Page() {
     <main style={{ maxWidth: 900 }}>
       <Link href="/home" className="back">← ホーム</Link>
       <h1>マニュアル</h1>
-      <Link href="/meetings" className="card" style={{ display: "block", textDecoration: "none", color: "var(--ink)", marginBottom: 12 }}><b>🎙 ミーティング（議事録）</b><br /><span className="sub">会議のボイスメモ → 文字起こし・議事録・要約・マインドマップ・AI会議</span></Link>
       <Link href="/lesson-check" className="card" style={{ display: "block", textDecoration: "none", color: "var(--ink)", marginBottom: 12 }}><b>📝 レッスンチェック表</b><br /><span className="sub">アシスタントの技術チェック（シャンプー・カット・カラーなど）。項目ごとに1〜5で採点して、合格かどうかを見られます。</span></Link>
       <input placeholder="🔍 さがす（題名・本文）" value={q} onChange={(e) => setQ(e.target.value)} style={{ marginBottom: 12 }} />
       {found ? (

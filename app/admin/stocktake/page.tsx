@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ShareMenu } from "@/app/ShareMenu";
 import { api, useAutoRefresh, useMe } from "@/lib/client";
 import { reiwaDot } from "@/lib/era";
 import { PRODUCT_KIND_LABEL, STOCKTAKE_LABEL, type ProductKind, type StocktakeDetail, type StocktakeRow, type StocktakeSummary, type StoreRow } from "@/lib/service";
@@ -21,7 +22,10 @@ export default function StocktakePage() {
   const [storeId, setStoreId] = useState(me.storeId);
   const [kind, setKind] = useState<ProductKind>("retail");
   const [list, setList] = useState<StocktakeRow[]>([]);
-  const [openId, setOpenId] = useState<string | null>(null);
+  const [openId, setOpenIdRaw] = useState<string | null>(null);
+  // 開いている棚卸し表を、リンク（?id=）にも入れる（メールで送ったリンクから、そのまま開けるように）
+  const setOpenId = useCallback((id: string | null) => { setOpenIdRaw(id); try { history.replaceState(null, "", id ? `${location.pathname}?id=${id}` : location.pathname); } catch { /* 無視 */ } }, []);
+  useEffect(() => { const id = new URLSearchParams(location.search).get("id"); if (id) setOpenIdRaw(id); }, []);
   const [view, setView] = useState<"list" | "summary">("list");
   const [takenOn, setTakenOn] = useState(monthEnd());
   const [msg, setMsg] = useState("");
@@ -37,7 +41,17 @@ export default function StocktakePage() {
   return (
     <>
       <h1>棚卸し</h1>
-      {me.level >= 3 && <p style={{ margin: "0 0 10px" }}><a href="/admin/products" style={{ fontWeight: 700 }}>▶ 商品を追加する・写真から読み込む・このお店で使わない商品を消す（商品一覧へ）</a></p>}
+      <div className="card" style={{ marginBottom: 10 }}>
+        <b>棚卸しのやり方（3ステップ）</b>
+        <ol style={{ margin: "6px 0 0 18px", padding: 0, lineHeight: 1.7 }}>
+          <li>下で、<b>お店</b>と<b>店販／業務</b>をえらび、<b>「始める」</b>を押す</li>
+          <li>商品ごとに、<b>数</b>を入れる（＋ − ボタンでも入ります。自動で保存されます）</li>
+          <li>全部入れたら、<b>「提出する」</b>を押す（店長・事務員さん）</li>
+        </ol>
+        {me.level >= 3
+          ? <p style={{ margin: "8px 0 0" }}><a href="/admin/products" style={{ fontWeight: 700 }}>▶ 商品が足りないとき：商品を追加する（写真から読み込むこともできます）</a></p>
+          : <p className="sub" style={{ margin: "8px 0 0" }}>商品が表にないときは、店長か事務員さんに、商品の追加をお願いしてください。</p>}
+      </div>
       <div className="seg"><button className={view === "list" ? "on" : ""} onClick={() => setView("list")}>棚卸し表（お店・種類ごと）</button><button className={view === "summary" ? "on" : ""} onClick={() => setView("summary")}>合算（店販・業務・全店）</button></div>
       {view === "summary" ? <Summary stores={me.level >= 3 ? stores : stores.filter((s) => s.id === me.storeId)} onOpen={(id) => { setOpenId(id); }} /> : <>
       <div className="toolbar">
@@ -90,8 +104,7 @@ function Summary({ stores, onOpen }: { stores: StoreRow[]; onOpen(id: string): v
       <h1 className="printonly" style={{ fontSize: 18 }}>{date ? reiwaDot(date) : ""} 棚卸金額（全店）</h1>
       <div className="toolbar noprint">
         <select aria-label="棚卸日" value={date} onChange={(e) => setDate(e.target.value)}>{dates.map((d) => <option key={d} value={d}>{reiwaDot(d)} 棚卸</option>)}</select>
-        <button className="ghost" style={{ color: "var(--ink)" }} onClick={() => window.print()}>印刷</button>
-        <button className="ghost" style={{ color: "var(--ink)" }} onClick={async () => setNote((await copyText(tsv())) ? "表をコピーしました" : "コピーできませんでした")}>表をコピー</button>
+        <ShareMenu title={`${date ? reiwaDot(date) : ""} 棚卸金額（全店）`} text={tsv()} />
         {note && <span className="sub">{note}</span>}
       </div>
       {dates.length === 0 ? <p className="hint">まだ棚卸しがありません。</p> : (
@@ -178,15 +191,29 @@ function Detail({ id, storeName, onBack }: { id: string; storeName: string; onBa
       <button className="ghost noprint" style={{ color: "var(--blue)", padding: 0 }} onClick={async () => { await flush(); onBack(); }}>← 棚卸しの一覧へ</button>
       <h1 className="noprint" style={{ fontSize: 22 }}>{title}</h1>
       <h1 className="printonly" style={{ fontSize: 18 }}>{title}</h1>
-      <p className="sub noprint" style={{ margin: "0 0 8px" }}>{STOCKTAKE_LABEL[d.status]}　入力済み {counted} / {live.length}件　{saving && <b style={{ color: "var(--ink)" }}>{saving}</b>}</p>
+      <div className="card noprint" style={{ margin: "0 0 10px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
+          <span><span className="chip">{STOCKTAKE_LABEL[d.status]}</span>　入力済み <b>{counted}</b> / {live.length}件</span>
+          <span className="sub">{saving && <b style={{ color: "var(--ink)" }}>{saving}</b>}</span>
+        </div>
+        <div style={{ height: 8, background: "var(--line, #e5e5e5)", borderRadius: 4, margin: "8px 0" }}><div style={{ height: 8, width: `${live.length ? Math.round((counted / live.length) * 100) : 0}%`, background: "var(--blue, #2563eb)", borderRadius: 4 }} /></div>
+        <p style={{ margin: 0 }}>
+          {live.length === 0 ? <b>この表には、まだ商品がありません。</b>
+            : d.status !== "open" ? <>この棚卸しは「{STOCKTAKE_LABEL[d.status]}」です。{d.editable ? "数を直せます。" : "数は直せません（見るだけ）。"}</>
+            : counted < live.length ? <>商品ごとの<b>数</b>を入れてください（ない商品は <b>0</b>）。入れた分は、自動で保存されます。<b>黄色</b>の商品が、まだ入っていません。</>
+            : <>全部入りました。{d.canManage ? <b>上の「提出する」を押してください。</b> : "店長が提出します。"}</>}
+        </p>
+        {live.length === 0 && (me.level >= 3
+          ? <p style={{ margin: "8px 0 0" }}><a href="/admin/products" style={{ fontWeight: 700 }}>▶ 商品を追加する（商品一覧へ）</a>　追加したあと、ここで「商品を追加（新しく増えた分）」を押します。</p>
+          : <p className="sub" style={{ margin: "8px 0 0" }}>店長か事務員さんに、商品の追加をお願いしてください。</p>)}
+      </div>
       <div className="actions noprint" style={{ marginBottom: 10 }}>
         {d.editable && d.canManage && <button className="ghost" style={{ color: "var(--blue)" }} onClick={() => run({ action: "sync" })}>商品を追加（新しく増えた分）</button>}
         {d.canManage && d.status === "open" && <button style={{ width: "auto", margin: 0, padding: "10px 14px", fontSize: 14 }} onClick={() => confirm("棚卸しをオフィスに提出しますか？（提出後は店長は直せません）") && run({ action: "status", status: "submitted" })}>オフィスに提出する</button>}
         {me.level === 4 && d.status === "submitted" && <button style={{ width: "auto", margin: 0, padding: "10px 14px", fontSize: 14 }} onClick={() => run({ action: "status", status: "acknowledged" })}>確認済みにする</button>}
         {me.level === 4 && d.status !== "open" && <button className="ghost" style={{ color: "var(--sub)" }} onClick={() => confirm("ひとつ前の状態に戻しますか？") && run({ action: "status", status: d.status === "acknowledged" ? "submitted" : "open" })}>ひとつ戻す</button>}
         {d.canManage && d.status !== "open" && <button className="ghost" style={{ color: "var(--blue)" }} onClick={async () => { try { const r = await api<{ count: number }>("/api/stock", { action: "apply", stocktakeId: id }); setMsg(""); setNote(`在庫に反映しました（${r.count}件の差を合わせました）`); } catch (e) { setMsg((e as Error).message); } }}>この棚卸しを在庫に反映</button>}
-        <button className="ghost" style={{ color: "var(--ink)" }} onClick={() => window.print()}>印刷</button>
-        <button className="ghost" style={{ color: "var(--ink)" }} onClick={async () => setNote((await copyText(tsv())) ? "表をコピーしました（Excelやメールにはりつけできます）" : "コピーできませんでした")}>表をコピー</button>
+        <ShareMenu title={title} text={tsv()} link={`${typeof location !== "undefined" ? location.origin : ""}/admin/stocktake?id=${id}`} />
         {d.canManage && d.status === "open" && <button className="ghost" onClick={async () => { if (confirm("この棚卸しを削除しますか？（入力した数量も消えます）") && (await run({ action: "delete" }))) onBack(); }}>削除</button>}
         {note && <span className="sub">{note}</span>}
       </div>
@@ -196,7 +223,25 @@ function Detail({ id, storeName, onBack }: { id: string; storeName: string; onBa
         <label className="sub" style={{ margin: 0, display: "flex", gap: 6, alignItems: "center" }}><input type="checkbox" style={{ width: 18, height: 18 }} checked={onlyEmpty} onChange={(e) => setOnlyEmpty(e.target.checked)} />未入力だけ表示</label>
       </div>
 
-      <div className="scroll"><table className="sttable">
+      <ul className="stcards noprint">
+        {shown.map((i) => (
+          <li key={i.id} className={i.quantity === null ? "empty" : ""}>
+            <div className="stinfo"><b>{i.name}</b><span className="sub">{[i.maker, i.spec].filter(Boolean).join("　")}　仕入値 {i.costPrice.toLocaleString("ja-JP")}円</span></div>
+            <div className="stctl">
+              {d.editable ? (
+                <span className="stepper big">
+                  <button type="button" aria-label="減らす" onClick={() => step(i.id, -1)}>−</button>
+                  <input inputMode="numeric" aria-label={`${i.name}の数量`} value={qty[i.id] ?? ""} placeholder="数" onChange={(e) => change(i.id, e.target.value)} onBlur={() => { flush(); }} />
+                  <button type="button" aria-label="増やす" onClick={() => step(i.id, 1)}>＋</button>
+                </span>
+              ) : <b style={{ fontSize: 20 }}>{i.quantity ?? "—"}</b>}
+              <span className="sub">{i.quantity === null ? "" : `${i.amount.toLocaleString("ja-JP")}円`}</span>
+            </div>
+          </li>
+        ))}
+        {shown.length === 0 && live.length > 0 && <p className="hint">該当する商品がありません。</p>}
+      </ul>
+      <div className="scroll stwide"><table className="sttable">
         <thead><tr><th className="maker">メーカー</th><th>品名</th><th className="spec">規格</th><th>仕入値</th><th>数量</th><th>金額</th></tr></thead>
         <tbody>
           {shown.map((i) => (

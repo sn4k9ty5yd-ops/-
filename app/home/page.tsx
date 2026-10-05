@@ -26,6 +26,7 @@ function Cards() {
     { big: true, href: "/inbox", title: unread ? `お知らせ（${unread}件）` : "お知らせ", sub: unread ? "新しいお知らせがあります（休みのかぶりなど）" : "休みのかぶりや、話し合いの書き込み", show: true },
     { big: true, href: "/manual", title: "マニュアル", sub: "教育・営業マニュアル、技術動画、技術評価", show: true },
     { big: true, href: "/shifts", title: leaveTodo ? `シフト（有給の確認待ち${leaveTodo}件）` : "シフト", sub: me.level >= 2 ? "見る・希望休・有給・次のシフトを作る・出勤簿" : "シフトを見る・希望休を出す・有給の提出と変更", show: true },
+    { big: true, href: "/meetings", title: "ミーティング", sub: "会議のボイスメモ → 文字起こし・議事録・要約・マインドマップ・AI会議（自分のお店の分）", show: !me.displayOnly },
     { big: true, href: "/material", title: "材料費・在庫", sub: "発注額・在庫・業務に回した分・スタッフ購入", show: true },
     { href: "/material/summary", title: "材料費統括", sub: "月ごと・お店ごと・商品ごとの割合（管理者・材料担当）", show: me.level === 4 || !!me.materialManager },
     { big: true, href: "/my-lessons", title: "自分のレッスン", sub: "何をしたか・何人目か・かかった時間をカレンダーで見る", show: me.rank === "assistant" },
@@ -46,7 +47,7 @@ function Cards() {
     { href: "/admin/stores", title: "店舗の編集", sub: "新店舗の追加・名前の変更・閉店（管理者のみ）", show: me.level >= 4 },
   ].filter((c) => c.show);
   const ICON: Record<string, [string, number, string]> = {
-    "/inbox": ["🔔", 8, ""], "/manual": ["📖", 265, ""], "/shifts": ["📅", 212, ""], "/requests": ["🌴", 168, ""], "/material": ["🧴", 28, ""],
+    "/inbox": ["🔔", 8, ""], "/meetings": ["🎙️", 300, ""], "/manual": ["📖", 265, ""], "/shifts": ["📅", 212, ""], "/requests": ["🌴", 168, ""], "/material": ["🧴", 28, ""],
     "/material/summary": ["📊", 28, "材料・在庫"], "/my-lessons": ["🎓", 262, ""], "/leave": ["🏝️", 172, ""], "/my-sales": ["📈", 140, ""], "/sales": ["💴", 140, "シフト・勤怠"], "/lessons": ["🎓", 262, "スタッフ・設定"], "/lesson-check": ["📝", 262, "スタッフ・設定"], "/admin/stock": ["📦", 150, "材料・在庫"], "/admin/stocktake": ["📋", 190, "材料・在庫"], "/admin/products": ["🏷️", 320, "材料・在庫"],
     "/admin/periods": ["🗂️", 212, "シフト・勤怠"], "/admin/shifts": ["✏️", 212, "シフト・勤怠"], "/admin/requests": ["👥", 168, "シフト・勤怠"], 
     "/admin/staff": ["🧑‍🤝‍🧑", 340, "スタッフ・設定"], "/admin/settings": ["⚙️", 220, "スタッフ・設定"], "/admin/activity": ["🕵️", 20, "スタッフ・設定"], "/security": ["🔐", 8, "スタッフ・設定"], "/admin/records": ["🧾", 45, "スタッフ・設定"], "/admin/guide": ["📘", 205, "スタッフ・設定"], "/help": ["❓", 200, ""], "/admin/feedback": ["💌", 330, "スタッフ・設定"], "/admin/stores": ["🏬", 280, "スタッフ・設定"],
@@ -61,7 +62,7 @@ function Cards() {
     <main className="home">
       <p className="eyebrow">{hello}</p>
       <h1 className="hero">{me.name}</h1>
-      <p className="role">{myStore && <b>{myStore}</b>}{myStore && "　·　"}{me.rank && <><b>{me.rank === "stylist" ? "スタイリスト" : "アシスタント"}</b>{"　·　"}</>}{levelLabel(me, me)}　·　株式会社ALBUM</p>
+      <p className="role">{myStore && <b>{myStore}</b>}{myStore && "　·　"}{me.rank && <><b>{me.rank === "stylist" ? "スタイリスト" : "アシスタント"}</b>{"　·　"}</>}{levelLabel(me, me)}</p>
       {push && push !== "on" && push !== "unsupported" && !me.displayOnly && (
         <Link href="/notify" className="pushbanner"><span className="ic" style={{ ["--h" as string]: 8 }} aria-hidden>📣</span><span><b>スマホに通知を届けましょう（1分）</b><small>シフトの公開や、毎朝の「今日の出勤メンバー」が届きます。やり方を絵で案内します。</small></span><i>›</i></Link>
       )}

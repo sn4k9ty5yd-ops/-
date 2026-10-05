@@ -23,7 +23,7 @@ export async function callAi(prompt: string, opts: { env?: Record<string, string
   const timer = setTimeout(() => ctl.abort(), opts.timeoutMs ?? 120000);
   try {
     if (st.provider === "gemini") {
-      const model = env.AI_MODEL || "gemini-2.0-flash";
+      const model = env.AI_MODEL || "gemini-2.5-flash";
       const res = await f(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
         method: "POST", signal: ctl.signal,
         headers: { "content-type": "application/json", "x-goog-api-key": env.GEMINI_API_KEY! },
