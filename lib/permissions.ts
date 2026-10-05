@@ -70,3 +70,9 @@ export const TIER_NAMES: Record<Tier, string> = {
 };
 /** 事務員さん（レベル5）か。レッスンの状況は見られない */
 export const isOfficeOnly = (p: { level: number; appOwner?: boolean; execView?: boolean }) => tierOf(p) === 5;
+
+/** 画面に出すレベルの表示。アプリ制作者には内訳（名前）も出し、ほかの人には「レベル◯」だけを出す */
+export function levelLabel(viewer: { appOwner?: boolean }, target: { level: number; appOwner?: boolean; execView?: boolean }): string {
+  const t = tierOf(target);
+  return viewer.appOwner ? TIER_NAMES[t] : `レベル${t}`;
+}

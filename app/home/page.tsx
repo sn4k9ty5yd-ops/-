@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { api, MeProvider, useMe } from "@/lib/client";
 import { pushState, type PushState } from "@/lib/push-client";
-import { isOfficeOnly, TIER_NAMES, tierOf } from "@/lib/permissions";
+import { isOfficeOnly, levelLabel } from "@/lib/permissions";
 import { reiwa } from "@/lib/era";
 import { todayJst } from "@/lib/period-nav";
 import { WEEKDAYS } from "@/lib/labels";
@@ -39,6 +39,7 @@ function Cards() {
     { href: "/security", title: "セキュリティ", sub: "パスコードを変える・ログインの記録", show: true },
     { href: "/admin/records", title: "税務署用の書面", sub: "全情報を、期間をえらんで書面（印刷・PDF）にする", show: me.level === 4 },
     { big: true, href: "/help", title: "ヘルプ", sub: "このアプリでできることと、やり方・ご要望を送る", show: true },
+    { href: "/admin/activity", title: "変更の記録", sub: "だれが・どこを・いつ変更したか（制作者だけ）", show: !!me.appOwner },
     { href: "/admin/feedback", title: "届いたご要望", sub: "みんなからの「こうしてほしい」（制作者だけ）", show: !!me.appOwner },
     { href: "/admin/guide", title: "アプリの説明書", sub: "社長用・事務員さん用・全社員Zoom台本（印刷・コピー）", show: !!me.appOwner },
     { href: "/admin/settings", title: "設定", sub: "休憩・実働のルール", show: me.level >= 4 },
@@ -48,7 +49,7 @@ function Cards() {
     "/inbox": ["🔔", 8, ""], "/manual": ["📖", 265, ""], "/shifts": ["📅", 212, ""], "/requests": ["🌴", 168, ""], "/material": ["🧴", 28, ""],
     "/material/summary": ["📊", 28, "材料・在庫"], "/my-lessons": ["🎓", 262, ""], "/leave": ["🏝️", 172, ""], "/my-sales": ["📈", 140, ""], "/sales": ["💴", 140, "シフト・勤怠"], "/lessons": ["🎓", 262, "スタッフ・設定"], "/lesson-check": ["📝", 262, "スタッフ・設定"], "/admin/stock": ["📦", 150, "材料・在庫"], "/admin/stocktake": ["📋", 190, "材料・在庫"], "/admin/products": ["🏷️", 320, "材料・在庫"],
     "/admin/periods": ["🗂️", 212, "シフト・勤怠"], "/admin/shifts": ["✏️", 212, "シフト・勤怠"], "/admin/requests": ["👥", 168, "シフト・勤怠"], 
-    "/admin/staff": ["🧑‍🤝‍🧑", 340, "スタッフ・設定"], "/admin/settings": ["⚙️", 220, "スタッフ・設定"], "/security": ["🔐", 8, "スタッフ・設定"], "/admin/records": ["🧾", 45, "スタッフ・設定"], "/admin/guide": ["📘", 205, "スタッフ・設定"], "/help": ["❓", 200, ""], "/admin/feedback": ["💌", 330, "スタッフ・設定"], "/admin/stores": ["🏬", 280, "スタッフ・設定"],
+    "/admin/staff": ["🧑‍🤝‍🧑", 340, "スタッフ・設定"], "/admin/settings": ["⚙️", 220, "スタッフ・設定"], "/admin/activity": ["🕵️", 20, "スタッフ・設定"], "/security": ["🔐", 8, "スタッフ・設定"], "/admin/records": ["🧾", 45, "スタッフ・設定"], "/admin/guide": ["📘", 205, "スタッフ・設定"], "/help": ["❓", 200, ""], "/admin/feedback": ["💌", 330, "スタッフ・設定"], "/admin/stores": ["🏬", 280, "スタッフ・設定"],
   };
   const ic = (href: string) => ICON[href] ?? ["•", 210, ""];
   const big = cards.filter((c) => c.big), rest = cards.filter((c) => !c.big);
@@ -60,7 +61,7 @@ function Cards() {
     <main className="home">
       <p className="eyebrow">{hello}</p>
       <h1 className="hero">{me.name}</h1>
-      <p className="role">{myStore && <b>{myStore}</b>}{myStore && "　·　"}{me.rank && <><b>{me.rank === "stylist" ? "スタイリスト" : "アシスタント"}</b>{"　·　"}</>}{TIER_NAMES[tierOf(me)]}　·　株式会社ALBUM</p>
+      <p className="role">{myStore && <b>{myStore}</b>}{myStore && "　·　"}{me.rank && <><b>{me.rank === "stylist" ? "スタイリスト" : "アシスタント"}</b>{"　·　"}</>}{levelLabel(me, me)}　·　株式会社ALBUM</p>
       {push && push !== "on" && push !== "unsupported" && !me.displayOnly && (
         <Link href="/notify" className="pushbanner"><span className="ic" style={{ ["--h" as string]: 8 }} aria-hidden>📣</span><span><b>スマホに通知を届けましょう（1分）</b><small>シフトの公開や、毎朝の「今日の出勤メンバー」が届きます。やり方を絵で案内します。</small></span><i>›</i></Link>
       )}

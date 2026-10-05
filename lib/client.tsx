@@ -35,7 +35,6 @@ export function MeProvider({ children }: { children: React.ReactNode }) {
   if (!me) return null;
   return (
     <MeCtx.Provider value={{ me, logout }}>
-      {me.execView && <div className="noprint" style={{ background: "#fff4d6", color: "#7a5300", padding: "6px 12px", fontSize: 13, textAlign: "center" }}>👁 見るだけのアカウントです（変更はできません）</div>}
       {children}
     </MeCtx.Provider>
   );

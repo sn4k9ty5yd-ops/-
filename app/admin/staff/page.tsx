@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, useAutoRefresh, useMe } from "@/lib/client";
 import { reiwa } from "@/lib/era";
-import { TIER_NAMES, tierOf, type Level, type Tier } from "@/lib/permissions";
+import { levelLabel, TIER_NAMES, tierOf, type Tier } from "@/lib/permissions";
 import { parseStaffPaste } from "@/lib/staff-paste";
 import type { BulkStaffResult } from "@/lib/service";
 import type { StaffRow } from "@/lib/service";
@@ -166,7 +166,7 @@ export default function StaffPage() {
                 <select value={tierOf(s)} onChange={(e) => run(() => api(`/api/staff/${s.id}/level`, { level: Number(e.target.value) }))}>
                   {LEVEL_CHOICES.map((l) => <option key={l} value={l}>{TIER_NAMES[l]}</option>)}
                 </select>
-              ) : <span className="chip">{TIER_NAMES[tierOf(s)]}</span>}
+              ) : <span className="chip">{levelLabel(me, s)}</span>}
               {s.manageable && s.status === "active" && (
                 <>
                   <button className="ghost" style={{ color: "var(--blue)" }}
@@ -237,7 +237,7 @@ export default function StaffPage() {
               <div className="scroll" style={{ marginTop: 10, maxHeight: 260, overflow: "auto" }}>
                 <table className="sttable"><thead><tr><th>名前</th><th>社員番号</th><th>お店</th><th>レベル</th><th>確認</th></tr></thead>
                   <tbody>{parsed.rows.map((r) => (
-                    <tr key={r.line} className={r.error ? "empty" : ""}><td>{r.name}</td><td>{r.employeeCode}</td><td>{nameOfStore(r.storeId) || r.storeName}</td><td>{r.displayOnly ? "表示専用" : TIER_NAMES[r.level as Tier].replace(/^レベル\d /, "")}</td>
+                    <tr key={r.line} className={r.error ? "empty" : ""}><td>{r.name}</td><td>{r.employeeCode}</td><td>{nameOfStore(r.storeId) || r.storeName}</td><td>{r.displayOnly ? "表示専用" : (me.appOwner ? TIER_NAMES[r.level as Tier].replace(/^レベル\d /, "") : `レベル${r.level}`)}</td>
                       <td style={{ color: r.error ? "#d70015" : "#1e7e34" }}>{r.error ?? "OK"}</td></tr>))}</tbody></table>
               </div>
             )}

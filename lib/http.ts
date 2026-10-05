@@ -2,7 +2,7 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { validateSession } from "./auth/login";
 import { getDb } from "./db";
-import { applyScheduledRetirements, ForbiddenError, purgeOldMaterialImages, runMorningNotices, runSalesReminders } from "./service";
+import { applyScheduledRetirements, ForbiddenError, logActivity, purgeOldMaterialImages, runMorningNotices, runSalesReminders } from "./service";
 
 export const COOKIE = "session";
 export const COOKIE_MAX_AGE = 60 * 60 * 24 * 14;
@@ -53,10 +53,17 @@ export function authed<P = Record<string, never>>(
     // 社長のアカウント（レベル4）は、見るだけ。書き込みの操作は止める（パスコード・通知・ご要望は除く）
     if (opts.write && !["/api/security", "/api/notifications", "/api/push/subscribe", "/api/push/test", "/api/feedback"].includes(path)) {
       const ro = (await (await getDb()).query<{ x: boolean }>("select exec_view as x from memberships where id = $1", [userId])).rows[0]?.x;
-      if (ro) return json({ error: "社長のアカウントは、見るだけです（この操作はできません）" }, 403);
+      if (ro) return json({ error: "この操作は、できません（権限がありません）" }, 403);
     }
+    const cloned = opts.write && Number(req.headers.get("content-length") ?? 0) < 200000 ? req.clone() : null;   // 記録のために、中身のうち action・status・storeId だけを見る
     try {
-      return await fn(userId, req, await ctx.params);
+      const res = await fn(userId, req, await ctx.params);
+      if (cloned && res.ok) {
+        // 変更の記録（失敗しても、本来の処理には影響させない）
+        const b = (await cloned.json().catch(() => null)) as Record<string, unknown> | null;
+        await logActivity(await getDb(), userId, path, b && typeof b === "object" ? { action: b.action, status: b.status, storeId: b.storeId } : null).catch(() => undefined);
+      }
+      return res;
     } catch (e) {
       if (e instanceof ForbiddenError) return json({ error: e.message }, 403);
       if (e instanceof Error && e.message) return json({ error: e.message }, 400);

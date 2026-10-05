@@ -1,4 +1,5 @@
 import { callAi } from "./ai";
+import { describeActivity, isOfficeReport, NOT_LOGGED } from "./activity";
 import { discussionPrompt, minutesPrompt, mindmapPrompt, parseMindmap, summaryPrompt, themePrompt } from "./meeting-prompts";
 import { createHash } from "node:crypto";
 import { issuePasscode } from "./auth/login";
@@ -9,7 +10,7 @@ import { asUser } from "./db/user-context";
 import type { Database, Queryable } from "./db/types";
 import { daysOf, hoursOn, md, shortNames } from "./labels";
 import { pushToUsers, vapidKeys } from "./push";
-import type { Level } from "./permissions";
+import { tierOf, type Level } from "./permissions";
 
 // 画面(API)から呼ばれる業務処理。権限の判定はすべてDB側(RLS)で行い、ここでは再実装しない。
 
@@ -2779,4 +2780,41 @@ export async function saveMeetingAiResult(db: Database, userId: string, input: {
   if (result.length > 100000) throw new Error("文字が多すぎます");
   const me = (await getMe(db, userId))!;
   await asUser(db, userId, (q) => q.query("insert into meeting_ai (company_id, store_id, meeting_id, theme, result, created_by) values ($1,$2,$3,$4,$5,$6)", [me.companyId, g.meeting.storeId, input.id, theme.slice(0, 200), result, userId]));
+}
+
+// ---------------------------------------------------------------- 変更の記録（アプリ制作者だけが見られる）
+export interface ActivityRow { id: number; userId: string | null; userName: string; userLevel: string; storeName: string | null; area: string; what: string; at: string }
+let lastActivityPurge = 0;
+/** 書き込みの操作を1行残す。事務員さんへの提出・報告にあたるときは、アプリ制作者にも通知する（制作者本人の操作は残さない） */
+export async function logActivity(db: Database, userId: string, path: string, body: Record<string, unknown> | null): Promise<void> {
+  if (NOT_LOGGED.test(path)) return;
+  const u = (await db.query<{ company_id: string; name: string; level: number; app_owner: boolean; exec_view: boolean; store_name: string; store_id: string }>(
+    "select m.company_id, m.name, m.level, m.app_owner, m.exec_view, m.store_id, s.name as store_name from memberships m join stores s on s.id = m.store_id where m.id = $1", [userId])).rows[0];
+  if (!u || u.app_owner) return;
+  const { area, what } = describeActivity(path, body);
+  let storeName: string | null = u.store_name;
+  const sid = typeof body?.storeId === "string" ? body.storeId : null;
+  if (sid && sid !== u.store_id) storeName = (await db.query<{ name: string }>("select name from stores where id = $1 and company_id = $2", [sid, u.company_id])).rows[0]?.name ?? storeName;
+  const level = tierOf({ level: u.level, appOwner: u.app_owner, execView: u.exec_view });
+  await db.query("insert into activity_log (company_id, user_id, user_name, user_level, store_name, area, what, path) values ($1,$2,$3,$4,$5,$6,$7,$8)", [u.company_id, userId, u.name, `レベル${level}`, storeName, area, what, path]);
+  if (Date.now() - lastActivityPurge > 3600000) { lastActivityPurge = Date.now(); await db.query("delete from activity_log where at < now() - interval '400 days'"); }
+  if (isOfficeReport(path, body)) {
+    const owners = (await db.query<{ id: string }>("select id from memberships where company_id = $1 and app_owner and status = 'active'", [u.company_id])).rows.map((r) => r.id);
+    const title = `${u.name}さん（${storeName ?? ""}）が「${area}」を${what}しました`;
+    for (const o of owners) await db.query("insert into notifications (company_id, user_id, kind, title, body, link) values ($1,$2,'audit',$3,$4,'/admin/activity')", [u.company_id, o, title, "事務員さんへの提出・報告です。「変更の記録」で確認できます。"]);
+    await pushToUsers(db, owners, { title, body: "事務員さんへの提出・報告です", url: "/admin/activity", tag: "audit" }).catch(() => 0);
+  }
+}
+
+export async function listActivity(db: Database, userId: string, q: { userName?: string; area?: string; limit?: number } = {}): Promise<{ rows: ActivityRow[]; areas: string[]; people: string[] }> {
+  const me = await getMe(db, userId);
+  if (!me?.appOwner) throw new ForbiddenError();
+  const lim = Math.min(Math.max(q.limit ?? 200, 1), 1000);
+  const where = ["company_id = $1"]; const vals: unknown[] = [me.companyId];
+  if (q.userName) { vals.push(q.userName); where.push(`user_name = $${vals.length}`); }
+  if (q.area) { vals.push(q.area); where.push(`area = $${vals.length}`); }
+  vals.push(lim);
+  const rows = (await db.query<ActivityRow>(`select id, user_id as "userId", user_name as "userName", user_level as "userLevel", store_name as "storeName", area, what, at::text as at from activity_log where ${where.join(" and ")} order by id desc limit $${vals.length}`, vals)).rows;
+  const meta = (await db.query<{ area: string[]; people: string[] }>("select array_agg(distinct area) as area, array_agg(distinct user_name) as people from (select area, user_name from activity_log where company_id = $1 order by id desc limit 3000) x", [me.companyId])).rows[0];
+  return { rows, areas: (meta?.area ?? []).sort(), people: (meta?.people ?? []).sort() };
 }
