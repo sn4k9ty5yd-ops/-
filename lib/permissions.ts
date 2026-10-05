@@ -34,7 +34,7 @@ export const LEVEL_PERMISSIONS: ReadonlyArray<readonly [Level, string, Scope]> =
   [1, "stocktake.view", "own"], [1, "stocktake.edit", "own"], [2, "stocktake.view", "own"], [3, "stocktake.view", "all"], [4, "stocktake.view", "all"],
   [2, "stocktake.edit", "own"], [3, "stocktake.edit", "own"], [4, "stocktake.edit", "all"],
   [1, "stocktake.manage", "own"], [2, "stocktake.manage", "own"], [3, "stocktake.manage", "own"], [4, "stocktake.manage", "all"],
-  [2, "stock.view", "own"], [3, "stock.view", "all"], [4, "stock.view", "all"],
+  [1, "stock.view", "own"], [2, "stock.view", "own"], [3, "stock.view", "own"], [4, "stock.view", "all"],
   [2, "stock.edit", "own"], [3, "stock.edit", "own"], [4, "stock.edit", "all"],
   [3, "stock.settings", "own"], [4, "stock.settings", "all"],
   [4, "manual.manage", "all"],

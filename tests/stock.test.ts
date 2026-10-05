@@ -76,10 +76,10 @@ describe("入庫・出庫・在庫の数量", () => {
 });
 
 describe("見られる人・記録できる人", () => {
-  it("スタッフは見えない・記録できない。他店の店長は見るだけ。他社は何も見えない", async () => {
-    await as(U.staff1, async () => { expect(await rows("select 1 from stock_levels")).toHaveLength(0); expect(await fails(mv(S1, P1, "in", 1))).toBe(true); });
+  it("スタッフは自店の在庫だけ見えて、記録できない。他店の店長は見えない。他社は何も見えない", async () => {
+    await as(U.staff1, async () => { expect(await rows(`select 1 from stock_levels where store_id='${S2}'`)).toHaveLength(0); expect(await fails(mv(S1, P1, "in", 1))).toBe(true); });
     await as(U.mgr1, async () => {
-      expect((await rows("select distinct store_id from stock_levels")).length).toBe(2);
+      expect((await rows("select distinct store_id from stock_levels")).length).toBe(1);   // 他店は見えない
       expect(await fails(mv(S2, P1, "in", 1))).toBe(true);
     });
     await as(U.shift1, async () => { expect(await rows(`select 1 from stock_levels where store_id='${S2}'`)).toHaveLength(0); expect(await fails(mv(S2, P1, "in", 1))).toBe(true); });

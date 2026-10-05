@@ -1011,6 +1011,8 @@ export async function setStockSettings(db: Database, userId: string, storeId: st
 
 export async function listStock(db: Database, userId: string, storeId: string): Promise<{ settings: StockSettings; items: StockItem[] }> {
   const settings = await getStockSettings(db, userId, storeId);
+  const who = await getMe(db, userId);
+  if (!who || who.displayOnly || (who.level < 4 && who.storeId !== storeId)) return { settings, items: [] };   // 他店の在庫は見えない（商品の名前も出さない）
   const rows = (await asUser(db, userId, (q) =>
     q.query<Omit<StockItem, "low" | "suggested">>(
       `select p.id as "productId", p.kind, p.maker, p.name, p.spec, p.cost_price as "costPrice", p.status,
@@ -2581,4 +2583,50 @@ export async function saveCheckSheet(db: Database, userId: string, input: { id?:
     if (((e as Error).message ?? "").includes("bad")) throw new Error("表の内容が正しくありません（満点・合格点・回数を見直してください）");
     throw new ForbiddenError();
   }
+}
+
+// ---------------------------------------------------------------- テスター（店販→業務に回した分）・スタッフ購入（給料から天引き）
+export interface TesterRow { id: string; storeId: string; productId: string; maker: string; name: string; spec: string; qty: number; unitCost: number; amount: number; day: string; note: string | null; stockApplied: boolean; createdBy: string | null; byName: string | null }
+export interface PurchaseRow { id: string; storeId: string; membershipId: string; buyer: string; productId: string; maker: string; name: string; spec: string; qty: number; unitPrice: number; amount: number; day: string; note: string | null; stockApplied: boolean; createdBy: string | null }
+const monthEnd = (month: string) => { const [y, m] = month.split("-").map(Number); const t = new Date(Date.UTC(y, m, 1)); return `${t.getUTCFullYear()}-${String(t.getUTCMonth() + 1).padStart(2, "0")}-01`; };
+const mapEntryError = (e: unknown): never => {
+  const m = (e as Error).message ?? "";
+  if (m.includes("bad qty")) throw new Error("本数は、1以上の整数で入れてください");
+  if (m.includes("not found")) throw new Error("商品（または人）が見つかりません。店販の商品から選んでください");
+  throw new ForbiddenError();
+};
+
+export async function listTester(db: Database, userId: string, storeId: string, month: string): Promise<{ rows: TesterRow[]; total: number }> {
+  if (!/^\d{4}-\d{2}$/.test(month)) throw new Error("月が正しくありません");
+  const me = await getMe(db, userId);
+  if (!me || me.displayOnly) throw new ForbiddenError();
+  const rows = (await asUser(db, userId, (q) => q.query<TesterRow>(
+    `select t.id, t.store_id as "storeId", t.product_id as "productId", t.maker, t.product_name as name, t.spec, t.qty, t.unit_cost as "unitCost", t.amount, t.day::text as day, t.note,
+            t.stock_applied as "stockApplied", t.created_by as "createdBy", m.name as "byName"
+       from tester_log t left join memberships m on m.id = t.created_by
+      where t.store_id = $1 and t.day >= $2::date and t.day < $3::date and t.cancelled_at is null order by t.day desc, t.created_at desc`, [storeId, `${month}-01`, monthEnd(month)]))).rows;
+  return { rows, total: rows.reduce((s, r) => s + r.amount, 0) };
+}
+export async function addTester(db: Database, userId: string, input: { storeId: string; productId: string; qty: number; day?: string; note?: string }): Promise<string> {
+  try { return (await asUser(db, userId, (q) => q.query<{ id: string }>("select public.tester_add($1,$2,$3,$4,$5) as id", [input.storeId, input.productId, input.qty, input.day || null, input.note ?? ""]))).rows[0].id; }
+  catch (e) { return mapEntryError(e); }
+}
+export async function listPurchases(db: Database, userId: string, storeId: string, month: string): Promise<{ rows: PurchaseRow[]; total: number; byPerson: { membershipId: string; name: string; total: number; count: number }[] }> {
+  if (!/^\d{4}-\d{2}$/.test(month)) throw new Error("月が正しくありません");
+  const me = await getMe(db, userId);
+  if (!me || me.displayOnly) throw new ForbiddenError();
+  const rows = (await asUser(db, userId, (q) => q.query<PurchaseRow>(
+    `select id, store_id as "storeId", membership_id as "membershipId", buyer_name as buyer, product_id as "productId", maker, product_name as name, spec, qty, unit_price as "unitPrice", amount, day::text as day, note,
+            stock_applied as "stockApplied", created_by as "createdBy"
+       from staff_purchases where store_id = $1 and day >= $2::date and day < $3::date and cancelled_at is null order by day desc, created_at desc`, [storeId, `${month}-01`, monthEnd(month)]))).rows;
+  const by = new Map<string, { membershipId: string; name: string; total: number; count: number }>();
+  for (const r of rows) { const x = by.get(r.membershipId) ?? { membershipId: r.membershipId, name: r.buyer, total: 0, count: 0 }; x.total += r.amount; x.count += r.qty; by.set(r.membershipId, x); }
+  return { rows, total: rows.reduce((s, r) => s + r.amount, 0), byPerson: [...by.values()].sort((a, b) => a.name.localeCompare(b.name, "ja")) };
+}
+export async function addPurchase(db: Database, userId: string, input: { membershipId: string; productId: string; qty: number; day?: string; note?: string }): Promise<string> {
+  try { return (await asUser(db, userId, (q) => q.query<{ id: string }>("select public.staff_purchase_add($1,$2,$3,$4,$5) as id", [input.membershipId, input.productId, input.qty, input.day || null, input.note ?? ""]))).rows[0].id; }
+  catch (e) { return mapEntryError(e); }
+}
+export async function cancelStockEntry(db: Database, userId: string, kind: "tester" | "purchase", id: string): Promise<void> {
+  try { await asUser(db, userId, (q) => q.query("select public.stock_entry_cancel($1,$2)", [kind, id])); } catch { throw new ForbiddenError(); }
 }

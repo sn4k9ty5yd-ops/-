@@ -1,10 +1,12 @@
 "use client";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { SubTabs } from "@/app/SubTabs";
 import { api, MeProvider, useAutoRefresh, useMe } from "@/lib/client";
+import { materialTabs } from "@/lib/material-tabs";
 import { applyMemory, findSupplier, parseOrderText, type OrderLine } from "@/lib/material-ocr";
 import { todayJst } from "@/lib/period-nav";
-import { MATERIAL_KIND_LABEL, toExTax, type MaterialImage, type MaterialMemory, type MaterialKind, type MaterialLogRow, type MaterialOrder, type StoreRow } from "@/lib/service";
+import { MATERIAL_KIND_LABEL, toExTax, type MaterialImage, type MaterialMemory, type MaterialKind, type MaterialLogRow, type MaterialOrder, type ProductRow, type StoreRow } from "@/lib/service";
 
 const yen = (n: number) => `${n.toLocaleString("ja-JP")}円`;
 const toInt = (raw: string) => raw.replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0)).replace(/[^\d]/g, "").replace(/^0+(?=\d)/, "");
@@ -32,6 +34,9 @@ function Page() {
   const [storeId, setStoreId] = useState(me.storeId);
   const [ym, setYm] = useState(todayJst().slice(0, 7));
   const [data, setData] = useState<{ orders: MaterialOrder[]; suppliers: string[]; budget: number | null; images: MaterialImage[] } | null>(null);
+  const [products, setProducts] = useState<ProductRow[]>([]);
+  const [pq, setPq] = useState("");
+  const [newP, setNewP] = useState<{ kind: "retail" | "supply"; maker: string; name: string; spec: string; cost: string } | null>(null);
   const [form, setForm] = useState<Form | null>(null);
   const [msg, setMsg] = useState(""); const [note, setNote] = useState("");
   const [log, setLog] = useState<MaterialLogRow[] | null>(null);
@@ -44,6 +49,9 @@ function Page() {
   const month = `${ym}-01`;
 
   useEffect(() => { api<StoreRow[]>("/api/stores").then((s) => setStores(s.filter((x) => x.status === "active"))).catch(() => {}); }, []);
+  const loadProducts = useCallback(async () => {
+    try { const [a, b] = await Promise.all([api<ProductRow[]>("/api/products?kind=supply"), api<ProductRow[]>("/api/products?kind=retail")]); setProducts([...b, ...a].filter((p) => p.status === "active" && p.storeIds.includes(storeId))); } catch { setProducts([]); }
+  }, [storeId]);
   const load = useCallback(async () => {
     const r = await api<{ orders: MaterialOrder[]; suppliers: string[]; budget: number | null; images: MaterialImage[] }>(`/api/material?storeId=${storeId}&from=${ym}-01&to=${ym}-${lastDay(ym)}&month=${month}`);
     setData(r);
@@ -107,7 +115,8 @@ function Page() {
   return (
     <main className="wide">
       <Link href="/home" className="back">← ホーム</Link>
-      <h1>材料費（発注額）</h1>
+      <h1>材料費</h1>
+      <SubTabs items={materialTabs(me.displayOnly)} />
       {(me.level === 4 || mgr) && <Link href="/material/summary" className="storelink" style={{ display: "inline-block", marginBottom: 12 }}>材料費統括を見る（全店の割合・月ごと）</Link>}
       <div className="toolbar">
         <select aria-label="お店" value={storeId} onChange={(e) => setStoreId(e.target.value)}>
@@ -216,6 +225,29 @@ function Page() {
                 </div>
               );
             })()}
+            {form.lines !== null && (
+              <div>
+                <b>商品から入れる（金額は、商品の仕入値×数量で自動で出ます）</b>
+                <input aria-label="商品をさがす" placeholder="メーカー・品名でさがす（例：髪にドラマを。）" value={pq} onFocus={() => { if (products.length === 0) loadProducts(); }} onChange={(e) => { setPq(e.target.value); if (products.length === 0) loadProducts(); }} />
+                {pq.trim() !== "" && (
+                  <div className="actions" style={{ flexWrap: "wrap" }}>
+                    {products.filter((p) => `${p.maker}${p.name}${p.spec}`.toLowerCase().includes(pq.trim().toLowerCase())).slice(0, 20).map((p) => (
+                      <button key={p.id} className="ghost" style={{ width: "auto", color: "var(--ink)", border: "1px solid var(--line, #ddd)", borderRadius: 20 }}
+                        onClick={() => setForm((cur) => {
+                          if (!cur) return cur;
+                          const nm = `${p.maker ? p.maker + " " : ""}${p.name}${p.spec ? " " + p.spec : ""}`;
+                          const ls = cur.lines ?? [];
+                          const i2 = ls.findIndex((x) => x.name === nm);
+                          const lines = i2 >= 0 ? ls.map((x, j2) => (j2 === i2 ? { ...x, qty: x.qty + 1, amount: x.amount + p.costPrice } : x)) : [...ls, { name: nm, qty: 1, amount: p.costPrice }];
+                          return { ...cur, tax: "ex", lines, amount: String(lines.reduce((t, l) => t + l.amount, 0)) };
+                        })}>{p.name}{p.spec ? `（${p.spec}）` : ""} {p.costPrice.toLocaleString("ja-JP")}円</button>
+                    ))}
+                    {products.length > 0 && products.filter((p) => `${p.maker}${p.name}${p.spec}`.toLowerCase().includes(pq.trim().toLowerCase())).length === 0 && <span className="sub">見つかりません。</span>}
+                  </div>
+                )}
+                {me.level >= 3 && <button className="ghost" style={{ color: "var(--blue)" }} onClick={() => setNewP({ kind: "retail", maker: "", name: "", spec: "", cost: "" })}>＋ 新しい商品を登録する</button>}
+              </div>
+            )}
             {form.lines !== null && (form.lines.length > 0 || form.pics.length > 0) && (
               <div>
                 <b>明細（読み取った結果。まちがいは直してください。直した名前は次から自動で覚えます）</b>
@@ -253,6 +285,24 @@ function Page() {
             <button className="ghost" onClick={() => setLog(null)}>閉じる</button>
           </div>
         </div>
+      )}
+      {newP && (
+        <div className="sheet-bg" onClick={() => setNewP(null)}><div className="sheet" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 520 }}>
+          <h2 style={{ marginTop: 0 }}>新しい商品を登録</h2>
+          <p className="sub">このお店で使う商品として登録します。仕入値（税抜）を入れると、これからは数量を入れるだけで合計が出ます。</p>
+          <div className="seg"><button className={newP.kind === "retail" ? "on" : ""} onClick={() => setNewP({ ...newP, kind: "retail" })}>店販</button><button className={newP.kind === "supply" ? "on" : ""} onClick={() => setNewP({ ...newP, kind: "supply" })}>業務</button></div>
+          <input placeholder="メーカー（例：髪にドラマを。）" value={newP.maker} onChange={(e) => setNewP({ ...newP, maker: e.target.value })} />
+          <input placeholder="商品名" value={newP.name} onChange={(e) => setNewP({ ...newP, name: e.target.value })} />
+          <input placeholder="規格（例：250ml・任意）" value={newP.spec} onChange={(e) => setNewP({ ...newP, spec: e.target.value })} />
+          <input inputMode="numeric" placeholder="仕入値（税抜・円）" value={newP.cost} onChange={(e) => setNewP({ ...newP, cost: toInt(e.target.value) })} />
+          {msg && <p className="err">{msg}</p>}
+          <div className="toolbar">
+            <button disabled={!newP.name.trim() || newP.cost === ""} onClick={async () => {
+              try { await api("/api/products", { kind: newP.kind, items: [{ maker: newP.maker, name: newP.name, spec: newP.spec, costPrice: Number(newP.cost) }], storeIds: [storeId] }); setNewP(null); setNote("商品を登録しました"); await loadProducts(); setPq(newP.name); } catch (e) { setMsg((e as Error).message); }
+            }}>登録する</button>
+            <button className="ghost" onClick={() => setNewP(null)}>やめる</button>
+          </div>
+        </div></div>
       )}
     </main>
   );
