@@ -11,14 +11,14 @@ import type { Level } from "./permissions";
 
 // 画面(API)から呼ばれる業務処理。権限の判定はすべてDB側(RLS)で行い、ここでは再実装しない。
 
-export interface Me { mustChangePasscode?: boolean; id: string; name: string; level: Level; storeId: string; companyId: string; companyName: string; closingStartDay: number; breakRule: BreakRule; displayOnly: boolean; materialManager?: boolean; appOwner?: boolean; rank?: "assistant" | "stylist" | null; eduLead?: boolean; }
+export interface Me { mustChangePasscode?: boolean; id: string; name: string; level: Level; storeId: string; companyId: string; companyName: string; closingStartDay: number; breakRule: BreakRule; displayOnly: boolean; materialManager?: boolean; execView?: boolean; appOwner?: boolean; rank?: "assistant" | "stylist" | null; eduLead?: boolean; }
 export interface StoreRow { id: string; name: string; status: "active" | "closed"; defaultOpen: string; defaultClose: string; satOpen: string | null; satClose: string | null; }
 /** 管理者だけが見られる、ログインの状況 */
 export type Presence = "online" | "idle" | "loggedout" | "never";
 export const ONLINE_SECONDS = 120; // これ以内に開いていれば「オンライン」
 export interface StaffRow {
   presence?: Presence; seenAgoSec?: number | null; retireOn?: string | null;
-  id: string; name: string; employeeCode: string; storeId: string; level: Level; status: "active" | "disabled"; manageable: boolean; onShift: boolean; displayOnly: boolean; canEvaluate?: boolean; materialManager?: boolean; eduLead?: boolean; appOwner?: boolean; rank?: "assistant" | "stylist" | null; shortName?: string | null;
+  id: string; name: string; employeeCode: string; storeId: string; level: Level; status: "active" | "disabled"; manageable: boolean; onShift: boolean; displayOnly: boolean; execView?: boolean; canEvaluate?: boolean; materialManager?: boolean; eduLead?: boolean; appOwner?: boolean; rank?: "assistant" | "stylist" | null; shortName?: string | null;
 }
 
 export class ForbiddenError extends Error {
@@ -29,7 +29,7 @@ export async function getMe(db: Database, userId: string): Promise<Me | null> {
   const { rows } = await asUser(db, userId, (q) =>
     q.query<Omit<Me, "breakRule"> & { cap: number | null; tiers: { overMinutes: number; breakMinutes: number }[] }>(
       `select m.id, m.name, m.level, m.store_id as "storeId", m.company_id as "companyId", c.name as "companyName", c.closing_start_day as "closingStartDay",
-              c.work_cap_minutes as cap, c.break_tiers as tiers, m.display_only as "displayOnly", m.material_manager as "materialManager", m.app_owner as "appOwner", m.rank as rank, m.edu_lead as "eduLead", m.passcode_must_change as "mustChangePasscode"
+              c.work_cap_minutes as cap, c.break_tiers as tiers, m.display_only as "displayOnly", m.material_manager as "materialManager", m.app_owner as "appOwner", m.exec_view as "execView", m.rank as rank, m.edu_lead as "eduLead", m.passcode_must_change as "mustChangePasscode"
          from memberships m join companies c on c.id = m.company_id where m.id = $1`, [userId]),
   );
   const r = rows[0];
@@ -116,7 +116,7 @@ export async function listStaff(db: Database, userId: string): Promise<StaffRow[
   if (!me) return [];
   const { rows } = await asUser(db, userId, (q) =>
     q.query<StaffRow>(
-      `select id, name, employee_code as "employeeCode", store_id as "storeId", level, status, on_shift as "onShift", display_only as "displayOnly", app_owner as "appOwner", can_evaluate as "canEvaluate", material_manager as "materialManager", edu_lead as "eduLead", rank, short_name as "shortName" from memberships order by store_id, level desc, name`));
+      `select id, name, employee_code as "employeeCode", store_id as "storeId", level, status, on_shift as "onShift", display_only as "displayOnly", app_owner as "appOwner", exec_view as "execView", can_evaluate as "canEvaluate", material_manager as "materialManager", edu_lead as "eduLead", rank, short_name as "shortName" from memberships order by store_id, level desc, name`));
   // ログインの状況は管理者(Lv4)だけに見せる（管理用接続で読む）
   const pres = new Map<string, { presence: Presence; seenAgoSec: number | null; retireOn: string | null }>();
   if (me.level === 4 && rows.length > 0) {
@@ -138,7 +138,7 @@ export async function listStaff(db: Database, userId: string): Promise<StaffRow[
   return rows.map((r) => ({
     ...r,
     ...(pres.get(r.id) ?? {}),
-    manageable: (me.level === 4 || (me.level === 3 && r.storeId === me.storeId && r.level < me.level)) && (!r.appOwner || r.id === userId),
+    manageable: (me.level === 4 || (me.level === 3 && r.storeId === me.storeId && r.level < me.level)) && (!r.appOwner || r.id === userId) && (!r.execView || me.appOwner || r.id === userId),
   })).sort(compareEmployeeCode);
 }
 
@@ -153,20 +153,22 @@ export function compareEmployeeCode(a: { employeeCode: string }, b: { employeeCo
 /** スタッフ登録。パスコードを発行して返す（このときだけ見られる） */
 export async function addStaff(
   db: Database, userId: string,
-  input: { name: string; employeeCode: string; storeId: string; level: Level; displayOnly?: boolean },
+  input: { name: string; employeeCode: string; storeId: string; level: Level | 5; displayOnly?: boolean },
 ): Promise<{ id: string; passcode: string }> {
   const me = await getMe(db, userId);
   if (!me) throw new ForbiddenError();
+  if (!input.displayOnly && input.level >= 4 && !me.appOwner) throw new ForbiddenError("レベル4・5のアカウントを作れるのは、アプリ制作者だけです");
   let id: string;
   try {
     id = (await asUser(db, userId, (q) =>
       q.query<{ id: string }>(
         `insert into memberships (company_id, store_id, employee_code, name, level, on_shift, display_only) values ($1,$2,$3,$4,$5,$6,$7) returning id`,
-        [me.companyId, input.storeId, input.employeeCode.trim(), input.name.trim(), input.displayOnly ? 1 : input.level, !input.displayOnly, !!input.displayOnly]))).rows[0].id;
+        [me.companyId, input.storeId, input.employeeCode.trim(), input.name.trim(), input.displayOnly ? 1 : Math.min(input.level, 4), !input.displayOnly, !!input.displayOnly]))).rows[0].id;
   } catch (e) {
     if ((e as { code?: string }).code === "23505") throw new Error("その社員番号はすでに使われています");
     throw new ForbiddenError();
   }
+  if (!input.displayOnly && input.level === 4) await db.query("update memberships set exec_view = true where id = $1", [id]);
   return { id, passcode: await issuePasscode(db, id) };
 }
 
@@ -181,8 +183,9 @@ async function assertCanManage(db: Database, userId: string, targetId: string) {
 /** アプリ制作者の行は、本人以外（オフィスでも）は変えられない */
 async function assertNotOwnerTarget(db: Database, userId: string, targetId: string) {
   if (targetId === userId) return;
-  const r = await asUser(db, userId, (q) => q.query<{ o: boolean }>("select app_owner as o from memberships where id = $1", [targetId]));
+  const r = await asUser(db, userId, (q) => q.query<{ o: boolean; x: boolean }>("select app_owner as o, exec_view as x from memberships where id = $1", [targetId]));
   if (r.rows[0]?.o) throw new ForbiddenError("この人は、アプリ制作者です。ほかの人は変更できません");
+  if (r.rows[0]?.x && !(await getMe(db, userId))?.appOwner) throw new ForbiddenError("この人は、社長のアカウントです。変更できるのは、アプリ制作者だけです");
 }
 
 export async function disableStaff(db: Database, userId: string, targetId: string): Promise<void> {
@@ -197,13 +200,20 @@ export async function disableStaff(db: Database, userId: string, targetId: strin
   await db.query("delete from sessions where membership_id = $1", [targetId]);
 }
 
-export async function setStaffLevel(db: Database, userId: string, targetId: string, level: Level): Promise<void> {
+/** レベルを変える。1〜3は事務員さん以上。4（社長・見るだけ）と5（事務員さん）に決められるのは、アプリ制作者だけ（中の数字はどちらも4。社長だけ exec_view の印をつける） */
+export async function setStaffLevel(db: Database, userId: string, targetId: string, level: Level | 5): Promise<void> {
+  const me = await getMe(db, userId);
+  if (!me) throw new ForbiddenError();
+  if (level >= 4 && !me.appOwner) throw new ForbiddenError("レベル4・5に決められるのは、アプリ制作者だけです");
+  const inner = (level >= 4 ? 4 : level) as Level;
+  await assertNotOwnerTarget(db, userId, targetId);
   let n = 0;
   try {
     n = (await asUser(db, userId, (q) =>
-      q.query("update memberships set level = $2 where id = $1 and id <> $3 returning id", [targetId, level, userId]))).rows.length;
+      q.query("update memberships set level = $2 where id = $1 and id <> $3 returning id", [targetId, inner, userId]))).rows.length;
   } catch { throw new ForbiddenError(); }
   if (n === 0) throw new ForbiddenError();
+  await db.query("update memberships set exec_view = $2 where id = $1 and not app_owner", [targetId, level === 4]);
 }
 
 /** 名前・社員番号の変更（管理者のみ。自分自身も可）。ログイン中の端末はそのまま使える */
@@ -1133,6 +1143,7 @@ export async function addStaffBulk(db: Database, userId: string, rows: BulkStaff
     if (!r.name?.trim() || r.name.trim().length > 50) throw new Error(`${at}：名前を確認してください`);
     if (!CODE_PATTERN.test(r.employeeCode ?? "")) throw new Error(`${at}：社員番号は、英数字（20文字まで）にしてください`);
     if (![1, 2, 3, 4].includes(r.level)) throw new Error(`${at}：レベルが正しくありません`);
+    if (r.level === 4 && !r.displayOnly) throw new Error(`${at}：レベル4・5のアカウントは、まとめて登録できません（アプリ制作者が1人ずつ追加します）`);
     if (seen.has(r.employeeCode)) throw new Error(`${at}：社員番号「${r.employeeCode}」が、2回出てきます`);
     seen.add(r.employeeCode);
   }

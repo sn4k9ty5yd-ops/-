@@ -5,7 +5,7 @@ import { setStaffLevel } from "@/lib/service";
 
 export const POST = authed<{ id: string }>(async (userId, req, { id }) => {
   const { level } = (await req.json()) as { level?: number };
-  if (![1, 2, 3, 4].includes(level ?? 0)) throw new Error("レベルが正しくありません");
-  await setStaffLevel(await getDb(), userId, id, level as Level);
+  if (![1, 2, 3, 4, 5].includes(level ?? 0)) throw new Error("レベルが正しくありません");
+  await setStaffLevel(await getDb(), userId, id, level as Level | 5);
   return json({ ok: true });
 }, { write: true });

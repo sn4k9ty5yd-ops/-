@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, useAutoRefresh, useMe } from "@/lib/client";
 import { reiwa } from "@/lib/era";
-import { LEVEL_NAMES, type Level } from "@/lib/permissions";
+import { TIER_NAMES, tierOf, type Level, type Tier } from "@/lib/permissions";
 import { parseStaffPaste } from "@/lib/staff-paste";
 import type { BulkStaffResult } from "@/lib/service";
 import type { StaffRow } from "@/lib/service";
@@ -11,7 +11,6 @@ type Store = { id: string; name: string; status: "active" | "closed" };
 async function copyText(text: string) {
   try { await navigator.clipboard.writeText(text); return true; } catch { const t = document.createElement("textarea"); t.value = text; document.body.appendChild(t); t.select(); const ok = document.execCommand("copy"); t.remove(); return ok; }
 }
-const LEVELS: Level[] = [1, 2, 3, 4];
 const ago = (sec: number | null | undefined) => sec == null ? "" : sec < 90 ? "いま" : sec < 3600 ? `${Math.round(sec / 60)}分前` : sec < 86400 ? `${Math.round(sec / 3600)}時間前` : `${Math.round(sec / 86400)}日前`;
 function PresenceBadge({ s }: { s: StaffRow }) {
   if (!s.presence) return null;
@@ -26,9 +25,10 @@ function PresenceBadge({ s }: { s: StaffRow }) {
 
 export default function StaffPage() {
   const { me } = useMe();
+  const LEVEL_CHOICES: Tier[] = me.appOwner ? [1, 2, 3, 4, 5] : [1, 2, 3];   // レベル4（社長）・5（事務員）に決められるのは、アプリ制作者だけ
   const [staff, setStaff] = useState<StaffRow[]>([]);
   const [stores, setStores] = useState<Store[]>([]);
-  const [form, setForm] = useState({ name: "", employeeCode: "", storeId: me.storeId, level: 1 as Level, displayOnly: false });
+  const [form, setForm] = useState({ name: "", employeeCode: "", storeId: me.storeId, level: 1 as number, displayOnly: false });
   const [msg, setMsg] = useState("");
   // 見ているお店（毎回えらびなおさなくていいように、おぼえておく）。"" = すべて
   const [pickStore, setPickStore] = useState<string>("");
@@ -162,11 +162,11 @@ export default function StaffPage() {
                   番号を空ける
                 </button>
               )}
-              {me.level === 4 && s.status === "active" && s.id !== me.id && !s.displayOnly ? (
-                <select value={s.level} onChange={(e) => run(() => api(`/api/staff/${s.id}/level`, { level: Number(e.target.value) }))}>
-                  {LEVELS.map((l) => <option key={l} value={l}>{LEVEL_NAMES[l]}</option>)}
+              {me.level === 4 && s.status === "active" && s.id !== me.id && !s.displayOnly && !s.appOwner && (tierOf(s) < 4 || me.appOwner) ? (
+                <select value={tierOf(s)} onChange={(e) => run(() => api(`/api/staff/${s.id}/level`, { level: Number(e.target.value) }))}>
+                  {LEVEL_CHOICES.map((l) => <option key={l} value={l}>{TIER_NAMES[l]}</option>)}
                 </select>
-              ) : <span className="chip">{LEVEL_NAMES[s.level]}</span>}
+              ) : <span className="chip">{TIER_NAMES[tierOf(s)]}</span>}
               {s.manageable && s.status === "active" && (
                 <>
                   <button className="ghost" style={{ color: "var(--blue)" }}
@@ -215,8 +215,8 @@ export default function StaffPage() {
           {me.level === 4 && !form.displayOnly && (
             <>
               <label htmlFor="lv">レベル</label>
-              <select id="lv" value={form.level} onChange={(e) => setForm({ ...form, level: Number(e.target.value) as Level })}>
-                {LEVELS.map((l) => <option key={l} value={l}>{LEVEL_NAMES[l]}</option>)}
+              <select id="lv" value={form.level} onChange={(e) => setForm({ ...form, level: Number(e.target.value) })}>
+                {LEVEL_CHOICES.map((l) => <option key={l} value={l}>{TIER_NAMES[l]}</option>)}
               </select>
             </>
           )}
@@ -237,7 +237,7 @@ export default function StaffPage() {
               <div className="scroll" style={{ marginTop: 10, maxHeight: 260, overflow: "auto" }}>
                 <table className="sttable"><thead><tr><th>名前</th><th>社員番号</th><th>お店</th><th>レベル</th><th>確認</th></tr></thead>
                   <tbody>{parsed.rows.map((r) => (
-                    <tr key={r.line} className={r.error ? "empty" : ""}><td>{r.name}</td><td>{r.employeeCode}</td><td>{nameOfStore(r.storeId) || r.storeName}</td><td>{r.displayOnly ? "表示専用" : LEVEL_NAMES[r.level].replace(/^レベル\d /, "")}</td>
+                    <tr key={r.line} className={r.error ? "empty" : ""}><td>{r.name}</td><td>{r.employeeCode}</td><td>{nameOfStore(r.storeId) || r.storeName}</td><td>{r.displayOnly ? "表示専用" : TIER_NAMES[r.level as Tier].replace(/^レベル\d /, "")}</td>
                       <td style={{ color: r.error ? "#d70015" : "#1e7e34" }}>{r.error ?? "OK"}</td></tr>))}</tbody></table>
               </div>
             )}

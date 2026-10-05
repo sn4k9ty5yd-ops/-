@@ -58,3 +58,15 @@ export function can(actor: Actor, perm: string, targetStoreId: string): boolean 
 export function canManageStaff(actor: Actor, target: { level: Level; storeId: string }): boolean {
   return can(actor, "staff.manage", target.storeId) && (actor.level === 4 || target.level < actor.level);
 }
+
+/** 画面で見せるレベル（1〜6）。中の数字は 4 のまま、社長(exec_view)=4・事務員=5・アプリ制作者=6 */
+export type Tier = 1 | 2 | 3 | 4 | 5 | 6;
+export function tierOf(p: { level: number; appOwner?: boolean; execView?: boolean }): Tier {
+  if (p.level < 4) return p.level as Tier;
+  return p.appOwner ? 6 : p.execView ? 4 : 5;
+}
+export const TIER_NAMES: Record<Tier, string> = {
+  1: "レベル1 スタッフ", 2: "レベル2 シフト担当", 3: "レベル3 店長", 4: "レベル4 社長（見るだけ）", 5: "レベル5 事務員", 6: "レベル6 アプリ制作者",
+};
+/** 事務員さん（レベル5）か。レッスンの状況は見られない */
+export const isOfficeOnly = (p: { level: number; appOwner?: boolean; execView?: boolean }) => tierOf(p) === 5;

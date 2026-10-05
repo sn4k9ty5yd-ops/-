@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { api, MeProvider, useMe } from "@/lib/client";
 import { pushState, type PushState } from "@/lib/push-client";
-import { LEVEL_NAMES } from "@/lib/permissions";
+import { isOfficeOnly, TIER_NAMES, tierOf } from "@/lib/permissions";
 import { reiwa } from "@/lib/era";
 import { todayJst } from "@/lib/period-nav";
 import { WEEKDAYS } from "@/lib/labels";
@@ -29,7 +29,7 @@ function Cards() {
     { big: true, href: "/material", title: "材料費・在庫", sub: "発注額・在庫・業務に回した分・スタッフ購入", show: true },
     { href: "/material/summary", title: "材料費統括", sub: "月ごと・お店ごと・商品ごとの割合（管理者・材料担当）", show: me.level === 4 || !!me.materialManager },
     { big: true, href: "/my-lessons", title: "自分のレッスン", sub: "何をしたか・何人目か・かかった時間をカレンダーで見る", show: me.rank === "assistant" },
-    { href: "/lessons", title: "レッスン記録", sub: "アシスタントが今日何をしたかを、ボタンで記録・報告", show: me.level >= 3 || !!me.eduLead },
+    { href: "/lessons", title: "レッスン記録", sub: "アシスタントが今日何をしたかを、ボタンで記録・報告", show: (me.level >= 3 || !!me.eduLead) && !isOfficeOnly(me) },
     { href: "/admin/stocktake", title: "棚卸し", sub: "店販・業務の棚卸し（みんなで数量を入れます）", show: !me.displayOnly },
     { href: "/admin/products", title: "商品一覧", sub: "店販・業務の商品と仕入値", show: me.level >= 3 },
     { href: "/admin/shifts", title: "出勤簿", sub: "日ごと・人ごと・一覧表で入力します", show: false },
@@ -60,7 +60,7 @@ function Cards() {
     <main className="home">
       <p className="eyebrow">{hello}</p>
       <h1 className="hero">{me.name}</h1>
-      <p className="role">{myStore && <b>{myStore}</b>}{myStore && "　·　"}{me.rank && <><b>{me.rank === "stylist" ? "スタイリスト" : "アシスタント"}</b>{"　·　"}</>}{LEVEL_NAMES[me.level]}{me.appOwner ? "・アプリ制作者" : ""}　·　株式会社ALBUM</p>
+      <p className="role">{myStore && <b>{myStore}</b>}{myStore && "　·　"}{me.rank && <><b>{me.rank === "stylist" ? "スタイリスト" : "アシスタント"}</b>{"　·　"}</>}{TIER_NAMES[tierOf(me)]}　·　株式会社ALBUM</p>
       {push && push !== "on" && push !== "unsupported" && !me.displayOnly && (
         <Link href="/notify" className="pushbanner"><span className="ic" style={{ ["--h" as string]: 8 }} aria-hidden>📣</span><span><b>スマホに通知を届けましょう（1分）</b><small>シフトの公開や、毎朝の「今日の出勤メンバー」が届きます。やり方を絵で案内します。</small></span><i>›</i></Link>
       )}

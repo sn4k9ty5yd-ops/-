@@ -208,7 +208,7 @@ describe("レッスンチェック表（採点）", () => {
     for (const n of ["a", "b"]) sid[n] = (await d.query<{ id: string }>("insert into stores (company_id, name) values ($1,$2) returning id", [co, n])).rows[0].id;
     const mk = async (k: string, code: string, level: number, s: string, extra = "") =>
       (u[k] = (await d.query<{ id: string }>("insert into memberships (company_id, store_id, employee_code, name, level) values ($1,$2,$3,$4,$5) returning id", [co, s, code, k, level])).rows[0].id, extra && await d.query(`update memberships set ${extra} where id = $1`, [u[k]]));
-    await mk("office", "1", 4, sid.a); await mk("mgrA", "2", 3, sid.a); await mk("edu", "3", 1, sid.a, "edu_lead = true"); await mk("evalr", "4", 1, sid.a, "can_evaluate = true");
+    await mk("office", "1", 4, sid.a, "app_owner = true"); await mk("mgrA", "2", 3, sid.a); await mk("edu", "3", 1, sid.a, "edu_lead = true"); await mk("evalr", "4", 1, sid.a, "can_evaluate = true");
     await mk("traineeA", "5", 1, sid.a, "rank = 'assistant'"); await mk("plainA", "6", 1, sid.a); await mk("styA", "9", 1, sid.a, "rank = 'stylist'"); await mk("traineeB", "7", 1, sid.b, "rank = 'assistant'"); await mk("mgrB", "8", 3, sid.b);
   });
   it("表を直せるのは、事務員さんと教育担当だけ。店長でも不可", async () => {

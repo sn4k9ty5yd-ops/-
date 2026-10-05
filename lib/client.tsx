@@ -33,7 +33,12 @@ export function MeProvider({ children }: { children: React.ReactNode }) {
   }, [router]);
   useEffect(() => { if (me?.mustChangePasscode && pathname !== "/security") router.replace("/security"); }, [me, pathname, router]);   // 最初に、パスコードを変えてもらう
   if (!me) return null;
-  return <MeCtx.Provider value={{ me, logout }}>{children}</MeCtx.Provider>;
+  return (
+    <MeCtx.Provider value={{ me, logout }}>
+      {me.execView && <div className="noprint" style={{ background: "#fff4d6", color: "#7a5300", padding: "6px 12px", fontSize: 13, textAlign: "center" }}>👁 見るだけのアカウントです（変更はできません）</div>}
+      {children}
+    </MeCtx.Provider>
+  );
 }
 
 /** 開いている間、30秒ごと・画面に戻ったときに最新のデータを読み込み直す（他の人の変更が自動で反映される） */

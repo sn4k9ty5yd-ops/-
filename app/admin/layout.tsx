@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { MeProvider, useMe } from "@/lib/client";
-import { LEVEL_NAMES } from "@/lib/permissions";
+import { TIER_NAMES, tierOf } from "@/lib/permissions";
 import { SubTabs } from "@/app/SubTabs";
 import { shiftTabs } from "@/lib/shift-tabs";
 
@@ -34,7 +34,7 @@ function Shell({ children }: { children: React.ReactNode }) {
   return (
     <div className="shell">
       <header className="demo">
-        <span><b>株式会社ALBUM</b>　{me.name}（{LEVEL_NAMES[me.level]}{me.appOwner ? "・アプリ制作者" : ""}）</span>
+        <span><b>株式会社ALBUM</b>　{me.name}（{TIER_NAMES[tierOf(me)]}）</span>
         <span className="actions">
           {me.level === 4 && <Link href="/admin/stores" className="storelink">⚙ 店舗の編集</Link>}
           <button className="ghost" style={{ color: "var(--ink)" }} onClick={logout}>ログアウト</button>
