@@ -1,0 +1,58 @@
+/** AI（文章をつくる機能）の呼び出し。料金がかからない枠のあるサービスをつかう。カギ（キー）は、サーバーの設定に入れる（画面・記録には出さない）。
+ *  GEMINI_API_KEY（Google・無料枠あり）か ANTHROPIC_API_KEY（Claude・有料）のどちらかがあれば使える。 */
+export interface AiStatus { available: boolean; provider: "gemini" | "anthropic" | null }
+
+export function aiStatus(env: Record<string, string | undefined> = process.env): AiStatus {
+  if (env.GEMINI_API_KEY) return { available: true, provider: "gemini" };
+  if (env.ANTHROPIC_API_KEY) return { available: true, provider: "anthropic" };
+  return { available: false, provider: null };
+}
+
+export class AiUnavailableError extends Error {
+  constructor() { super("AIの準備がまだです（管理者がカギを設定すると使えます）。いまは「プロンプトをコピー」で、ほかのAIに貼って使えます"); }
+}
+
+type Fetch = typeof fetch;
+
+export async function callAi(prompt: string, opts: { env?: Record<string, string | undefined>; fetchFn?: Fetch; timeoutMs?: number } = {}): Promise<string> {
+  const env = opts.env ?? process.env;
+  const f = opts.fetchFn ?? fetch;
+  const st = aiStatus(env);
+  if (!st.available) throw new AiUnavailableError();
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), opts.timeoutMs ?? 120000);
+  try {
+    if (st.provider === "gemini") {
+      const model = env.AI_MODEL || "gemini-2.0-flash";
+      const res = await f(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+        method: "POST", signal: ctl.signal,
+        headers: { "content-type": "application/json", "x-goog-api-key": env.GEMINI_API_KEY! },
+        body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: prompt }] }], generationConfig: { temperature: 0.7, maxOutputTokens: 8192 } }),
+      });
+      if (!res.ok) throw new Error(aiHttpMessage(res.status));
+      const j = (await res.json()) as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
+      const text = (j.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? "").join("").trim();
+      if (!text) throw new Error("AIから、答えが返ってきませんでした。もう一度ためしてください");
+      return text;
+    }
+    const res = await f("https://api.anthropic.com/v1/messages", {
+      method: "POST", signal: ctl.signal,
+      headers: { "content-type": "application/json", "x-api-key": env.ANTHROPIC_API_KEY!, "anthropic-version": "2023-06-01" },
+      body: JSON.stringify({ model: env.AI_MODEL || "claude-haiku-4-5-20251001", max_tokens: 8192, messages: [{ role: "user", content: prompt }] }),
+    });
+    if (!res.ok) throw new Error(aiHttpMessage(res.status));
+    const j = (await res.json()) as { content?: { type: string; text?: string }[] };
+    const text = (j.content ?? []).filter((c) => c.type === "text").map((c) => c.text ?? "").join("").trim();
+    if (!text) throw new Error("AIから、答えが返ってきませんでした。もう一度ためしてください");
+    return text;
+  } catch (e) {
+    if ((e as Error).name === "AbortError") throw new Error("AIの返事に時間がかかりすぎました。もう一度ためしてください");
+    throw e;
+  } finally { clearTimeout(timer); }
+}
+
+function aiHttpMessage(status: number): string {
+  if (status === 429) return "AIの無料の利用回数を、いったん使いきりました。しばらくしてから、もう一度ためしてください";
+  if (status === 401 || status === 403) return "AIのカギが正しくないようです（管理者に伝えてください）";
+  return `AIがうまく動きませんでした（${status}）。しばらくしてから、もう一度ためしてください`;
+}

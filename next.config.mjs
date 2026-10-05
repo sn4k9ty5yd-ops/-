@@ -12,7 +12,7 @@ export default {
         { key: "X-Content-Type-Options", value: "nosniff" },
         { key: "Referrer-Policy", value: "same-origin" },
         { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains" },
-        { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), payment=(), usb=()" },
+        { key: "Permissions-Policy", value: "camera=(), microphone=(self), geolocation=(), payment=(), usb=()" },
         { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
         // 読みこめる場所を、自分のサイト・YouTube（マニュアルの動画）・文字読み取り（OCR）の部品に限る
         { key: "Content-Security-Policy", value: [

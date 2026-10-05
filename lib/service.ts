@@ -1,3 +1,5 @@
+import { callAi } from "./ai";
+import { discussionPrompt, minutesPrompt, mindmapPrompt, parseMindmap, summaryPrompt, themePrompt } from "./meeting-prompts";
 import { createHash } from "node:crypto";
 import { issuePasscode } from "./auth/login";
 import { generatePasscode, hashPasscode } from "./auth/passcode";
@@ -2655,4 +2657,126 @@ export async function moveStaff(db: Database, userId: string, targetId: string, 
   await assertNotOwnerTarget(db, userId, targetId);
   await asUser(db, userId, (q) => q.query("update memberships set store_id = $2 where id = $1", [targetId, storeId]));
   await db.query("insert into audit_logs (company_id, actor_id, action, target_id, detail) values ($1,$2,'staff.move',$3,$4::jsonb)", [me.companyId, userId, targetId, JSON.stringify({ from: t.store_id, to: storeId })]);
+}
+
+// ---------------------------------------------------------------- ミーティング（議事録・AI）
+export interface MeetingRow { id: string; storeId: string; title: string; heldOn: string; attendees: string; transcript: string; minutes: string; summary: string; mindmap: string; createdBy: string | null; byName: string | null; updatedAt: string }
+export interface MeetingAiRow { id: string; meetingId: string | null; theme: string; result: string; byName: string | null; createdAt: string }
+const MEETING_COLS = `m.id, m.store_id as "storeId", m.title, m.held_on::text as "heldOn", m.attendees, m.transcript, m.minutes, m.summary, m.mindmap, m.created_by as "createdBy", u.name as "byName", m.updated_at::text as "updatedAt"`;
+
+export async function listMeetings(db: Database, userId: string, storeId: string): Promise<Omit<MeetingRow, "transcript" | "minutes" | "mindmap">[]> {
+  const me = await getMe(db, userId);
+  if (!me || me.displayOnly) throw new ForbiddenError();
+  return (await asUser(db, userId, (q) => q.query<MeetingRow>(
+    `select ${MEETING_COLS} from meetings m left join memberships u on u.id = m.created_by where m.store_id = $1 order by m.held_on desc, m.created_at desc limit 200`, [storeId]))).rows
+    .map(({ transcript: _t, minutes: _m, mindmap: _k, ...r }) => r);
+}
+
+export async function getMeeting(db: Database, userId: string, id: string): Promise<{ meeting: MeetingRow; ai: MeetingAiRow[]; canEdit: boolean } | null> {
+  const me = await getMe(db, userId);
+  if (!me || me.displayOnly) throw new ForbiddenError();
+  return asUser(db, userId, async (q) => {
+    const m = (await q.query<MeetingRow>(`select ${MEETING_COLS} from meetings m left join memberships u on u.id = m.created_by where m.id = $1`, [id])).rows[0];
+    if (!m) return null;
+    const ai = (await q.query<MeetingAiRow>(`select a.id, a.meeting_id as "meetingId", a.theme, a.result, u.name as "byName", a.created_at::text as "createdAt" from meeting_ai a left join memberships u on u.id = a.created_by where a.meeting_id = $1 order by a.created_at desc`, [id])).rows;
+    const canEdit = (await q.query<{ v: boolean }>("select app.meeting_edit($1) as v", [m.storeId])).rows[0].v;
+    return { meeting: m, ai, canEdit };
+  });
+}
+
+export async function createMeeting(db: Database, userId: string, input: { storeId: string; title: string; heldOn: string; attendees?: string }): Promise<string> {
+  const me = await getMe(db, userId);
+  if (!me) throw new ForbiddenError();
+  const title = input.title.trim();
+  if (!title || title.length > 100) throw new Error("会議の名前を入れてください（100文字まで）");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.heldOn)) throw new Error("日付が正しくありません");
+  try {
+    return (await asUser(db, userId, (q) => q.query<{ id: string }>(
+      "insert into meetings (company_id, store_id, title, held_on, attendees, created_by) values ($1,$2,$3,$4,$5,$6) returning id",
+      [me.companyId, input.storeId, title, input.heldOn, (input.attendees ?? "").trim().slice(0, 500), userId]))).rows[0].id;
+  } catch { throw new ForbiddenError(); }
+}
+
+const MEETING_FIELDS = { title: "title", heldOn: "held_on", attendees: "attendees", transcript: "transcript", minutes: "minutes", summary: "summary", mindmap: "mindmap" } as const;
+export async function updateMeeting(db: Database, userId: string, id: string, patch: Partial<Record<keyof typeof MEETING_FIELDS, string>>): Promise<void> {
+  const sets: string[] = []; const vals: unknown[] = [id];
+  for (const [k, col] of Object.entries(MEETING_FIELDS)) {
+    const v = patch[k as keyof typeof MEETING_FIELDS];
+    if (v === undefined) continue;
+    if (typeof v !== "string") throw new Error("内容が正しくありません");
+    if (k === "title" && (!v.trim() || v.length > 100)) throw new Error("会議の名前を入れてください（100文字まで）");
+    if (k === "heldOn" && !/^\d{4}-\d{2}-\d{2}$/.test(v)) throw new Error("日付が正しくありません");
+    if (v.length > 200000) throw new Error("文字が多すぎます");
+    vals.push(v); sets.push(`${col} = $${vals.length}`);
+  }
+  if (sets.length === 0) return;
+  const n = (await asUser(db, userId, (q) => q.query(`update meetings set ${sets.join(", ")}, updated_at = now() where id = $1 returning id`, vals))).rows.length;
+  if (n === 0) throw new ForbiddenError();
+}
+
+export async function deleteMeeting(db: Database, userId: string, id: string): Promise<void> {
+  try { await asUser(db, userId, (q) => q.query("select public.meeting_delete($1)", [id])); } catch { throw new ForbiddenError(); }
+}
+
+/** 自分のAIの使いすぎを止める（無料の枠を守る）。1時間に30回まで */
+const aiUse = new Map<string, number[]>();
+function aiThrottle(userId: string) {
+  const now = Date.now(); const list = (aiUse.get(userId) ?? []).filter((t) => now - t < 3600000);
+  if (list.length >= 30) throw new Error("AIを、短い時間に使いすぎです。しばらくしてから、もう一度ためしてください");
+  list.push(now); aiUse.set(userId, list);
+}
+
+export type MeetingAiAction = "minutes" | "summary" | "mindmap" | "theme" | "discussion";
+/** AIで、議事録・要約・マインドマップをつくる／課題（テーマ）を取り出す／AI会議をひらく。作ったものは、会議に保存する（書ける人だけ）。 */
+export async function runMeetingAi(db: Database, userId: string, input: { id: string; action: MeetingAiAction; theme?: string }, aiFn: (prompt: string) => Promise<string> = (p) => callAi(p)): Promise<{ text: string }> {
+  const g = await getMeeting(db, userId, input.id);
+  if (!g) throw new ForbiddenError();
+  if (!g.canEdit) throw new ForbiddenError("会議を直せるのは、店長と事務員さんです");
+  const m = g.meeting;
+  const source = (m.minutes.trim() || m.transcript.trim());
+  aiThrottle(userId);
+  const me = (await getMe(db, userId))!;
+  switch (input.action) {
+    case "minutes": {
+      if (!m.transcript.trim()) throw new Error("先に、文字起こしを入れてください");
+      const text = await aiFn(minutesPrompt(m.transcript, m.title, m.heldOn, m.attendees));
+      await updateMeeting(db, userId, m.id, { minutes: text }); return { text };
+    }
+    case "summary": {
+      if (!source) throw new Error("先に、文字起こしか議事録を入れてください");
+      const text = await aiFn(summaryPrompt(source));
+      await updateMeeting(db, userId, m.id, { summary: text }); return { text };
+    }
+    case "mindmap": {
+      if (!source) throw new Error("先に、文字起こしか議事録を入れてください");
+      const raw = await aiFn(mindmapPrompt(source));
+      const tree = parseMindmap(raw);
+      if (!tree) throw new Error("マインドマップをうまく作れませんでした。もう一度ためしてください");
+      const text = JSON.stringify(tree);
+      await updateMeeting(db, userId, m.id, { mindmap: text }); return { text };
+    }
+    case "theme": {
+      const base = (m.summary.trim() || source);
+      if (!base) throw new Error("先に、文字起こしか議事録を入れてください");
+      return { text: (await aiFn(themePrompt(base))).split("\n")[0].replace(/^[「『"'\s]+|[」』"'\s]+$/g, "").slice(0, 100) };
+    }
+    case "discussion": {
+      const theme = (input.theme ?? "").trim();
+      if (!theme || theme.length > 200) throw new Error("テーマを入れてください（200文字まで）");
+      const text = await aiFn(discussionPrompt(theme));
+      await asUser(db, userId, (q) => q.query("insert into meeting_ai (company_id, store_id, meeting_id, theme, result, created_by) values ($1,$2,$3,$4,$5,$6)", [me.companyId, m.storeId, m.id, theme, text, userId]));
+      return { text };
+    }
+  }
+}
+
+/** AIがまだ使えないとき、ほかのAIで作った会議の結果を貼りつけて残す */
+export async function saveMeetingAiResult(db: Database, userId: string, input: { id: string; theme: string; result: string }): Promise<void> {
+  const g = await getMeeting(db, userId, input.id);
+  if (!g || !g.canEdit) throw new ForbiddenError();
+  const theme = input.theme.trim(), result = input.result.trim();
+  if (!theme || !result) throw new Error("テーマと結果を入れてください");
+  if (result.length > 100000) throw new Error("文字が多すぎます");
+  const me = (await getMe(db, userId))!;
+  await asUser(db, userId, (q) => q.query("insert into meeting_ai (company_id, store_id, meeting_id, theme, result, created_by) values ($1,$2,$3,$4,$5,$6)", [me.companyId, g.meeting.storeId, input.id, theme.slice(0, 200), result, userId]));
 }
