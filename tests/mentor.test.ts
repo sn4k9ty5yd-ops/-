@@ -16,7 +16,8 @@ describe("メンターの指示文", () => {
     expect(p).toContain("ちょっと口が悪いけど、結局いちばん味方してくれる親友");
     expect(p).toContain("【この人のMBTI】ENFP");
     expect(p).toContain("話しながら考えるタイプ");
-    expect(p).toContain("よりそいホットライン");
+    expect(p).not.toContain("ホットライン");
+    expect(p).toContain("信頼できる人");
     expect(mentorSystemPrompt(null, "")).toContain("未入力");
     expect(MENTOR_OPENER).toBe("やっと呼んだか。で、今日は何やらかした？");
   });
@@ -105,5 +106,63 @@ describe("メンターの会話は本人だけ。面談シートは、書いた�
     await svc.reviewInterview(d, u.mgrA, iv, "よく聞けています");
     expect((await svc.listInterviews(d, u.mgrA)).rows[0]).toMatchObject({ status: "reviewed", reviewComment: "よく聞けています" });
     expect((await svc.listNotifications(d, u.mentor)).items.some((n) => n.title.includes("店長が確認"))).toBe(true);
+  });
+});
+
+describe("面談シートの編集・削除", () => {
+  let d: Database; const u: Record<string, string> = {}; const sid: Record<string, string> = {};
+  beforeAll(async () => {
+    d = await newDb(); await migrate(d);
+    const co = (await d.query<{ id: string }>("insert into companies (code, name) values ('iv-co','I') returning id")).rows[0].id;
+    for (const n of ["a", "b"]) sid[n] = (await d.query<{ id: string }>("insert into stores (company_id, name) values ($1,$2) returning id", [co, n])).rows[0].id;
+    const mk = async (k: string, code: string, level: number, s: string) => (u[k] = (await d.query<{ id: string }>("insert into memberships (company_id, store_id, employee_code, name, level) values ($1,$2,$3,$4,$5) returning id", [co, s, code, k, level])).rows[0].id);
+    await mk("mgr", "1", 3, sid.a); await mk("mentor", "2", 1, sid.a); await mk("kid1", "3", 1, sid.a); await mk("kid2", "4", 1, sid.a); await mk("far", "5", 1, sid.b);
+  });
+  it("まちがえた下書きは、受けた人・種類・日付を直せる。他店の人には直せない", async () => {
+    const id = await svc.createInterview(d, u.mentor, { menteeId: u.kid1, template: "apr", heldOn: "2026-10-05" });
+    await svc.saveInterview(d, u.mentor, id, { menteeId: u.kid2, template: "oct", heldOn: "2026-10-06" });
+    expect((await svc.listInterviews(d, u.mentor)).rows[0]).toMatchObject({ menteeId: u.kid2, template: "oct", heldOn: "2026-10-06" });
+    await expect(svc.saveInterview(d, u.mentor, id, { menteeId: u.far })).rejects.toThrow();
+    await expect(svc.saveInterview(d, u.kid1, id, { template: "feb" })).rejects.toThrow(svc.ForbiddenError);
+  });
+  it("提出ずみは、取り下げて直せる。確認ずみは動かせない。消せるのは書いた人だけ", async () => {
+    const id = await svc.createInterview(d, u.mentor, { menteeId: u.kid1, template: "jun", heldOn: "2026-10-05" });
+    await svc.submitInterview(d, u.mentor, id);
+    await expect(svc.deleteInterview(d, u.mgr, id)).rejects.toThrow(svc.ForbiddenError);       // 店長でも、消せない
+    await expect(svc.reopenInterview(d, u.mgr, id)).rejects.toThrow(svc.ForbiddenError);
+    await svc.reopenInterview(d, u.mentor, id);
+    await svc.saveInterview(d, u.mentor, id, { memo: "直した" });
+    await svc.submitInterview(d, u.mentor, id);
+    await svc.reviewInterview(d, u.mgr, id, "OK");
+    await expect(svc.deleteInterview(d, u.mentor, id)).rejects.toThrow(svc.ForbiddenError);     // 確認ずみは消せない
+    await expect(svc.reopenInterview(d, u.mentor, id)).rejects.toThrow(svc.ForbiddenError);
+  });
+  it("下書きは、書いた人が消せる", async () => {
+    const id = await svc.createInterview(d, u.mentor, { menteeId: u.kid1, template: "feb", heldOn: "2026-10-05" });
+    const before = (await svc.listInterviews(d, u.mentor)).rows.length;
+    await svc.deleteInterview(d, u.mentor, id);
+    expect((await svc.listInterviews(d, u.mentor)).rows).toHaveLength(before - 1);
+  });
+});
+
+describe("みんなのMBTI（スタイリストだけ）", () => {
+  let d: Database; const u: Record<string, string> = {};
+  beforeAll(async () => {
+    d = await newDb(); await migrate(d);
+    const co = (await d.query<{ id: string }>("insert into companies (code, name) values ('mb-co','M') returning id")).rows[0].id;
+    const a = (await d.query<{ id: string }>("insert into stores (company_id, name) values ($1,'A') returning id", [co])).rows[0].id;
+    const b = (await d.query<{ id: string }>("insert into stores (company_id, name) values ($1,'B') returning id", [co])).rows[0].id;
+    const mk = async (k: string, code: string, level: number, s: string, extra = "") => { u[k] = (await d.query<{ id: string }>("insert into memberships (company_id, store_id, employee_code, name, level) values ($1,$2,$3,$4,$5) returning id", [co, s, code, k, level])).rows[0].id; if (extra) await d.query(`update memberships set ${extra} where id = $1`, [u[k]]); };
+    await mk("styA", "1", 1, a, "rank = 'stylist'"); await mk("styB", "2", 1, b, "rank = 'stylist'"); await mk("kid", "3", 1, a, "rank = 'assistant'"); await mk("mgr", "4", 3, a);
+    await svc.setMentorMbti(d, u.kid, "ENFP"); await svc.setMentorMbti(d, u.styB, "ISTJ");
+  });
+  it("スタイリストは、お店がちがう人のMBTIも見られる。会話は見えない", async () => {
+    const r = await svc.listMbtiDirectory(d, u.styA);
+    expect(r.map((x) => [x.name, x.mbti]).sort()).toEqual([["kid", "ENFP"], ["styB", "ISTJ"]]);
+    expect((await svc.getMentor(d, u.styA)).messages).toHaveLength(0);
+  });
+  it("スタイリスト以外（アシスタント・店長）は見られない", async () => {
+    await expect(svc.listMbtiDirectory(d, u.kid)).rejects.toThrow(svc.ForbiddenError);
+    await expect(svc.listMbtiDirectory(d, u.mgr)).rejects.toThrow(svc.ForbiddenError);
   });
 });

@@ -2915,8 +2915,13 @@ export async function createInterview(db: Database, userId: string, input: { men
   } catch { throw new ForbiddenError(); }
 }
 
-export async function saveInterview(db: Database, userId: string, id: string, patch: { answers?: Record<string, string>; memo?: string; heldOn?: string }): Promise<void> {
+export async function saveInterview(db: Database, userId: string, id: string, patch: { answers?: Record<string, string>; memo?: string; heldOn?: string; menteeId?: string; template?: string }): Promise<void> {
   const sets: string[] = []; const vals: unknown[] = [id];
+  if (patch.template) { if (!findTemplate(patch.template)) throw new Error("面談の種類が正しくありません"); vals.push(patch.template); sets.push(`template = $${vals.length}`); }
+  if (patch.menteeId) {
+    if (!(await listInterviewMentees(db, userId)).some((m) => m.id === patch.menteeId)) throw new Error("面談を受けた人は、自分のお店のスタッフから選んでください");
+    vals.push(patch.menteeId); sets.push(`mentee_id = $${vals.length}`);
+  }
   if (patch.answers) {
     const clean: Record<string, string> = {};
     for (const [k, v] of Object.entries(patch.answers)) if (typeof v === "string" && v.trim()) clean[k.slice(0, 300)] = v.slice(0, 5000);
@@ -2948,4 +2953,20 @@ export async function reviewInterview(db: Database, userId: string, id: string, 
   try { await asUser(db, userId, (q) => q.query("select public.interview_review($1, $2)", [id, comment])); } catch { throw new ForbiddenError("確認できるのは、そのお店の店長だけです"); }
   const a = (await db.query<{ author_id: string; mentee: string }>("select i.author_id, m.name as mentee from interviews i join memberships m on m.id = i.mentee_id where i.id = $1", [id])).rows[0];
   if (a && a.author_id !== userId) await db.query("insert into notifications (company_id, user_id, kind, title, body, link) values ($1,$2,'interview',$3,$4,'/interviews')", [me.companyId, a.author_id, `${a.mentee}さんの面談シートを、店長が確認しました`, comment ? comment.slice(0, 80) : ""]);
+}
+
+/** まちがえた面談シートを消す（書いた人だけ。店長が確認ずみのものは消せない） */
+export async function deleteInterview(db: Database, userId: string, id: string): Promise<void> {
+  try { await asUser(db, userId, (q) => q.query("select public.interview_delete($1)", [id])); } catch { throw new ForbiddenError("消せません（あなたが書いたものではないか、店長が確認ずみです）"); }
+}
+/** 提出を取り下げて、直せる状態にもどす（書いた人だけ。店長が確認する前まで） */
+export async function reopenInterview(db: Database, userId: string, id: string): Promise<void> {
+  try { await asUser(db, userId, (q) => q.query("select public.interview_reopen($1)", [id])); } catch { throw new ForbiddenError("取り下げられません（提出前か、店長が確認ずみです）"); }
+}
+
+/** みんなのMBTI（スタイリストだけが見られる。名前・お店・MBTIだけ） */
+export async function listMbtiDirectory(db: Database, userId: string): Promise<{ name: string; storeName: string; mbti: string }[]> {
+  const me = await getMe(db, userId);
+  if (!me || me.displayOnly || me.rank !== "stylist") throw new ForbiddenError("みんなのMBTIは、スタイリストが見られます");
+  return (await asUser(db, userId, (q) => q.query<{ name: string; storeName: string; mbti: string }>("select name, store_name as \"storeName\", mbti from public.mbti_directory()"))).rows;
 }

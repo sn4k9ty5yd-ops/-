@@ -32,14 +32,26 @@ function Page() {
     <li style={{ cursor: "pointer" }} onClick={() => setOpen(r.id)}>
       <div><b>{r.menteeName}</b>さん　<span className="sub">{findTemplate(r.template)?.label}　{reiwa(r.heldOn)}</span>
         {!r.mine && <div className="sub">書いた人：{r.authorName}</div>}</div>
-      <span className="chip">{STATUS[r.status]}</span>
+      <span style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
+        <span className="chip">{STATUS[r.status]}</span>
+        {r.mine && r.status !== "reviewed" && (
+          <>
+            <button className="ghost" onClick={(e) => { e.stopPropagation(); setOpen(r.id); }}>編集</button>
+            <button className="ghost" style={{ color: "#c00" }} onClick={async (e) => {
+              e.stopPropagation();
+              if (!confirm(`${r.menteeName}さんの ${findTemplate(r.template)?.label} を削除しますか？（もとには戻せません）`)) return;
+              try { await api("/api/interviews", { action: "delete", id: r.id }); await load(); } catch (er) { setMsg((er as Error).message); }
+            }}>削除</button>
+          </>
+        )}
+      </span>
     </li>
   );
   return (
     <main className="wide">
       <Link href="/home" className="back">← ホーム</Link>
       <h1>メンター</h1>
-      <SubTabs items={mentorTabs(me.displayOnly)} />
+      <SubTabs items={mentorTabs(me.displayOnly, me.rank)} />
       <p className="sub">メンター面談の記録です。面談したあとに書いて、店長に提出します。</p>
       {msg && <p className="err">{msg}</p>}
       {!form && <button onClick={async () => { setMentees(await api("/api/interviews?mentees=1")); setForm({ menteeId: "", template: "oct", heldOn: todayJst() }); }}>＋ 面談シートを書く</button>}
@@ -73,12 +85,16 @@ function Page() {
 }
 
 function Sheet({ row, isManager, onBack }: { row: InterviewRow; isManager: boolean; onBack: () => void }) {
-  const t = findTemplate(row.template);
   const editable = row.mine && row.status === "draft";
   const [answers, setAnswers] = useState<Record<string, string>>(row.answers ?? {});
   const [memo, setMemo] = useState(row.memo);
   const [comment, setComment] = useState(row.reviewComment);
   const [saved, setSaved] = useState(""); const [msg, setMsg] = useState("");
+  const [head, setHead] = useState({ menteeId: row.menteeId, template: row.template, heldOn: row.heldOn });
+  const [mentees, setMentees] = useState<{ id: string; name: string }[]>([]);
+  useEffect(() => { if (row.mine && row.status === "draft") api<{ id: string; name: string }[]>("/api/interviews?mentees=1").then(setMentees).catch(() => {}); }, [row.mine, row.status]);
+  const saveHead = async (h: typeof head) => { setHead(h); try { await api("/api/interviews", { action: "save", id: row.id, menteeId: h.menteeId, template: h.template, heldOn: h.heldOn }); setSaved("保存しました"); setMsg(""); } catch (e) { setMsg((e as Error).message); } };
+  const t = findTemplate(head.template);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const save = useCallback(async (a: Record<string, string>, m: string) => {
     try { await api("/api/interviews", { action: "save", id: row.id, answers: a, memo: m }); setSaved("保存しました"); } catch (e) { setMsg((e as Error).message); }
@@ -89,8 +105,18 @@ function Sheet({ row, isManager, onBack }: { row: InterviewRow; isManager: boole
   return (
     <main className="wide">
       <button className="ghost noprint" onClick={onBack}>← 面談シートの一覧</button>
-      <h1 style={{ marginBottom: 2 }}>{row.menteeName}さん　{t?.label}</h1>
+      <h1 style={{ marginBottom: 2 }}>{(mentees.find((m) => m.id === head.menteeId)?.name ?? row.menteeName)}さん　{t?.label}</h1>
       <p className="sub" style={{ margin: 0 }}>{reiwa(row.heldOn)}　書いた人：{row.authorName}　<span className="chip">{STATUS[row.status]}</span>　{saved}</p>
+      {editable && (
+        <div className="card" style={{ margin: "8px 0" }}>
+          <b>面談の情報（まちがえたときは、ここで直せます）</b>
+          <label>面談を受けた人<select value={head.menteeId} onChange={(e) => saveHead({ ...head, menteeId: e.target.value })}>
+            {!mentees.some((m) => m.id === head.menteeId) && <option value={head.menteeId}>{row.menteeName}</option>}
+            {mentees.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}</select></label>
+          <label>面談の種類<select value={head.template} onChange={(e) => saveHead({ ...head, template: e.target.value })}>{INTERVIEW_TEMPLATES.map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}</select></label>
+          <label>日付<input type="date" value={head.heldOn} onChange={(e) => saveHead({ ...head, heldOn: e.target.value })} /></label>
+        </div>
+      )}
       {t && <p className="sub">{t.hint}</p>}
       {msg && <p className="err">{msg}</p>}
       {(t?.questions ?? []).map((q) => (
@@ -113,6 +139,14 @@ function Sheet({ row, isManager, onBack }: { row: InterviewRow; isManager: boole
               alert(r.notified > 0 ? "店長に提出しました" : "提出しました（このお店に店長が登録されていないため、お知らせは届いていません）"); onBack(); } catch (e) { setMsg((e as Error).message); }
           }}>店長に提出する</button>
         </div>
+      )}
+      {row.mine && row.status === "submitted" && (
+        <div className="toolbar">
+          <button onClick={async () => { if (!confirm("提出を取り下げて、直せるようにしますか？（直したら、もう一度提出してください）")) return; try { await api("/api/interviews", { action: "reopen", id: row.id }); onBack(); } catch (e) { setMsg((e as Error).message); } }}>取り下げて、直す</button>
+        </div>
+      )}
+      {row.mine && row.status !== "reviewed" && (
+        <div className="toolbar"><button className="ghost" style={{ color: "#c00" }} onClick={async () => { if (!confirm("この面談シートを削除しますか？（もとには戻せません）")) return; try { await api("/api/interviews", { action: "delete", id: row.id }); onBack(); } catch (e) { setMsg((e as Error).message); } }}>この面談シートを削除</button></div>
       )}
       {!editable && row.status === "reviewed" && row.reviewComment && <div className="card"><b>店長のコメント</b><div style={{ whiteSpace: "pre-wrap" }}>{row.reviewComment}</div></div>}
       {isManager && !row.mine && row.status !== "draft" && (

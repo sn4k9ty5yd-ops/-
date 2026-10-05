@@ -27,6 +27,7 @@ function Page() {
 
   const send = async () => {
     const t = text.trim(); if (!t || !sid || busy) return;
+    if (!st?.aiAvailable) { setMsg("メンター（AI）は、いま準備中で、まだ返事ができません。準備ができたら、話せるようになります。"); return; }
     setBusy(true); setPending(t); setText(""); setMsg("");
     try { await api("/api/mentor", { action: "send", sessionId: sid, text: t }); await load(sid); } catch (e) { setMsg((e as Error).message); setText(t); }
     setPending(null); setBusy(false);
@@ -43,7 +44,7 @@ function Page() {
     <main className="wide">
       <Link href="/home" className="back">← ホーム</Link>
       <h1>メンター</h1>
-      <SubTabs items={mentorTabs(me.displayOnly)} />
+      <SubTabs items={mentorTabs(me.displayOnly, me.rank)} />
 
       <div className="card" style={{ marginBottom: 10 }}>
         <label style={{ margin: 0 }}><b>あなたのMBTI</b>（最初に入れてね。その人に合わせて話します）
@@ -53,6 +54,7 @@ function Page() {
           </select>
         </label>
         {!st.mbti && <p className="sub" style={{ margin: "6px 0 0" }}>わからないときは、「16Personalities」などの無料の診断で調べられます。</p>}
+        <p className="sub" style={{ margin: "6px 0 0" }}>※ 入れたMBTIは、スタイリストのみんなが見られます（会話の内容は、見えません）。</p>
       </div>
 
       <div className="toolbar">
@@ -80,9 +82,8 @@ function Page() {
       <div style={{ position: "sticky", bottom: 8, background: "var(--card, #fff)", border: "1px solid var(--line, #e5e5e5)", borderRadius: 18, padding: 8, display: "flex", gap: 8, alignItems: "flex-end", boxShadow: "0 4px 18px rgba(0,0,0,.12)" }}>
         <textarea rows={2} value={text} placeholder="なんでも話してみて" style={{ flex: 1, margin: 0, border: "none", resize: "none" }} onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); send(); } }} />
-        <button disabled={busy || !text.trim() || !st.aiAvailable} onClick={send} style={{ width: "auto", margin: 0 }}>送る</button>
+        <button disabled={busy || !text.trim()} onClick={send} style={{ width: "auto", margin: 0 }}>送る</button>
       </div>
-      <p className="sub" style={{ marginTop: 10 }}>つらいときは、ひとりで抱えないでね。よりそいホットライン 0120-279-338（24時間・無料）</p>
     </main>
   );
 }
