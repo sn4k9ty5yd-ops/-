@@ -2862,7 +2862,7 @@ export async function setMentorMbti(db: Database, userId: string, mbti: string |
 }
 
 /** メンター（Monday）に話しかける。返事は、AIがつくる。会話は、本人の分として保存される */
-export async function sendMentorMessage(db: Database, userId: string, input: { sessionId: string; text: string }, aiFn: (system: string, turns: ChatTurn[]) => Promise<string> = (s, t) => callAiChat(s, t, { maxTokens: 1024 })): Promise<{ reply: string }> {
+export async function sendMentorMessage(db: Database, userId: string, input: { sessionId: string; text: string }, aiFn: (system: string, turns: ChatTurn[]) => Promise<string> = (s, t) => callAiChat(s, t, { maxTokens: 400 })): Promise<{ reply: string }> {
   await loadAiKey(db);
   const me = await getMe(db, userId);
   if (!me || me.displayOnly) throw new ForbiddenError();
