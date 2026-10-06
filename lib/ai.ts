@@ -105,7 +105,11 @@ export async function callAiChat(system: string, turns: ChatTurn[], opts: { env?
       let res = await tryModel(model);
       // モデルの名前が古くて見つからない（404）ときは、いま使えるモデルを調べて、いちばん新しい「flash」に切りかえる（AI_MODEL を決めているときは、そのまま）
       if (res.status === 404 && !env.AI_MODEL) {
-        const nm = await discoverGeminiModel(f, key, ctl.signal, tier);
+        // 一覧が取れないときは、Googleの返事の「このモデルを使ってください」の名前を使う
+        let hint: string | null = null;
+        try { const t = ((await res.clone().json()) as { error?: { message?: string } }).error?.message ?? ""; hint = /use\s+models\/(gemini-[0-9A-Za-z.\-]+?)(?=\s|\.\s|,|$)/.exec(t)?.[1]?.replace(/\.$/, "") ?? null; } catch { /* 読めなくてもよい */ }
+        if (hint && !new RegExp(`-${tier}$`).test(hint)) hint = null;
+        const nm = (await discoverGeminiModel(f, key, ctl.signal, tier)) ?? hint;
         if (nm && nm !== model) { found[tier] = nm; model = nm; first = null; res = await tryModel(model); }
       }
       if (!res.ok) { const e = await httpError(res, key); if (first) { const e1 = await httpError(first, key); e.detail = `入口1（${(first as Response).status}）${e1.detail} ／ 入口2（${res.status}）${e.detail}`.slice(0, 500); } e.detail = `モデル：${model} ／ ${e.detail}`.slice(0, 600); throw e; }

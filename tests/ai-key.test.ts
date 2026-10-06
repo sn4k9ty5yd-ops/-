@@ -91,4 +91,16 @@ describe("AIのカギ（アプリ制作者だけ）", () => {
     await svc.setAiTierSetting(d, u.owner, "flash");
     expect(getAiTier()).toBe("flash");
   });
+  it("モデル一覧が取れなくても、Googleの返事の「このモデルを使って」の名前に切りかえる", async () => {
+    resetGeminiModel();
+    const calls: string[] = [];
+    const fake = (async (u: string) => {
+      calls.push(u);
+      if (u.includes("/models?pageSize")) return new Response("{}", { status: 403 });
+      return u.includes("gemini-2.5-flash") ? new Response(JSON.stringify({ error: { status: "NOT_FOUND", message: "This model models/gemini-2.5-flash is no longer available to new users. Please update your code to use models/gemini-3.8-flash for the latest features. We recommend" } }), { status: 404 }) : new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: "返事" }] } }] }), { status: 200 });
+    }) as unknown as typeof fetch;
+    expect(await callAi("やあ", { env: { GEMINI_API_KEY: "AIza" + "x".repeat(30) }, fetchFn: fake })).toBe("返事");
+    expect(calls.some((c) => c.includes("gemini-3.8-flash:generateContent"))).toBe(true);
+    resetGeminiModel();
+  });
 });
