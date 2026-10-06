@@ -1,3 +1,4 @@
+import { AiHttpError } from "./ai";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { validateSession } from "./auth/login";
@@ -66,6 +67,11 @@ export function authed<P = Record<string, never>>(
       return res;
     } catch (e) {
       if (e instanceof ForbiddenError) return json({ error: e.message }, 403);
+      if (e instanceof AiHttpError && e.detail) {
+        // AIの会社からのエラーは、アプリ制作者にだけ、くわしい原因も見せる（原因をつかむため。カギは含まれない）
+        const owner = (await (await getDb()).query<{ x: boolean }>("select app_owner as x from memberships where id = $1", [userId]).catch(() => ({ rows: [] as { x: boolean }[] }))).rows[0]?.x;
+        return json({ error: e.message + (owner ? `\n（くわしい原因：${e.detail}）` : "") }, 400);
+      }
       if (e instanceof Error && e.message) return json({ error: e.message }, 400);
       return json({ error: "エラーが発生しました" }, 500);
     }

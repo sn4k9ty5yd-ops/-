@@ -545,3 +545,4 @@ main.login .err{color:var(--bad);font-weight:700}
 .hrow .rt small{color:var(--sub,#6e6e73);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .hrow i{color:var(--sub,#6e6e73);font-style:normal;font-size:20px}
 @media print{.hsearch{display:none !important}}
+p.err{white-space:pre-wrap;word-break:break-word}
