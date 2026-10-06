@@ -24,3 +24,17 @@ export function hoursText(start: string, end: string, rule: BreakRule = DEFAULT_
   return `在店 ${fmt(h.stay)}　休憩 ${fmt(h.breakMin)}　実働 ${fmt(h.work)}`;
 }
 export const kindClass = (s?: ShiftRow) => (!s ? "" : s.kind === "work" ? "k-work" : `k-${s.kind}`);
+
+/** 出勤簿の名前の並び順（オフィスが決めた順。名前がこの文字で始まる人を先に。ほかの人はそのあと） */
+export const ROSTER_FIRST = ["永尾", "中嶋", "成田", "金子直", "松村"];
+export function sortRoster<T extends { name: string }>(list: T[]): T[] {
+  const rank = (n: string) => { const i = ROSTER_FIRST.findIndex((p) => n.replace(/\s|　/g, "").startsWith(p)); return i < 0 ? ROSTER_FIRST.length : i; };
+  return [...list].sort((a, b) => rank(a.name) - rank(b.name));
+}
+/** 出勤簿の表の「適用」「入店」「退店」「休憩」「実働」の5段 */
+export function attendanceLines(s: ShiftRow | undefined, rule: BreakRule = DEFAULT_BREAK_RULE): string[] {
+  if (!s) return ["", "", "", "", ""];
+  if (s.kind !== "work") return [{ off: "休み", paid: "有給", holiday: "公休", other: "その他", work: "" }[s.kind], "", "", "", ""];
+  const h = calcHours(s.start!, s.end!, rule);
+  return ["出勤", s.start!, s.end!, fmt(h.breakMin), fmt(h.work)];
+}

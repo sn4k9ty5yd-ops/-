@@ -19,3 +19,15 @@ describe("占い（お楽しみ）", () => {
     const c = compatibility("INFJ", "INFJ"); expect(c.score).toBeGreaterThanOrEqual(78); expect(c.score).toBeLessThanOrEqual(99);
   });
 });
+
+import { attendanceLines, sortRoster } from "../lib/shift-ui";
+describe("出勤簿の並びと5段", () => {
+  it("永尾→中嶋→成田→金子直→松村の順、あとは元の順", () => {
+    const n = ["A", "松村 光留", "金子 直樹", "成田 和樹", "中嶋", "永尾", "B"].map((name) => ({ name }));
+    expect(sortRoster(n).map((x) => x.name)).toEqual(["永尾", "中嶋", "成田 和樹", "金子 直樹", "松村 光留", "A", "B"]);
+  });
+  it("10-19は 休憩1:00・実働8:00", () => {
+    expect(attendanceLines({ kind: "work", start: "10:00", end: "19:00" } as never)).toEqual(["出勤", "10:00", "19:00", "1:00", "8:00"]);
+    expect(attendanceLines({ kind: "paid" } as never)[0]).toBe("有給");
+  });
+});
