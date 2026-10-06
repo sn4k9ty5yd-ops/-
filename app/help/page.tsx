@@ -15,6 +15,13 @@ function Inner() {
   const [open, setOpen] = useState<string | null>(null);
   const load = useCallback(() => api<FeedbackRow[]>("/api/feedback").then(setMine).catch(() => {}), []);
   useEffect(() => { load(); }, [load]);
+  // 検索から来たとき（/help#h-…）は、その項目をひらいて、そこまで移る
+  useEffect(() => {
+    const id = window.location.hash.replace(/^#h-/, "");
+    if (!id) return;
+    setOpen(id);
+    setTimeout(() => document.getElementById(`h-${id}`)?.scrollIntoView({ behavior: "smooth", block: "start" }), 150);
+  }, []);
   const topics = HELP.filter((t) => me.level >= (t.min ?? 1) && (t.flag !== "material" || me.level === 4 || !!me.materialManager) && (t.flag !== "edu" || me.level >= 3 || !!me.eduLead));
   const send = async () => {
     try { await api("/api/feedback", { body: text }); setText(""); setMsg("送りました。ありがとうございます！"); await load(); } catch (e) { setMsg((e as Error).message); }

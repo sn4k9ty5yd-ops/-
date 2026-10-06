@@ -533,3 +533,15 @@ main.login .err{color:var(--bad);font-weight:700}
 @media (min-width:700px){.stcards{display:none}}
 @media (max-width:699px){.stwide{display:none}}
 @media print{.stcards{display:none !important}.stwide{display:block !important}}
+
+/* ホームの検索 */
+.hsearch{position:sticky;top:0;z-index:30;margin:0 0 12px;padding-top:4px}
+.hsearch input[type=search]{width:100%;box-sizing:border-box;margin:0;padding:14px 16px;font-size:17px;border-radius:16px;border:2px solid var(--line,#e5e5ea);background:#fff;color:var(--ink,#1d1d1f);box-shadow:0 4px 14px rgba(0,0,0,.08)}
+.hsearch input[type=search]:focus{outline:none;border-color:var(--blue,#0071e3)}
+.hresults{margin-top:6px;background:#fff;border-radius:16px;box-shadow:0 8px 28px rgba(0,0,0,.16);max-height:62vh;overflow:auto;padding:4px}
+.hrow{display:flex;align-items:center;gap:10px;padding:10px;border-radius:12px;text-decoration:none;color:var(--ink,#1d1d1f)}
+.hrow:hover,.hrow:active{background:rgba(0,113,227,.08)}
+.hrow .rt{flex:1;min-width:0;display:flex;flex-direction:column}
+.hrow .rt small{color:var(--sub,#6e6e73);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hrow i{color:var(--sub,#6e6e73);font-style:normal;font-size:20px}
+@media print{.hsearch{display:none !important}}

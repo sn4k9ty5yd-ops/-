@@ -8,6 +8,7 @@ import { isOfficeOnly, levelLabel } from "@/lib/permissions";
 import { reiwa } from "@/lib/era";
 import { todayJst } from "@/lib/period-nav";
 import { WEEKDAYS } from "@/lib/labels";
+import { searchAll } from "@/lib/search";
 
 function Cards() {
   const { me, logout } = useMe();
@@ -21,7 +22,9 @@ function Cards() {
   useEffect(() => { api<{ id: string; name: string }[]>("/api/stores").then((l) => setMyStore(l.find((x) => x.id === me.storeId)?.name ?? "")).catch(() => {}); }, [me.storeId]);
   useEffect(() => { pushState().then(setPush).catch(() => {}); }, []);
   useEffect(() => { if (!me.displayOnly) api<{ unread: number }>("/api/notifications").then((r) => setUnread(r.unread)).catch(() => {}); }, [me.displayOnly]);
+  const [q, setQ] = useState("");
   if (me.displayOnly) return null;
+  const hits = q.trim() ? searchAll(q, me) : [];
   const cards = [
     { big: true, href: "/inbox", title: unread ? `お知らせ（${unread}件）` : "お知らせ", sub: unread ? "新しいお知らせがあります（休みのかぶりなど）" : "休みのかぶりや、話し合いの書き込み", show: true },
     { big: true, href: "/manual", title: "マニュアル", sub: "教育・営業マニュアル、技術動画、技術評価", show: true },
@@ -61,6 +64,16 @@ function Cards() {
   const Icon = ({ href }: { href: string }) => <span className="ic" style={{ ["--h" as string]: ic(href)[1] }} aria-hidden>{ic(href)[0]}</span>;
   return (
     <main className="home">
+      <div className="hsearch" role="search">
+        <input type="search" inputMode="search" enterKeyHint="search" aria-label="さがす" placeholder="🔍 さがす（例：有給・棚卸し・休憩・パスコード）" value={q} onChange={(e) => setQ(e.target.value)} />
+        {q.trim() && (
+          <div className="hresults">
+            {hits.length === 0 ? <p className="sub" style={{ margin: 8 }}>見つかりませんでした。ちがう言葉（例：「休み」「売上」「出勤簿」）で、ためしてください。</p> : hits.map((h) => (
+              <Link key={h.href + h.title} href={h.href} className="hrow"><span className="ic" style={{ ["--h" as string]: 210 }} aria-hidden>{h.icon}</span><span className="rt"><b>{h.title}</b><small>{h.kind === "help" ? "やり方：" : ""}{h.sub}</small></span><i>›</i></Link>
+            ))}
+          </div>
+        )}
+      </div>
       <p className="eyebrow">{hello}</p>
       <h1 className="hero">{me.name}</h1>
       <p className="role">{myStore && <b>{myStore}</b>}{myStore && "　·　"}{me.rank && <><b>{me.rank === "stylist" ? "スタイリスト" : "アシスタント"}</b>{"　·　"}</>}{levelLabel(me, me)}</p>
