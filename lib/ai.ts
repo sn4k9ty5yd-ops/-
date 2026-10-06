@@ -39,8 +39,9 @@ export type AiTier = "flash" | "pro";   // flash＝速くて安い（ふだん�
 let tier: AiTier = "flash";
 export function setAiTier(t: string | null | undefined) { tier = t === "pro" ? "pro" : "flash"; }
 export const getAiTier = (): AiTier => tier;
-const found: Record<AiTier, string | null> = { flash: null, pro: null };   // 自動で見つけたモデル（サーバーを再起動するまで、おぼえておく）
-export const resetGeminiModel = () => { found.flash = null; found.pro = null; };
+const found: Record<AiTier, string | null> = { flash: null, pro: null };
+const foundAt: Record<AiTier, number> = { flash: 0, pro: 0 };   // 混んでいて切りかえた先は、10分だけ、そのまま使う（毎回、混んでいる方を試して待たないため）   // 自動で見つけたモデル（サーバーを再起動するまで、おぼえておく）
+export const resetGeminiModel = () => { found.flash = null; found.pro = null; foundAt.flash = 0; foundAt.pro = 0; };
 const DEFAULT_MODEL: Record<AiTier, string> = { flash: "gemini-2.5-flash", pro: "gemini-2.5-pro" };
 
 /** 使えるモデルの一覧（generateContent が使える gemini）。いちばん新しい「flash」「pro」から順に（lite・画像・音声・実験版は、あとまわし） */
@@ -101,12 +102,13 @@ export async function callAiChat(system: string, turns: ChatTurn[], opts: { env?
         const alt2 = await post(`https://aiplatform.googleapis.com/v1/publishers/google/models/${m}:generateContent?key=${encodeURIComponent(key)}`, {});
         return alt2.ok ? alt2 : alt;
       };
+      if (found[tier] && foundAt[tier] && Date.now() - foundAt[tier] > 600000 && !env.AI_MODEL) { found[tier] = null; }   // 10分たったら、また最新を試す
       let model = env.AI_MODEL || found[tier] || DEFAULT_MODEL[tier];
       // Googleが混んでいる（503・500）ときは、少し待って、もう一度送る（最大3回）
       const withRetry = async (m: string): Promise<Response> => {
         let r = await tryModel(m);
-        for (let i = 0; i < 2 && [500, 503].includes(((first as Response | null) ?? r).status); i++) {
-          await new Promise((ok) => setTimeout(ok, (opts.retryDelayMs ?? 1500) * (i + 1)));
+        for (let i = 0; i < 1 && [500, 503].includes(((first as Response | null) ?? r).status); i++) {
+          await new Promise((ok) => setTimeout(ok, (opts.retryDelayMs ?? 500) * (i + 1)));
           first = null; r = await tryModel(m);
         }
         return r;
@@ -120,14 +122,14 @@ export async function callAiChat(system: string, turns: ChatTurn[], opts: { env?
         try { const t = ((await primary().clone().json()) as { error?: { message?: string } }).error?.message ?? ""; hint = /use\s+models\/(gemini-[0-9A-Za-z.\-]+?)(?=\s|\.\s|,|$)/.exec(t)?.[1]?.replace(/\.$/, "") ?? null; } catch { /* 読めなくてもよい */ }
         if (hint && !new RegExp(`-${tier}$`).test(hint)) hint = null;
         const nm = (await discoverGeminiModel(f, key, ctl.signal, tier)) ?? hint;
-        if (nm && nm !== model) { found[tier] = nm; model = nm; first = null; res = await withRetry(model); }
+        if (nm && nm !== model) { found[tier] = nm; foundAt[tier] = 0; model = nm; first = null; res = await withRetry(model); }
       }
       // いちばん新しいモデルが混んでいる（503）ときは、ほかのモデル（ひとつ前のflash・flash-liteなど）を順に試す
       if (!res.ok && [500, 503, 429].includes(primary().status) && !env.AI_MODEL) {
         const others = (await listGeminiModels(f, key, ctl.signal, tier)).filter((n) => n !== model).slice(0, 3);
         for (const alt of others) {
           first = null; const r2 = await tryModel(alt);
-          if (r2.ok) { res = r2; model = alt; break; }
+          if (r2.ok) { res = r2; model = alt; found[tier] = alt; foundAt[tier] = Date.now(); break; }
         }
       }
       if (!res.ok) { const e = await httpError(res, key); if (first) { const e1 = await httpError(first, key); e.detail = `入口1（${(first as Response).status}）${e1.detail} ／ 入口2（${res.status}）${e.detail}`.slice(0, 500); } e.detail = `モデル：${model} ／ ${e.detail}`.slice(0, 600); throw e; }
