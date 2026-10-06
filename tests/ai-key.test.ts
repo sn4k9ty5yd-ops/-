@@ -116,4 +116,13 @@ describe("AIのカギ（アプリ制作者だけ）", () => {
     expect(calls.some((c) => c.includes("generativelanguage") && c.includes("gemini-3.8-flash:generateContent"))).toBe(true);
     resetGeminiModel();
   });
+  it("Googleが混んでいて503のときは、少し待って、もう一度送る", async () => {
+    resetGeminiModel();
+    let n = 0;
+    const fake = (async () => (++n < 3 ? new Response('{"error":{"status":"UNAVAILABLE","message":"high demand"}}', { status: 503 }) : new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: "やっと返事" }] } }] }), { status: 200 }))) as unknown as typeof fetch;
+    expect(await callAi("やあ", { env: { GEMINI_API_KEY: "AIza" + "x".repeat(30), AI_MODEL: "m" }, fetchFn: fake, retryDelayMs: 0 })).toBe("やっと返事");
+    expect(n).toBe(3);
+    n = -10;
+    await expect(callAi("やあ", { env: { GEMINI_API_KEY: "AIza" + "x".repeat(30), AI_MODEL: "m" }, fetchFn: fake, retryDelayMs: 0 })).rejects.toThrow("混んでいます");
+  });
 });

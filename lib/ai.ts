@@ -67,12 +67,12 @@ type Fetch = typeof fetch;
 
 export interface ChatTurn { role: "user" | "assistant"; content: string }
 
-export async function callAi(prompt: string, opts: { env?: Record<string, string | undefined>; fetchFn?: Fetch; timeoutMs?: number } = {}): Promise<string> {
+export async function callAi(prompt: string, opts: { env?: Record<string, string | undefined>; fetchFn?: Fetch; timeoutMs?: number; retryDelayMs?: number } = {}): Promise<string> {
   return callAiChat("", [{ role: "user", content: prompt }], opts);
 }
 
 /** 会話（やりとりの続き）を渡して、次の返事をもらう。system は、キャラや決まり */
-export async function callAiChat(system: string, turns: ChatTurn[], opts: { env?: Record<string, string | undefined>; fetchFn?: Fetch; timeoutMs?: number; maxTokens?: number } = {}): Promise<string> {
+export async function callAiChat(system: string, turns: ChatTurn[], opts: { env?: Record<string, string | undefined>; fetchFn?: Fetch; timeoutMs?: number; maxTokens?: number; retryDelayMs?: number } = {}): Promise<string> {
   const env = opts.env ?? effectiveEnv();
   const f = opts.fetchFn ?? fetch;
   const st = aiStatus(env);
@@ -102,7 +102,16 @@ export async function callAiChat(system: string, turns: ChatTurn[], opts: { env?
         return alt2.ok ? alt2 : alt;
       };
       let model = env.AI_MODEL || found[tier] || DEFAULT_MODEL[tier];
-      let res = await tryModel(model);
+      // Googleが混んでいる（503・500）ときは、少し待って、もう一度送る（最大3回）
+      const withRetry = async (m: string): Promise<Response> => {
+        let r = await tryModel(m);
+        for (let i = 0; i < 2 && [500, 503].includes(((first as Response | null) ?? r).status); i++) {
+          await new Promise((ok) => setTimeout(ok, (opts.retryDelayMs ?? 1500) * (i + 1)));
+          first = null; r = await tryModel(m);
+        }
+        return r;
+      };
+      let res = await withRetry(model);
       const primary = () => (first as Response | null) ?? res;   // ふつうの入り口（入口1）の返事
       // モデルの名前が古くて見つからない（404）ときは、いま使えるモデルを調べて、いちばん新しい「flash」に切りかえる（AI_MODEL を決めているときは、そのまま）
       if (primary().status === 404 && !env.AI_MODEL) {
@@ -111,7 +120,7 @@ export async function callAiChat(system: string, turns: ChatTurn[], opts: { env?
         try { const t = ((await primary().clone().json()) as { error?: { message?: string } }).error?.message ?? ""; hint = /use\s+models\/(gemini-[0-9A-Za-z.\-]+?)(?=\s|\.\s|,|$)/.exec(t)?.[1]?.replace(/\.$/, "") ?? null; } catch { /* 読めなくてもよい */ }
         if (hint && !new RegExp(`-${tier}$`).test(hint)) hint = null;
         const nm = (await discoverGeminiModel(f, key, ctl.signal, tier)) ?? hint;
-        if (nm && nm !== model) { found[tier] = nm; model = nm; first = null; res = await tryModel(model); }
+        if (nm && nm !== model) { found[tier] = nm; model = nm; first = null; res = await withRetry(model); }
       }
       if (!res.ok) { const e = await httpError(res, key); if (first) { const e1 = await httpError(first, key); e.detail = `入口1（${(first as Response).status}）${e1.detail} ／ 入口2（${res.status}）${e.detail}`.slice(0, 500); } e.detail = `モデル：${model} ／ ${e.detail}`.slice(0, 600); throw e; }
       const j = (await res.json()) as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
@@ -138,6 +147,7 @@ export async function callAiChat(system: string, turns: ChatTurn[], opts: { env?
 function aiHttpMessage(status: number): string {
   if (status === 429) return "AIの無料の利用回数を、いったん使いきりました。しばらくしてから、もう一度ためしてください";
   if (status === 401 || status === 403) return "AIのカギが正しくないようです（管理者に伝えてください）";
+  if (status === 503 || status === 500) return "Googleのサーバーが、いま混んでいます（" + status + "）。少し待ってから、もう一度送ってください";
   if (status === 404) return "AIの宛先（モデル）が見つかりませんでした（404）。カギの種類か、AIの名前が合っていないようです";
   return `AIがうまく動きませんでした（${status}）。しばらくしてから、もう一度ためしてください`;
 }
