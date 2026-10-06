@@ -125,4 +125,16 @@ describe("AIのカギ（アプリ制作者だけ）", () => {
     n = -10;
     await expect(callAi("やあ", { env: { GEMINI_API_KEY: "AIza" + "x".repeat(30), AI_MODEL: "m" }, fetchFn: fake, retryDelayMs: 0 })).rejects.toThrow("混んでいます");
   });
+  it("最新モデルが混んでいて503が続くときは、ほかのモデルを順に試す", async () => {
+    resetGeminiModel();
+    const calls: string[] = [];
+    const fake = (async (u: string) => {
+      calls.push(u);
+      if (u.includes("/models?pageSize")) return new Response(JSON.stringify({ models: ["gemini-3.8-flash", "gemini-3.5-flash", "gemini-3.8-flash-lite"].map((n) => ({ name: `models/${n}`, supportedGenerationMethods: ["generateContent"] })) }), { status: 200 });
+      return (u.includes("gemini-3.8-flash:") || u.includes("gemini-2.5-flash:")) ? new Response('{"error":{"status":"UNAVAILABLE","message":"high demand"}}', { status: 503 }) : new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: "ほかのモデルの返事" }] } }] }), { status: 200 });
+    }) as unknown as typeof fetch;
+    expect(await callAi("やあ", { env: { GEMINI_API_KEY: "AIza" + "x".repeat(30) }, fetchFn: fake, retryDelayMs: 0 })).toBe("ほかのモデルの返事");
+    expect(calls.some((c) => c.includes("gemini-3.5-flash:generateContent"))).toBe(true);
+    resetGeminiModel();
+  });
 });

@@ -43,20 +43,20 @@ const found: Record<AiTier, string | null> = { flash: null, pro: null };   // �
 export const resetGeminiModel = () => { found.flash = null; found.pro = null; };
 const DEFAULT_MODEL: Record<AiTier, string> = { flash: "gemini-2.5-flash", pro: "gemini-2.5-pro" };
 
-/** 使えるモデルの一覧から、generateContent が使える、いちばん新しい「flash」（lite・画像・音声・実験版でないもの）をえらぶ */
-export async function discoverGeminiModel(f: Fetch, key: string, signal?: AbortSignal, want: AiTier = "flash"): Promise<string | null> {
+/** 使えるモデルの一覧（generateContent が使える gemini）。いちばん新しい「flash」「pro」から順に（lite・画像・音声・実験版は、あとまわし） */
+export async function listGeminiModels(f: Fetch, key: string, signal?: AbortSignal, want: AiTier = "flash"): Promise<string[]> {
   try {
     const r = await f("https://generativelanguage.googleapis.com/v1beta/models?pageSize=200", { signal, headers: { "x-goog-api-key": key } });
-    if (!r.ok) return null;
+    if (!r.ok) return [];
     const j = (await r.json()) as { models?: { name?: string; supportedGenerationMethods?: string[] }[] };
-    const cands = (j.models ?? [])
-      .filter((m) => (m.supportedGenerationMethods ?? []).includes("generateContent"))
-      .map((m) => (m.name ?? "").replace(/^models\//, ""))
-      .map((n) => ({ n, v: new RegExp(`^gemini-(\\d+(?:\\.\\d+)?)-${want}$`).exec(n)?.[1] }))
-      .filter((x): x is { n: string; v: string } => !!x.v)
-      .sort((a, b) => Number(b.v) - Number(a.v));
-    return cands[0]?.n ?? null;
-  } catch { return null; }
+    const names = (j.models ?? []).filter((m) => (m.supportedGenerationMethods ?? []).includes("generateContent")).map((m) => (m.name ?? "").replace(/^models\//, ""));
+    const rank = (re: RegExp) => names.map((n) => ({ n, v: re.exec(n)?.[1] })).filter((x): x is { n: string; v: string } => !!x.v).sort((a, b) => Number(b.v) - Number(a.v)).map((x) => x.n);
+    return [...rank(new RegExp(`^gemini-(\\d+(?:\\.\\d+)?)-${want}$`)), ...rank(want === "pro" ? /^gemini-(\d+(?:\.\d+)?)-flash$/ : /^gemini-(\d+(?:\.\d+)?)-flash-lite$/)];
+  } catch { return []; }
+}
+export async function discoverGeminiModel(f: Fetch, key: string, signal?: AbortSignal, want: AiTier = "flash"): Promise<string | null> {
+  const l = await listGeminiModels(f, key, signal, want);
+  return l.find((n) => new RegExp(`^gemini-\\d+(?:\\.\\d+)?-${want}$`).test(n)) ?? null;
 }
 
 export class AiUnavailableError extends Error {
@@ -121,6 +121,14 @@ export async function callAiChat(system: string, turns: ChatTurn[], opts: { env?
         if (hint && !new RegExp(`-${tier}$`).test(hint)) hint = null;
         const nm = (await discoverGeminiModel(f, key, ctl.signal, tier)) ?? hint;
         if (nm && nm !== model) { found[tier] = nm; model = nm; first = null; res = await withRetry(model); }
+      }
+      // いちばん新しいモデルが混んでいる（503）ときは、ほかのモデル（ひとつ前のflash・flash-liteなど）を順に試す
+      if (!res.ok && [500, 503, 429].includes(primary().status) && !env.AI_MODEL) {
+        const others = (await listGeminiModels(f, key, ctl.signal, tier)).filter((n) => n !== model).slice(0, 3);
+        for (const alt of others) {
+          first = null; const r2 = await tryModel(alt);
+          if (r2.ok) { res = r2; model = alt; break; }
+        }
       }
       if (!res.ok) { const e = await httpError(res, key); if (first) { const e1 = await httpError(first, key); e.detail = `入口1（${(first as Response).status}）${e1.detail} ／ 入口2（${res.status}）${e.detail}`.slice(0, 500); } e.detail = `モデル：${model} ／ ${e.detail}`.slice(0, 600); throw e; }
       const j = (await res.json()) as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
