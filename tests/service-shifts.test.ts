@@ -108,12 +108,13 @@ describe("シフト作成サービス", () => {
     expect((await svc.listShifts(db, id.office, periodId, st.s2))).toHaveLength(1);
   });
 
-  it("消せる。確定すると、店長・シフト担当は変更も削除もできない", async () => {
+  it("消せる。確定・公開したあとも、店長・シフト担当は直せる（変更があるため）。確認済みは直せない", async () => {
     expect(await svc.clearShifts(db, id.shift1, periodId, st.s1, [{ membershipId: id.b, day: "2026-11-21" }])).toBe(1);
     await svc.setPeriodStatus(db, id.mgr1, { periodId, storeId: st.s1, status: "confirmed" });
-    await expect(svc.saveShifts(db, id.shift1, periodId, st.s1, [{ membershipId: id.b, day: "2026-11-21", kind: "off" }])).rejects.toThrow("変更できません");
-    await expect(svc.clearShifts(db, id.mgr1, periodId, st.s1, [{ membershipId: id.a, day: "2026-11-21" }])).rejects.toThrow("変更できません");
-    await svc.saveShifts(db, id.office, periodId, st.s1, [{ membershipId: id.b, day: "2026-11-21", kind: "off" }]); // オフィスは可
+    await svc.saveShifts(db, id.shift1, periodId, st.s1, [{ membershipId: id.b, day: "2026-11-21", kind: "off" }]);
+    expect(await svc.clearShifts(db, id.mgr1, periodId, st.s1, [{ membershipId: id.a, day: "2026-11-21" }])).toBeGreaterThanOrEqual(0);
+    await svc.saveShifts(db, id.office, periodId, st.s1, [{ membershipId: id.b, day: "2026-11-21", kind: "off" }]); // オフィスも可
+    await expect(svc.saveShifts(db, id.a, periodId, st.s1, [{ membershipId: id.b, day: "2026-11-21", kind: "work", start: "10:00", end: "19:00" }])).rejects.toThrow();   // スタッフは不可
   });
 
   it("公開すると、スタッフは自店舗のシフトが見られる。公開前は見えない", async () => {

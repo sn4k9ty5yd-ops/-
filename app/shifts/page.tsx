@@ -135,7 +135,7 @@ function Page() {
         const row = (id: string, label: string, tag?: string) => (
           <li key={id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, padding: "8px 0", borderBottom: "1px solid var(--line)" }}>
             <span><b style={id === me.id ? { color: "var(--blue)" } : undefined}>{name.get(id) ?? ""}{id === me.id && "（あなた）"}</b>{tag && <span className="chip" style={{ marginLeft: 8 }}>{tag}</span>}{label && <span className="sub"> {label}</span>}</span>
-            {editable && <button className="ghost" style={{ color: "var(--blue)", width: "auto", padding: "6px 10px" }} onClick={() => setEditTarget({ id, name: name.get(id) ?? "" })}>変更</button>}
+            {editable && <button className="ghost" style={{ color: "var(--blue)", width: "auto", padding: "6px 10px" }} onClick={() => setEditTarget({ id, name: name.get(id) ?? "" })}>編集</button>}
           </li>
         );
         return (

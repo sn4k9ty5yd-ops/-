@@ -58,10 +58,12 @@ describe("シフトを編集できる状態・人", () => {
       expect(await fails(`update shifts set start_time='11:00', end_time='20:00' where membership_id='${U.staff1}' and day='2026-11-20'`)).toBe(false);
     });
   });
-  it("確定後はシフト担当・店長は編集できない。オフィスはできる。確認済みは誰もできない", async () => {
+  it("確定後も、シフト担当・店長・オフィスは編集できる。確認済みは誰もできない", async () => {
     await setStatus(S1, "confirmed");
-    await as(U.shift1, async () => expect(await fails(`update shifts set end_time='21:00' where membership_id='${U.staff1}'`)).toBe(true));
-    await as(U.mgr1, async () => expect(await fails(`delete from shifts where membership_id='${U.staff1b}'`)).toBe(true));
+    await as(U.shift1, async () => expect(await fails(`update shifts set end_time='21:00' where membership_id='${U.staff1}'`)).toBe(false));
+    await as(U.staff1, async () => expect(await fails(`update shifts set end_time='21:30' where membership_id='${U.staff1}'`)).toBe(true));
+    await setStatus(S1, "published");
+    await as(U.mgr1, async () => expect(await fails(`update shifts set end_time='20:30' where membership_id='${U.staff1}'`)).toBe(false));
     await as(U.office, async () => expect(await fails(`update shifts set end_time='20:00' where membership_id='${U.staff1}'`)).toBe(false));
     await setStatus(S1, "acknowledged");
     await as(U.office, async () => expect(await fails(`update shifts set end_time='21:00' where membership_id='${U.staff1}'`)).toBe(true));
