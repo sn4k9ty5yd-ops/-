@@ -21,7 +21,7 @@ export default function AiKeyPage() {
       <p className="hint">ミーティングのAI・メンターのチャットを動かすための「カギ」を入れる画面です。アプリ制作者だけが見られます。カギは、ここにだけ貼ってください（チャットやメールには貼らないでください）。</p>
       {st && (
         <div className="card" style={{ marginBottom: 12 }}>
-          <b>いまの状態：</b>{st.available ? "✅ AIが使えます" : "⚪ まだ準備中（カギがありません）"}
+          <b>いまの状態：</b>{st.available ? "🔑 カギが入っています（動くかどうかは、「ためす」で確かめます）" : "⚪ まだ準備中（カギがありません）"}
           {st.available && <div className="sub">{st.provider === "gemini" ? "Google（Gemini）" : "Claude"}　／　{st.source === "screen" ? `この画面で入れたカギ（${st.masked}）` : "サーバーの設定のカギ"}{st.updatedAt ? `　${st.updatedAt.slice(0, 16)}` : ""}</div>}
         </div>
       )}
