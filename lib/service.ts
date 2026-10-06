@@ -462,8 +462,8 @@ export async function listNames(db: Database, userId: string): Promise<{ id: str
 
 // ------------------------------------------------------------------ シフト
 export type ShiftKind = "work" | "off" | "paid" | "holiday" | "other";
-export interface ShiftRow { id: string; membershipId: string; storeId: string; periodId: string; day: string; kind: ShiftKind; start: string | null; end: string | null; }
-export interface ShiftEntry { membershipId: string; day: string; kind: ShiftKind; start?: string | null; end?: string | null; }
+export interface ShiftRow { id: string; membershipId: string; storeId: string; periodId: string; day: string; kind: ShiftKind; start: string | null; end: string | null; breakMin?: number | null; }
+export interface ShiftEntry { membershipId: string; day: string; kind: ShiftKind; start?: string | null; end?: string | null; breakMin?: number | null; }
 export const SHIFT_KIND_LABEL: Record<ShiftKind, string> = { work: "出勤", off: "休み", paid: "有給", holiday: "公休", other: "その他" };
 
 const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -498,7 +498,7 @@ export async function listShifts(db: Database, userId: string, periodId: string,
   return (await asUser(db, userId, (q) =>
     q.query<ShiftRow>(
       `select id, membership_id as "membershipId", store_id as "storeId", period_id as "periodId", day::text as day, kind,
-              to_char(start_time, 'HH24:MI') as start, to_char(end_time, 'HH24:MI') as "end"
+              to_char(start_time, 'HH24:MI') as start, to_char(end_time, 'HH24:MI') as "end", break_min as "breakMin"
          from shifts where period_id = $1 and store_id = $2 order by day`, [periodId, storeId]))).rows;
 }
 
@@ -516,6 +516,7 @@ function validateEntry(e: ShiftEntry) {
   if (e.kind === "work") {
     if (!e.start || !e.end || !TIME.test(e.start) || !TIME.test(e.end)) throw new Error("入店と退店の時間を入れてください");
     if (e.end <= e.start) throw new Error("退店は入店より後の時間にしてください");
+    if (e.breakMin != null && !(Number.isInteger(e.breakMin) && e.breakMin >= 0 && e.breakMin <= 600)) throw new Error("休憩は0〜600分の間で入れてください");
   }
 }
 
@@ -530,10 +531,10 @@ export async function saveShifts(db: Database, userId: string, periodId: string,
     await asUser(db, userId, async (q) => {
       for (const e of entries)
         await q.query(
-          `insert into shifts (company_id, store_id, period_id, membership_id, day, kind, start_time, end_time)
-           values ($1,$2,$3,$4,$5,$6,$7,$8)
-           on conflict (membership_id, day) do update set kind = excluded.kind, start_time = excluded.start_time, end_time = excluded.end_time`,
-          [me.companyId, storeId, periodId, e.membershipId, e.day, e.kind, e.kind === "work" ? e.start : null, e.kind === "work" ? e.end : null]);
+          `insert into shifts (company_id, store_id, period_id, membership_id, day, kind, start_time, end_time, break_min)
+           values ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+           on conflict (membership_id, day) do update set kind = excluded.kind, start_time = excluded.start_time, end_time = excluded.end_time, break_min = excluded.break_min`,
+          [me.companyId, storeId, periodId, e.membershipId, e.day, e.kind, e.kind === "work" ? e.start : null, e.kind === "work" ? e.end : null, e.kind === "work" ? (e.breakMin ?? null) : null]);
     });
   } catch (err) {
     const msg = (err as Error).message ?? "";

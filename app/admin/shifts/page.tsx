@@ -4,12 +4,12 @@ import { PasteOff } from "./PasteOff";
 import { LimitAll } from "./LimitAll";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, useAutoRefresh, useMe } from "@/lib/client";
-import { calcHours, fmt } from "@/lib/hours";
+import { fmt } from "@/lib/hours";
 import { holidayName } from "@/lib/holidays";
 import { daysOf, dow, hoursOn, md, WEEKDAYS } from "@/lib/labels";
 import { PeriodNav, periodFor, todayJst, tintStyle } from "@/lib/period-nav";
 import type { Period } from "@/lib/periods";
-import { attendanceLines, cellText, hoursText, sortRoster, KIND_BUTTONS, kindClass, longText } from "@/lib/shift-ui";
+import { attendanceLines, shiftHours, cellText, hoursText, sortRoster, KIND_BUTTONS, kindClass, longText } from "@/lib/shift-ui";
 import { STATUS_LABEL, type PeriodRow, type RequestRow, type ShiftEntry, type ShiftKind, type ShiftRow, type StoreRow } from "@/lib/service";
 import { ShiftSheet } from "./ShiftSheet";
 
@@ -221,7 +221,7 @@ export default function ShiftsPage() {
               <thead><tr><th style={{ position: "sticky", left: 0, background: "#fff", zIndex: 2 }}>名前</th><th></th>{days.map((d) => <th key={d} title="押すと、この日の全員を一括・個別で直せます" style={{ cursor: "pointer" }} onClick={() => { setDay(d); setMode("day"); window.scrollTo({ top: 0, behavior: "smooth" }); }} className={dow(d) === 0 || holidayName(d) ? "su" : dow(d) === 6 ? "sa" : ""}>{md(d)}<br /><small>{WEEKDAYS[dow(d)]}</small>{holidayName(d) && <><br /><small className="holname" style={{ fontSize: 9 }}>{holidayName(d)}</small></>}</th>)}<th>合計</th></tr></thead>
               <tbody>
                 {roster.map((p) => {
-                  const tot = days.reduce((a, d) => { const s = byKey.get(`${p.id}|${d}`); if (s?.kind === "work") { a.days++; a.min += calcHours(s.start!, s.end!, me.breakRule).work; } else if (s?.kind === "paid") a.paid++; return a; }, { days: 0, min: 0, paid: 0 });
+                  const tot = days.reduce((a, d) => { const s = byKey.get(`${p.id}|${d}`); if (s?.kind === "work") { a.days++; a.min += shiftHours(s, me.breakRule).work; } else if (s?.kind === "paid") a.paid++; return a; }, { days: 0, min: 0, paid: 0 });
                   return ["適用", "入店", "退店", "休憩", "実働"].map((label, li) => (
                     <tr key={`${p.id}${label}`} className={li === 0 ? "pstart" : ""}>
                       {li === 0 && <td rowSpan={5} className="name" style={{ cursor: "pointer", position: "sticky", left: 0, background: "#fff", zIndex: 1 }} title="押すと、この人の日をまとめて直せます" onClick={() => { setPersonId(p.id); setPicked(new Set()); setMode("person"); window.scrollTo({ top: 0, behavior: "smooth" }); }}>{p.name}</td>}

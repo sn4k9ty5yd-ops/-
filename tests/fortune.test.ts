@@ -20,7 +20,7 @@ describe("占い（お楽しみ）", () => {
   });
 });
 
-import { attendanceLines, sortRoster } from "../lib/shift-ui";
+import { attendanceLines, shiftHours, sortRoster } from "../lib/shift-ui";
 describe("出勤簿の並びと5段", () => {
   it("永尾→中嶋→成田→金子直→松村の順、あとは元の順", () => {
     const n = ["A", "松村 光留", "金子 直樹", "成田 和樹", "中嶋", "永尾", "B"].map((name) => ({ name }));
@@ -29,5 +29,14 @@ describe("出勤簿の並びと5段", () => {
   it("10-19は 休憩1:00・実働8:00", () => {
     expect(attendanceLines({ kind: "work", start: "10:00", end: "19:00" } as never)).toEqual(["出勤", "10:00", "19:00", "1:00", "8:00"]);
     expect(attendanceLines({ kind: "paid" } as never)[0]).toBe("有給");
+  });
+});
+
+describe("休憩を手で決める", () => {
+  it("決めた休憩を使い、空なら自動", () => {
+    const s = { start: "10:00", end: "19:00" };
+    expect(shiftHours({ ...s, breakMin: 30 })).toMatchObject({ breakMin: 30, work: 510 });
+    expect(shiftHours({ ...s, breakMin: null })).toMatchObject({ breakMin: 60, work: 480 });
+    expect(attendanceLines({ kind: "work", ...s, breakMin: 0 } as never)[4]).toBe("9:00");
   });
 });

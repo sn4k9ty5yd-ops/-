@@ -2,7 +2,7 @@ import { calcHours, DEFAULT_BREAK_RULE, fmt, type BreakRule } from "./hours";
 import type { ShiftKind, ShiftRow } from "./service";
 
 export const KIND_BUTTONS: { kind: ShiftKind; label: string }[] = [
-  { kind: "work", label: "出勤" }, { kind: "off", label: "休み" }, { kind: "paid", label: "有給" }, { kind: "holiday", label: "公休" }, { kind: "other", label: "その他" },
+  { kind: "work", label: "出勤" }, { kind: "off", label: "休み" }, { kind: "paid", label: "有給" }, { kind: "holiday", label: "公休" },
 ];
 const short = (t: string) => (t.endsWith(":00") ? String(Number(t.slice(0, 2))) : `${Number(t.slice(0, 2))}:${t.slice(3)}`);
 
@@ -35,6 +35,14 @@ export function sortRoster<T extends { name: string }>(list: T[]): T[] {
 export function attendanceLines(s: ShiftRow | undefined, rule: BreakRule = DEFAULT_BREAK_RULE): string[] {
   if (!s) return ["", "", "", "", ""];
   if (s.kind !== "work") return [{ off: "休み", paid: "有給", holiday: "公休", other: "その他", work: "" }[s.kind], "", "", "", ""];
-  const h = calcHours(s.start!, s.end!, rule);
+  const h = shiftHours(s, rule);
   return ["出勤", s.start!, s.end!, fmt(h.breakMin), fmt(h.work)];
+}
+
+/** 1日の在店・休憩・実働。休憩を手で決めていればそれを使い、なければ会社のルールで自動 */
+export function shiftHours(s: { start: string | null; end: string | null; breakMin?: number | null }, rule: BreakRule = DEFAULT_BREAK_RULE) {
+  const a = calcHours(s.start!, s.end!, rule);
+  if (s.breakMin == null) return a;
+  const breakMin = Math.min(a.stay, s.breakMin);
+  return { stay: a.stay, breakMin, work: a.stay - breakMin };
 }

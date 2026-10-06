@@ -33,6 +33,18 @@ describe("シフト作成サービス", () => {
     await expect(svc.setOnShift(db, id.a, id.b, false)).rejects.toThrow(svc.ForbiddenError);                 // スタッフは不可
   });
 
+  it("休憩を手で決めて保存でき、空にすると自動に戻る・範囲外は断る", async () => {
+    const day = "2026-11-23";
+    await svc.saveShifts(db, id.shift1, periodId, st.s1, [{ membershipId: id.a, day, kind: "work", start: "10:00", end: "19:00", breakMin: 30 }]);
+    let r = (await svc.listShifts(db, id.shift1, periodId, st.s1)).find((x) => x.membershipId === id.a && x.day === day);
+    expect(r?.breakMin).toBe(30);
+    await svc.saveShifts(db, id.shift1, periodId, st.s1, [{ membershipId: id.a, day, kind: "work", start: "10:00", end: "19:00" }]);
+    r = (await svc.listShifts(db, id.shift1, periodId, st.s1)).find((x) => x.membershipId === id.a && x.day === day);
+    expect(r?.breakMin).toBeNull();
+    await expect(svc.saveShifts(db, id.shift1, periodId, st.s1, [{ membershipId: id.a, day, kind: "work", start: "10:00", end: "19:00", breakMin: 700 }])).rejects.toThrow();
+    await svc.clearShifts(db, id.shift1, periodId, st.s1, [{ membershipId: id.a, day }]);
+  });
+
   it("希望休を、公休／有給を選んで出し、出し直しで種類が変わり、取り消せる", async () => {
     await svc.setMyRequest(db, id.b, periodId, "2026-11-22", "hope");
     await svc.setMyRequest(db, id.b, periodId, "2026-11-22", "paid");
