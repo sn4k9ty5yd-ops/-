@@ -3,6 +3,6 @@ export function shiftTabs(level: number): { href: string; label: string; show?: 
   return [
     { href: "/shifts", label: "見る" },
     { href: "/requests", label: "出す", also: ["/leave"] },
-    { href: "/admin/periods", label: "つくる", also: ["/admin/shifts"], show: level >= 2 },
+    { href: "/admin/periods", label: "つくる", also: ["/admin/shifts", "/admin/attendance"], show: level >= 2 },
   ];
 }

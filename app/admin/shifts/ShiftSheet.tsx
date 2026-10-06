@@ -17,6 +17,7 @@ export function ShiftSheet({
   const [start, setStart] = useState(initial?.start ?? defaults.start);
   const [end, setEnd] = useState(initial?.end ?? defaults.end);
   const [brk, setBrk] = useState<string>(initial?.breakMin == null ? "" : String(initial.breakMin));   // 空=自動
+  const [brkTouched, setBrkTouched] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const go = async (fn: () => Promise<void>) => { setBusy(true); setErr(""); try { await fn(); onClose(); } catch (e) { setErr((e as Error).message); setBusy(false); } };
@@ -31,8 +32,8 @@ export function ShiftSheet({
         {kind === "work" && (
           <>
             <div className="times">
-              <label>入店<input type="time" step={300} value={start} onChange={(e) => setStart(e.target.value)} /></label>
-              <label>退店<input type="time" step={300} value={end} onChange={(e) => setEnd(e.target.value)} /></label>
+              <label>入店<input type="time" step={300} value={start} onChange={(e) => { setStart(e.target.value); if (!brkTouched) setBrk(""); }} /></label>
+              <label>退店<input type="time" step={300} value={end} onChange={(e) => { setEnd(e.target.value); if (!brkTouched) setBrk(""); }} /></label>
             </div>
             {(() => {
               const ok = start && end && end > start; const a = ok ? calcHours(start, end, me.breakRule) : null;
@@ -40,7 +41,7 @@ export function ShiftSheet({
               return (
                 <>
                   <label style={{ display: "block", margin: "8px 0 0" }}>休憩（分）
-                    <input type="number" inputMode="numeric" min={0} max={600} step={5} value={brk} placeholder={a ? `自動：${a.breakMin}分` : "自動"} onChange={(e) => setBrk(e.target.value)} />
+                    <input type="number" inputMode="numeric" min={0} max={600} step={5} value={brk} placeholder={a ? `自動：${a.breakMin}分` : "自動"} onChange={(e) => { setBrkTouched(true); setBrk(e.target.value); }} />
                   </label>
                   <div className="sub" style={{ margin: "6px 0" }}>{a ? `在店 ${fmt(a.stay)}　休憩 ${fmt(Math.min(a.stay, bm))}${brk === "" ? "（自動）" : ""}　実働 ${fmt(Math.max(0, a.stay - bm))}` : ""}　空のままなら、設定の休憩ルールで自動になります</div>
                 </>

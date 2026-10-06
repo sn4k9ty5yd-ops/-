@@ -11,7 +11,8 @@ const TABS: { href: string; label: string; min: number; sub?: boolean; owner?: b
   { href: "/home", label: "ホーム", min: 1 },
   { href: "/shifts", label: "シフト", min: 1 },
   { href: "/admin/periods", label: "進み具合・締切", min: 2, sub: true },
-  { href: "/admin/shifts", label: "出勤簿", min: 2, sub: true },
+  { href: "/admin/shifts", label: "出勤簿予定", min: 2, sub: true },
+  { href: "/admin/attendance", label: "出勤簿確定", min: 2, sub: true },
   { href: "/admin/staff", label: "スタッフ", min: 3 },
   { href: "/admin/stocktake", label: "棚卸し", min: 1 },
   { href: "/admin/products", label: "商品", min: 3 },
@@ -23,7 +24,7 @@ const TABS: { href: string; label: string; min: number; sub?: boolean; owner?: b
   { href: "/admin/activity", label: "変更の記録", min: 4, owner: true },
 ];
 
-const SHIFT_PATHS = ["/admin/shift", "/admin/periods"];
+const SHIFT_PATHS = ["/admin/shift", "/admin/periods", "/admin/attendance"];
 
 function Shell({ children }: { children: React.ReactNode }) {
   const { me, logout } = useMe();
@@ -45,7 +46,7 @@ function Shell({ children }: { children: React.ReactNode }) {
         {TABS.filter((t) => me.level >= t.min && (!t.owner || me.appOwner) && !t.sub).map((t) => <Link key={t.href} href={t.href} className={path === t.href || (t.href === "/shifts" && inShift) ? "on" : ""}>{t.label}</Link>)}
       </nav>
       {inShift && <div className="wide" style={{ paddingBottom: 0 }}><SubTabs items={shiftTabs(me.level)} /></div>}
-      <main className={path.startsWith("/admin/shifts") || path.startsWith("/admin/stocktake") || path.startsWith("/admin/stock") || path.startsWith("/admin/products") || path.startsWith("/admin/records") ? "xwide" : "wide"}>{allowed ? children : <p className="hint">この画面を使う権限がありません。<Link href="/home">ホームへ戻る</Link></p>}</main>
+      <main className={path.startsWith("/admin/shifts") || path.startsWith("/admin/attendance") || path.startsWith("/admin/stocktake") || path.startsWith("/admin/stock") || path.startsWith("/admin/products") || path.startsWith("/admin/records") ? "xwide" : "wide"}>{allowed ? children : <p className="hint">この画面を使う権限がありません。<Link href="/home">ホームへ戻る</Link></p>}</main>
     </div>
   );
 }

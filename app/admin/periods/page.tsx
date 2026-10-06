@@ -39,7 +39,7 @@ export default function PeriodsPage() {
   const todo = [...periods].sort((x, y) => x.start.localeCompare(y.start)).filter((x) => x.end >= todayStr).map((x) => ({ p: x, s: x.stores.find((y) => y.storeId === me.storeId) })).find((x) => x.s && x.s.status !== "acknowledged");
   return (
     <>
-      <SubTabs items={[{ href: "/admin/periods", label: "やること" }, { href: "/admin/shifts", label: "出勤簿" }]} />
+      <SubTabs items={[{ href: "/admin/periods", label: "やること" }, { href: "/admin/shifts", label: "出勤簿予定" }, { href: "/admin/attendance", label: "出勤簿確定" }]} />
       <h1>つくる</h1>
       <p className="hint">シフトの流れ：①希望休の受付 → ②締め切り → ③出勤簿づくり → ④確定 → ⑤スタッフに公開 → ⑥オフィスに提出 → ⑦確認済み。各お店の「次は〜」のボタンを順番に押していきます。まちがえたら「ひとつ戻す」を押してください。</p>
       {todo && todo.s && (() => {
@@ -53,7 +53,7 @@ export default function PeriodsPage() {
             {next && canManage(s.storeId) && (next.to !== "acknowledged" || me.level >= 3) && (
               <button onClick={() => { advance(p.id, s.storeId, next); }}>次は：{next.label}</button>
             )}
-            {inKit && <Link href="/admin/shifts" className="ghost" style={{ display: "block", textAlign: "center", padding: 10 }}>出勤簿を開く</Link>}
+            {inKit && <Link href="/admin/shifts" className="ghost" style={{ display: "block", textAlign: "center", padding: 10 }}>出勤簿予定を開く</Link>}
           </div>
         );
       })()}

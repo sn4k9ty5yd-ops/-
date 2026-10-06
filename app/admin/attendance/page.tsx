@@ -1,4 +1,4 @@
-import { redirect } from "next/navigation";
+import { ShiftsView } from "../shifts/ShiftsView";
 
-// 「勤務時間の提出」の画面はなくなりました（出勤簿にまとめました）。古いリンクは出勤簿へ。
-export default function Page() { redirect("/admin/shifts"); }
+// 出勤簿確定（出勤簿予定とまったく同じ形。実際の勤務を直す）
+export default function Page() { return <ShiftsView final />; }

@@ -704,7 +704,7 @@ export async function draftAttendanceFromShifts(db: Database, userId: string, pe
   for (const sh of shifts) {
     const cur = existing.get(`${sh.membershipId}|${sh.day}`);
     if (cur && (cur.edited || !overwrite)) continue;
-    entries.push(sh.kind === "work" ? { membershipId: sh.membershipId, day: sh.day, kind: "work", clockIn: sh.start, clockOut: sh.end } : { membershipId: sh.membershipId, day: sh.day, kind: sh.kind });
+    entries.push(sh.kind === "work" ? { membershipId: sh.membershipId, day: sh.day, kind: "work", clockIn: sh.start, clockOut: sh.end, ...(sh.breakMin != null ? { breakMin: sh.breakMin } : {}) } : { membershipId: sh.membershipId, day: sh.day, kind: sh.kind });
   }
   return upsertAttendance(db, userId, periodId, storeId, entries, { edited: false, source: "shift" });
 }
@@ -721,6 +721,7 @@ export async function fillAttendance(
   const roster = (await listRoster(db, userId, input.storeId)).map((r) => r.id).filter((id) => !input.membershipIds || input.membershipIds.includes(id));
   const off = new Set((await listShifts(db, userId, input.periodId, input.storeId)).filter((s) => s.kind !== "work").map((s) => `${s.membershipId}|${s.day}`));
   const existing = new Map((await listAttendance(db, userId, input.periodId, input.storeId)).rows.map((r) => [`${r.membershipId}|${r.day}`, r]));
+  for (const r of existing.values()) if (r.kind !== "work") off.add(`${r.membershipId}|${r.day}`);   // 出勤簿確定で休みにした日も、そのまま
   const entries: AttendanceEntry[] = []; let skippedEdited = 0;
   for (const day of input.days) for (const id of roster) {
     const k = `${id}|${day}`;
