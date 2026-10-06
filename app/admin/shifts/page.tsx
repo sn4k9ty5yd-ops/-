@@ -96,7 +96,11 @@ export default function ShiftsPage() {
   return (
     <>
       <SubTabs items={[{ href: "/admin/periods", label: "やること" }, { href: "/admin/shifts", label: "出勤簿" }]} />
-      <h1>出勤簿</h1>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+        <h1 style={{ margin: 0 }}>出勤簿</h1>
+        <button className="ghost noprint" style={{ width: "auto", margin: 0 }} onClick={() => window.print()}>🖨 プリント</button>
+      </div>
+      <p className="printonly" style={{ fontSize: 12, margin: "2px 0 6px" }}>{store?.name}　{view.label}</p>
       <p className="hint">表で直します。<b>日付を押す</b>＝その日の全員をまとめて直す　<b>名前を押す</b>＝その人の日をまとめて直す　<b>マスを押す</b>＝1か所だけ直す</p>
       <div className="toolbar">
         <select aria-label="お店" value={storeId} onChange={(e) => setStoreId(e.target.value)}>
