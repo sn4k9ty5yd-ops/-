@@ -3,7 +3,7 @@ import { migrate } from "../lib/db/migrate";
 import { newDb } from "./helpers";
 import type { Database } from "../lib/db/types";
 import * as svc from "../lib/service";
-import { aiStatus, providerOfKey, setStoredAiKey } from "../lib/ai";
+import { aiStatus, callAi, providerOfKey, setStoredAiKey } from "../lib/ai";
 import { asUser } from "../lib/db/user-context";
 
 describe("AIのカギ（アプリ制作者だけ）", () => {
@@ -43,5 +43,15 @@ describe("AIのカギ（アプリ制作者だけ）", () => {
     await svc.clearAiKey(d, u.owner);
     setStoredAiKey(null);
     expect((await svc.getAiSettings(d, u.owner)).source).toBe(process.env.GEMINI_API_KEY || process.env.ANTHROPIC_API_KEY ? "server" : "none");
+  });
+  it("「AQ.」のカギは、ふつうの入り口で通らないとき、別の入り口でも試す", async () => {
+    const urls: string[] = [];
+    const fake = (async (u: string) => { urls.push(u); return u.includes("aiplatform") ? new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: "返事" }] } }] }), { status: 200 }) : new Response("{}", { status: 403 }); }) as unknown as typeof fetch;
+    expect(await callAi("やあ", { env: { GEMINI_API_KEY: "AQ.Ab8" + "x".repeat(30) }, fetchFn: fake })).toBe("返事");
+    expect(urls).toHaveLength(2);
+    const urls2: string[] = [];
+    const bad = (async (u: string) => { urls2.push(u); return new Response("{}", { status: 403 }); }) as unknown as typeof fetch;
+    await expect(callAi("やあ", { env: { GEMINI_API_KEY: "AIza" + "x".repeat(30) }, fetchFn: bad })).rejects.toThrow("カギが正しくない");
+    expect(urls2).toHaveLength(1);   // AQ.以外は、そのまま失敗
   });
 });

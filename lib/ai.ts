@@ -48,15 +48,19 @@ export async function callAiChat(system: string, turns: ChatTurn[], opts: { env?
   try {
     if (st.provider === "gemini") {
       const model = env.AI_MODEL || "gemini-2.5-flash";
-      const res = await f(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
-        method: "POST", signal: ctl.signal,
-        headers: { "content-type": "application/json", "x-goog-api-key": env.GEMINI_API_KEY! },
-        body: JSON.stringify({
-          ...(system ? { systemInstruction: { parts: [{ text: system }] } } : {}),
-          contents: turns.map((t) => ({ role: t.role === "assistant" ? "model" : "user", parts: [{ text: t.content }] })),
-          generationConfig: { temperature: 0.8, maxOutputTokens: maxTokens },
-        }),
+      const body = JSON.stringify({
+        ...(system ? { systemInstruction: { parts: [{ text: system }] } } : {}),
+        contents: turns.map((t) => ({ role: t.role === "assistant" ? "model" : "user", parts: [{ text: t.content }] })),
+        generationConfig: { temperature: 0.8, maxOutputTokens: maxTokens },
       });
+      const call = (url: string) => f(url, { method: "POST", signal: ctl.signal, headers: { "content-type": "application/json", "x-goog-api-key": env.GEMINI_API_KEY! }, body });
+      const m = encodeURIComponent(model);
+      let res = await call(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent`);
+      // 新しい形のカギ（「AQ.」で始まる）は、Googleの別の入り口（Vertex AI）でしか通らないことがあるので、通らなければ、そちらでも試す
+      if (!res.ok && [400, 401, 403, 404].includes(res.status) && env.GEMINI_API_KEY!.startsWith("AQ.")) {
+        const alt = await call(`https://aiplatform.googleapis.com/v1/publishers/google/models/${m}:generateContent`);
+        if (alt.ok) res = alt;
+      }
       if (!res.ok) throw new Error(aiHttpMessage(res.status));
       const j = (await res.json()) as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
       const text = (j.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? "").join("").trim();
