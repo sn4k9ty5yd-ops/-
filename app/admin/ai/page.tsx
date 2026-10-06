@@ -25,6 +25,28 @@ export default function AiKeyPage() {
           {st.available && <div className="sub">{st.provider === "gemini" ? "Google（Gemini）" : "Claude"}　／　{st.source === "screen" ? `この画面で入れたカギ（${st.masked}）` : "サーバーの設定のカギ"}{st.updatedAt ? `　${st.updatedAt.slice(0, 16)}` : ""}</div>}
         </div>
       )}
+      {st && (
+        <div className="card" style={{ marginBottom: 12 }}>
+          <h2 style={{ marginTop: 0 }}>AIの種類</h2>
+          <p className="hint" style={{ margin: "0 0 8px" }}>どちらを使うか、えらべます。えらぶと、すぐに切りかわります。</p>
+          <div className="seg">
+            <button className={st.tier !== "pro" ? "on" : ""} disabled={busy} onClick={() => run({ action: "tier", tier: "flash" }, "「速い・安い」に切りかえました")}>⚡ 速い・安い（flash）</button>
+            <button className={st.tier === "pro" ? "on" : ""} disabled={busy} onClick={() => run({ action: "tier", tier: "pro" }, "「高性能（pro）」に切りかえました。「ためす」で確かめてください")}>🧠 高性能（pro）</button>
+          </div>
+          <p className="sub" style={{ marginTop: 8 }}>高性能（pro）は、答えがくわしく賢くなりますが、時間がかかり、使った分のお金も高くなります。Googleで課金（支払いの設定）をしたカギで使ってください。課金していないカギでは、使えないか、すぐ回数の上限に達することがあります。</p>
+        </div>
+      )}
+      <div className="card" style={{ marginBottom: 12 }}>
+        <h2 style={{ marginTop: 0 }}>課金（有料）で使うには</h2>
+        <p className="sub">GeminiアプリのProの契約と、このアプリで使うAIの料金は、別々です。このアプリ用の支払いを、別に設定します。</p>
+        <ol style={{ lineHeight: 1.8, paddingLeft: 20 }}>
+          <li>Google AI Studio（aistudio.google.com）を開き、カギの一覧（「API keys」）を開きます。</li>
+          <li>使っているカギの横の「Set up billing」（支払いの設定）を押し、画面のとおりに、支払い方法を登録します。</li>
+          <li>登録が終わると、そのカギは、課金の枠（回数の上限が大きい枠）になります。アプリ側の操作は、いりません。</li>
+          <li>上の「AIの種類」で、「高性能（pro）」を選んで、「ためす」を押します。</li>
+        </ol>
+        <p className="hint">料金は、使った分だけです。このアプリの使い方（会議・占い・チャットなど）なら、ふつうは月に数百円〜数千円のことが多いです。Googleの支払い画面で、「予算のお知らせ（上限の通知）」を設定しておくと安心です。</p>
+      </div>
       <div className="card">
         <h2 style={{ marginTop: 0 }}>カギを入れる・入れかえる</h2>
         <ol style={{ lineHeight: 1.8, paddingLeft: 20 }}>

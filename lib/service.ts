@@ -1,4 +1,4 @@
-import { aiStatus, callAi, callAiChat, providerOfKey, resetGeminiModel, setStoredAiKey, type ChatTurn } from "./ai";
+import { aiStatus, callAi, callAiChat, getAiTier, providerOfKey, resetGeminiModel, setAiTier, setStoredAiKey, type AiTier, type ChatTurn } from "./ai";
 import { findTemplate } from "./interview-sheets";
 import { fortunePrompt, type FortuneInput } from "./fortune-ai";
 import { heavyNote, isMbti, MENTOR_MAX_TURNS, MENTOR_OPENER, mentorSystemPrompt } from "./mentor";
@@ -2986,8 +2986,9 @@ let aiKeyLoadedAt = 0;
 /** 保存してあるAIのカギを読み込む（30秒おぼえておく）。サーバーの設定より、こちらを優先する */
 export async function loadAiKey(db: Database, force = false): Promise<void> {
   if (!force && Date.now() - aiKeyLoadedAt < 30000) return;
-  const r = (await db.query<{ value: string }>("select value from app_secrets where name = 'ai_key'").catch(() => ({ rows: [] as { value: string }[] }))).rows[0];
-  setStoredAiKey(r?.value ?? null);
+  const rows = (await db.query<{ name: string; value: string }>("select name, value from app_secrets where name in ('ai_key', 'ai_tier')").catch(() => ({ rows: [] as { name: string; value: string }[] }))).rows;
+  setStoredAiKey(rows.find((x) => x.name === "ai_key")?.value ?? null);
+  setAiTier(rows.find((x) => x.name === "ai_tier")?.value);
   aiKeyLoadedAt = Date.now();
 }
 
@@ -2997,13 +2998,13 @@ async function ownerOnly(db: Database, userId: string): Promise<Me> {
   return me;
 }
 
-export interface AiSettings { available: boolean; provider: "gemini" | "anthropic" | null; source: "screen" | "server" | "none"; masked: string | null; updatedAt: string | null }
+export interface AiSettings { tier: AiTier; available: boolean; provider: "gemini" | "anthropic" | null; source: "screen" | "server" | "none"; masked: string | null; updatedAt: string | null }
 
 export async function getAiSettings(db: Database, userId: string): Promise<AiSettings> {
   await ownerOnly(db, userId); await loadAiKey(db, true);
   const r = (await db.query<{ value: string; updated_at: string }>("select value, to_char(updated_at at time zone 'Asia/Tokyo', 'YYYY-MM-DD HH24:MI') as updated_at from app_secrets where name = 'ai_key'")).rows[0];
   const st = aiStatus();
-  return { available: st.available, provider: st.provider, source: r ? "screen" : st.available ? "server" : "none", masked: r ? `${r.value.slice(0, 4)}…${r.value.slice(-4)}` : null, updatedAt: r?.updated_at ?? null };
+  return { tier: getAiTier(), available: st.available, provider: st.provider, source: r ? "screen" : st.available ? "server" : "none", masked: r ? `${r.value.slice(0, 4)}…${r.value.slice(-4)}` : null, updatedAt: r?.updated_at ?? null };
 }
 
 export async function setAiKey(db: Database, userId: string, key: string): Promise<void> {
@@ -3012,6 +3013,14 @@ export async function setAiKey(db: Database, userId: string, key: string): Promi
   if (!providerOfKey(k)) throw new Error("カギの形が正しくありません。Google AI Studio で作ったカギ（長い英数字）を、前後を欠かさず、まるごと貼ってください（空白や日本語が入っていないか確認してください）");
   await db.query("insert into app_secrets (name, value, updated_by) values ('ai_key', $1, $2) on conflict (name) do update set value = excluded.value, updated_at = now(), updated_by = excluded.updated_by", [k, userId]);
   await loadAiKey(db, true);
+}
+
+/** AIの種類: flash（速くて安い）か pro（高性能）。proは、課金している枠で使う想定 */
+export async function setAiTierSetting(db: Database, userId: string, t: string): Promise<void> {
+  await ownerOnly(db, userId);
+  if (t !== "flash" && t !== "pro") throw new Error("AIの種類が正しくありません");
+  await db.query("insert into app_secrets (name, value, updated_by) values ('ai_tier', $1, $2) on conflict (name) do update set value = excluded.value, updated_at = now(), updated_by = excluded.updated_by", [t, userId]);
+  resetGeminiModel(); await loadAiKey(db, true);
 }
 
 export async function clearAiKey(db: Database, userId: string): Promise<void> {

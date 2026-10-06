@@ -35,11 +35,16 @@ async function httpError(res: Response, key: string): Promise<AiHttpError> {
   return new AiHttpError(aiHttpMessage(res.status), res.status, detail);
 }
 
-let geminiModel: string | null = null;   // 自動で見つけたモデル（サーバーを再起動するまで、おぼえておく）
-export const resetGeminiModel = () => { geminiModel = null; };
+export type AiTier = "flash" | "pro";   // flash＝速くて安い（ふだん用）／pro＝高性能（有料の枠向け）
+let tier: AiTier = "flash";
+export function setAiTier(t: string | null | undefined) { tier = t === "pro" ? "pro" : "flash"; }
+export const getAiTier = (): AiTier => tier;
+const found: Record<AiTier, string | null> = { flash: null, pro: null };   // 自動で見つけたモデル（サーバーを再起動するまで、おぼえておく）
+export const resetGeminiModel = () => { found.flash = null; found.pro = null; };
+const DEFAULT_MODEL: Record<AiTier, string> = { flash: "gemini-2.5-flash", pro: "gemini-2.5-pro" };
 
 /** 使えるモデルの一覧から、generateContent が使える、いちばん新しい「flash」（lite・画像・音声・実験版でないもの）をえらぶ */
-export async function discoverGeminiModel(f: Fetch, key: string, signal?: AbortSignal): Promise<string | null> {
+export async function discoverGeminiModel(f: Fetch, key: string, signal?: AbortSignal, want: AiTier = "flash"): Promise<string | null> {
   try {
     const r = await f("https://generativelanguage.googleapis.com/v1beta/models?pageSize=200", { signal, headers: { "x-goog-api-key": key } });
     if (!r.ok) return null;
@@ -47,7 +52,7 @@ export async function discoverGeminiModel(f: Fetch, key: string, signal?: AbortS
     const cands = (j.models ?? [])
       .filter((m) => (m.supportedGenerationMethods ?? []).includes("generateContent"))
       .map((m) => (m.name ?? "").replace(/^models\//, ""))
-      .map((n) => ({ n, v: /^gemini-(\d+(?:\.\d+)?)-flash$/.exec(n)?.[1] }))
+      .map((n) => ({ n, v: new RegExp(`^gemini-(\\d+(?:\\.\\d+)?)-${want}$`).exec(n)?.[1] }))
       .filter((x): x is { n: string; v: string } => !!x.v)
       .sort((a, b) => Number(b.v) - Number(a.v));
     return cands[0]?.n ?? null;
@@ -96,12 +101,12 @@ export async function callAiChat(system: string, turns: ChatTurn[], opts: { env?
         const alt2 = await post(`https://aiplatform.googleapis.com/v1/publishers/google/models/${m}:generateContent?key=${encodeURIComponent(key)}`, {});
         return alt2.ok ? alt2 : alt;
       };
-      let model = env.AI_MODEL || geminiModel || "gemini-2.5-flash";
+      let model = env.AI_MODEL || found[tier] || DEFAULT_MODEL[tier];
       let res = await tryModel(model);
       // モデルの名前が古くて見つからない（404）ときは、いま使えるモデルを調べて、いちばん新しい「flash」に切りかえる（AI_MODEL を決めているときは、そのまま）
       if (res.status === 404 && !env.AI_MODEL) {
-        const found = await discoverGeminiModel(f, key, ctl.signal);
-        if (found && found !== model) { geminiModel = found; model = found; first = null; res = await tryModel(model); }
+        const nm = await discoverGeminiModel(f, key, ctl.signal, tier);
+        if (nm && nm !== model) { found[tier] = nm; model = nm; first = null; res = await tryModel(model); }
       }
       if (!res.ok) { const e = await httpError(res, key); if (first) { const e1 = await httpError(first, key); e.detail = `入口1（${(first as Response).status}）${e1.detail} ／ 入口2（${res.status}）${e.detail}`.slice(0, 500); } e.detail = `モデル：${model} ／ ${e.detail}`.slice(0, 600); throw e; }
       const j = (await res.json()) as { candidates?: { content?: { parts?: { text?: string }[] } }[] };

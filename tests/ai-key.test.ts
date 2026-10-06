@@ -3,7 +3,7 @@ import { migrate } from "../lib/db/migrate";
 import { newDb } from "./helpers";
 import type { Database } from "../lib/db/types";
 import * as svc from "../lib/service";
-import { aiStatus, callAi, providerOfKey, resetGeminiModel, setStoredAiKey } from "../lib/ai";
+import { aiStatus, callAi, getAiTier, providerOfKey, resetGeminiModel, setStoredAiKey } from "../lib/ai";
 import { asUser } from "../lib/db/user-context";
 
 describe("AIのカギ（アプリ制作者だけ）", () => {
@@ -78,5 +78,17 @@ describe("AIのカギ（アプリ制作者だけ）", () => {
     resetGeminiModel();
     await expect(callAi("やあ", { env: { GEMINI_API_KEY: "AIza" + "x".repeat(30), AI_MODEL: "gemini-2.5-flash" }, fetchFn: fake })).rejects.toThrow("宛先");
     resetGeminiModel();
+  });
+  it("AIの種類（flash／pro）を決められる。制作者だけ。proは、proのモデルを使う", async () => {
+    await expect(svc.setAiTierSetting(d, u.office, "pro")).rejects.toThrow(svc.ForbiddenError);
+    await expect(svc.setAiTierSetting(d, u.owner, "ultra")).rejects.toThrow();
+    await svc.setAiTierSetting(d, u.owner, "pro");
+    expect((await svc.getAiSettings(d, u.owner)).tier).toBe("pro"); expect(getAiTier()).toBe("pro");
+    const calls: string[] = [];
+    const fake = (async (u2: string) => { calls.push(u2); return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: "ok" }] } }] }), { status: 200 }); }) as unknown as typeof fetch;
+    await callAi("やあ", { env: { GEMINI_API_KEY: "AIza" + "x".repeat(30) }, fetchFn: fake });
+    expect(calls[0]).toContain("gemini-2.5-pro:generateContent");
+    await svc.setAiTierSetting(d, u.owner, "flash");
+    expect(getAiTier()).toBe("flash");
   });
 });
