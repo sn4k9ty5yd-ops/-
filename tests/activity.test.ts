@@ -46,6 +46,7 @@ describe("記録と通知", () => {
     await svc.logActivity(d, u.owner, "/api/attendance", { action: "save" });
     await svc.logActivity(d, u.mgr, "/api/security", { action: "x" });                       // 自分のパスコードなどは残さない
     const r = await svc.listActivity(d, u.owner);
+    expect(r.rows[0].at).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);   // どの端末でも、日付として読める書き方
     expect(r.rows).toHaveLength(1);
     expect(r.rows[0]).toMatchObject({ userName: "mgr", userLevel: "レベル3", area: "出勤簿", what: "保存", storeName: "A店" });
     await expect(svc.listActivity(d, u.office)).rejects.toThrow(svc.ForbiddenError);

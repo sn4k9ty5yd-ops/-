@@ -7,7 +7,15 @@ import type { ActivityRow } from "@/lib/service";
 async function copyText(text: string) {
   try { await navigator.clipboard.writeText(text); return true; } catch { const t = document.createElement("textarea"); t.value = text; document.body.appendChild(t); t.select(); const ok = document.execCommand("copy"); t.remove(); return ok; }
 }
-const when = (iso: string) => { const d = new Date(iso.replace(" ", "T") + (iso.includes("+") || iso.endsWith("Z") ? "" : "Z")); const j = new Date(d.getTime() + 9 * 3600000); const p = (n: number) => String(n).padStart(2, "0"); return `${reiwa(`${j.getUTCFullYear()}-${p(j.getUTCMonth() + 1)}-${p(j.getUTCDate())}`)} ${p(j.getUTCHours())}:${p(j.getUTCMinutes())}`; };
+/** 「2026-10-06T09:48:00Z」「2026-10-06 09:48:00+00」など、どの書き方でも、日本時間の日付にする（読めなければ、そのまま出す） */
+const when = (iso: string) => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?(?:\.\d+)?\s*(Z|[+-]\d{2}(?::?\d{2})?)?$/.exec(iso.trim());
+  if (!m) return iso;
+  const off = m[7] && m[7] !== "Z" ? (m[7][0] === "-" ? -1 : 1) * (Number(m[7].slice(1, 3)) * 60 + Number(m[7].slice(4).replace(":", "") || 0)) : 0;
+  const j = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]) - off * 60000 + 9 * 3600000);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${reiwa(`${j.getUTCFullYear()}-${p(j.getUTCMonth() + 1)}-${p(j.getUTCDate())}`)} ${p(j.getUTCHours())}:${p(j.getUTCMinutes())}`;
+};
 
 export default function ActivityPage() {
   const { me } = useMe();

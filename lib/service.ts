@@ -2823,7 +2823,7 @@ export async function listActivity(db: Database, userId: string, q: { userName?:
   if (q.userName) { vals.push(q.userName); where.push(`user_name = $${vals.length}`); }
   if (q.area) { vals.push(q.area); where.push(`area = $${vals.length}`); }
   vals.push(lim);
-  const rows = (await db.query<ActivityRow>(`select id, user_id as "userId", user_name as "userName", user_level as "userLevel", store_name as "storeName", area, what, at::text as at from activity_log where ${where.join(" and ")} order by id desc limit $${vals.length}`, vals)).rows;
+  const rows = (await db.query<ActivityRow>(`select id, user_id as "userId", user_name as "userName", user_level as "userLevel", store_name as "storeName", area, what, to_char(at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as at from activity_log where ${where.join(" and ")} order by id desc limit $${vals.length}`, vals)).rows;
   const meta = (await db.query<{ area: string[]; people: string[] }>("select array_agg(distinct area) as area, array_agg(distinct user_name) as people from (select area, user_name from activity_log where company_id = $1 order by id desc limit 3000) x", [me.companyId])).rows[0];
   return { rows, areas: (meta?.area ?? []).sort(), people: (meta?.people ?? []).sort() };
 }
