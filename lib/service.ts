@@ -10,7 +10,7 @@ import { calcHours, DEFAULT_BREAK_RULE, validateBreakRule, type BreakRule } from
 import { periodFor, upcomingPeriods } from "./periods";
 import { asUser } from "./db/user-context";
 import type { Database, Queryable } from "./db/types";
-import { daysOf, hoursOn, md, shortNames } from "./labels";
+import { daysOf, hoursOn, md, shortNames, sortRoster } from "./labels";
 import { pushToUsers, vapidKeys } from "./push";
 import { tierOf, type Level } from "./permissions";
 
@@ -491,7 +491,7 @@ export async function listRoster(db: Database, userId: string, storeId: string):
   const rows = (await asUser(db, userId, (q) =>
     q.query<{ id: string; name: string; level: Level; shortName: string | null }>(
       "select id, name, level, short_name as \"shortName\" from memberships where store_id = $1 and status = 'active' and on_shift order by level desc, name", [storeId]))).rows;
-  return rows.map((r) => (me?.appOwner || r.id === userId ? r : { ...r, level: 0 as const }));   // ほかの人のレベルの数字は、返事に入れない
+  return sortRoster(rows.map((r) => (me?.appOwner || r.id === userId ? r : { ...r, level: 0 as const })));   // ほかの人のレベルの数字は、返事に入れない。並びは、決めた順
 }
 
 export async function listShifts(db: Database, userId: string, periodId: string, storeId: string): Promise<ShiftRow[]> {
@@ -622,11 +622,12 @@ export interface AttendanceEntry { membershipId: string; day: string; kind: Shif
 const NOT_EDITABLE_ATT = "いまは出勤簿を変更できません（提出済み・確認済み、または権限がありません）";
 
 export async function listAttendanceRoster(db: Database, userId: string, periodId: string, storeId: string): Promise<{ id: string; name: string; status: string }[]> {
-  return (await asUser(db, userId, (q) =>
+  const rows = (await asUser(db, userId, (q) =>
     q.query<{ id: string; name: string; status: string }>(
       `select id, name, status from memberships
         where store_id = $2 and ((status = 'active' and on_shift) or id in (select membership_id from attendance_records where period_id = $1))
         order by level desc, name`, [periodId, storeId]))).rows;
+  return sortRoster(rows);
 }
 
 export async function listAttendance(db: Database, userId: string, periodId: string, storeId: string): Promise<{ rows: AttendanceRow[]; editable: boolean }> {

@@ -46,3 +46,10 @@ describe("休憩を手で決める", () => {
     expect(attendanceLines({ kind: "work", ...s, breakMin: 0 } as never)[4]).toBe("9:00");
   });
 });
+
+describe("名簿の並び（ちがう書き方も同じ人）", () => {
+  it("広・渡辺・太田・全角空白でも、決めた順に並ぶ", () => {
+    const n = ["山田　花", "渡辺 一", "太田 三", "広 茉紀", "金子　直樹", "永尾"].map((name) => ({ name }));
+    expect(sortRoster(n).map((x) => x.name)).toEqual(["永尾", "金子　直樹", "広 茉紀", "太田 三", "渡辺 一", "山田　花"]);
+  });
+});
