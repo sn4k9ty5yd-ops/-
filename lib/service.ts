@@ -3009,7 +3009,7 @@ export async function getAiSettings(db: Database, userId: string): Promise<AiSet
 export async function setAiKey(db: Database, userId: string, key: string): Promise<void> {
   await ownerOnly(db, userId);
   const k = key.trim();
-  if (!providerOfKey(k)) throw new Error("カギの形が正しくありません。Google AI Studio の「AIza」で始まるカギ（またはClaudeの「sk-ant-」で始まるカギ）を、まるごと貼ってください");
+  if (!providerOfKey(k)) throw new Error("カギの形が正しくありません。Google AI Studio で作ったカギ（長い英数字）を、前後を欠かさず、まるごと貼ってください（空白や日本語が入っていないか確認してください）");
   await db.query("insert into app_secrets (name, value, updated_by) values ('ai_key', $1, $2) on conflict (name) do update set value = excluded.value, updated_at = now(), updated_by = excluded.updated_by", [k, userId]);
   await loadAiKey(db, true);
 }

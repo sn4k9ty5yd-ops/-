@@ -7,8 +7,9 @@ let stored: string | null = null;
 export function setStoredAiKey(k: string | null) { stored = k && k.trim() ? k.trim() : null; }
 /** カギの形から、どのサービスのカギかを見分ける */
 export function providerOfKey(k: string): "gemini" | "anthropic" | null {
-  if (/^AIza[0-9A-Za-z_-]{20,}$/.test(k)) return "gemini";
   if (/^sk-ant-[0-9A-Za-z_-]{20,}$/.test(k)) return "anthropic";
+  // Googleのカギは「AIza…」のほかに、新しい形（「AQ.…」「AS…」など）もある。文字の種類と長さだけ見て、Geminiのカギとして扱う
+  if (/^[0-9A-Za-z_.-]{20,300}$/.test(k)) return "gemini";
   return null;
 }
 export function effectiveEnv(): Record<string, string | undefined> {

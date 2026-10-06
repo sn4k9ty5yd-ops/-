@@ -29,11 +29,11 @@ export default function AiKeyPage() {
         <h2 style={{ marginTop: 0 }}>カギを入れる・入れかえる</h2>
         <ol style={{ lineHeight: 1.8, paddingLeft: 20 }}>
           <li>Google AI Studio（aistudio.google.com）を開き、「Get API key」→「APIキーを作成」で、カギを作ります。</li>
-          <li>出てきた「AIza」で始まる長い文字を、コピーします。</li>
+          <li>出てきた長い文字（「AIza」「AQ.」「AS」などで始まります）を、まるごとコピーします。</li>
           <li>下の欄に貼って、「保存する」を押します。</li>
           <li>「ためす」を押して、「AIから返事が来ました」と出れば完了です。</li>
         </ol>
-        <input type="password" autoComplete="off" placeholder="ここにカギを貼る（AIza…）" value={key} onChange={(e) => setKey(e.target.value)} style={{ width: "100%" }} />
+        <input type="password" autoComplete="off" placeholder="ここにカギを貼る" value={key} onChange={(e) => setKey(e.target.value)} style={{ width: "100%" }} />
         <div className="actions">
           <button style={{ width: "auto" }} disabled={busy || key.trim().length < 20} onClick={() => run({ action: "save", key }, "保存しました。「ためす」を押して、確かめてください")}>保存する</button>
           <button className="ghost" style={{ width: "auto", color: "var(--blue)" }} disabled={busy || !st?.available} onClick={() => run({ action: "test" }, "")}>ためす</button>

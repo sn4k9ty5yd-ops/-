@@ -21,6 +21,8 @@ describe("AIのカギ（アプリ制作者だけ）", () => {
   const KEY = "AIzaSyDUMMYDUMMYDUMMYDUMMY12345678";
   it("形が正しいカギだけ保存でき、画面には先頭と最後の4文字しか出ない", async () => {
     expect(providerOfKey(KEY)).toBe("gemini"); expect(providerOfKey("hello")).toBeNull();
+    expect(providerOfKey("AQ.Ab8RN6" + "x".repeat(30))).toBe("gemini"); expect(providerOfKey("AS" + "y".repeat(40))).toBe("gemini");   // 新しい形のカギ
+    expect(providerOfKey("sk-ant-" + "z".repeat(30))).toBe("anthropic"); expect(providerOfKey("あいうえお".repeat(8))).toBeNull(); expect(providerOfKey("a b".repeat(10))).toBeNull();
     await expect(svc.setAiKey(d, u.owner, "hello")).rejects.toThrow("形が正しくありません");
     await svc.setAiKey(d, u.owner, `  ${KEY}\n`);
     const s = await svc.getAiSettings(d, u.owner);
