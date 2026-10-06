@@ -53,7 +53,7 @@ export function shortNames(people: { id: string; name: string; shortName?: strin
 
 /** 出勤簿・名簿の名前の並び順（オフィスが決めた順）。名前が、この文字で始まる人を先に。ほかの人はそのあと、いちばん最後が大坪。
  *  ちがう書き方（広/廣、渡辺/渡邊/渡邉、太田/大田、金子崇史＝金子た）も同じ人として見る。名前のあいだの空白は、無視する */
-export const ROSTER_FIRST: string[][] = [["永尾"], ["中嶋", "中島"], ["成田"], ["金子直"], ["松村"], ["廣", "広"], ["金子た", "金子崇"], ["大田", "太田"], ["上田"], ["渡邊", "渡辺", "渡邉"], ["山田"]];
+export const ROSTER_FIRST: string[][] = [["永尾"], ["中嶋", "中島"], ["成田"], ["金子直"], ["松村"], ["廣", "広"], ["金子た", "金子"], ["大田", "太田"], ["上田"], ["渡邊", "渡辺", "渡邉"], ["山田"]];
 export const ROSTER_LAST = ["大坪"];
 export function sortRoster<T extends { name: string; shortName?: string | null }>(list: T[]): T[] {
   const norm = (n: string) => n.normalize("NFKC").replace(/[\s\u3000]/g, "");
