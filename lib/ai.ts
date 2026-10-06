@@ -103,11 +103,12 @@ export async function callAiChat(system: string, turns: ChatTurn[], opts: { env?
       };
       let model = env.AI_MODEL || found[tier] || DEFAULT_MODEL[tier];
       let res = await tryModel(model);
+      const primary = () => (first as Response | null) ?? res;   // ふつうの入り口（入口1）の返事
       // モデルの名前が古くて見つからない（404）ときは、いま使えるモデルを調べて、いちばん新しい「flash」に切りかえる（AI_MODEL を決めているときは、そのまま）
-      if (res.status === 404 && !env.AI_MODEL) {
+      if (primary().status === 404 && !env.AI_MODEL) {
         // 一覧が取れないときは、Googleの返事の「このモデルを使ってください」の名前を使う
         let hint: string | null = null;
-        try { const t = ((await res.clone().json()) as { error?: { message?: string } }).error?.message ?? ""; hint = /use\s+models\/(gemini-[0-9A-Za-z.\-]+?)(?=\s|\.\s|,|$)/.exec(t)?.[1]?.replace(/\.$/, "") ?? null; } catch { /* 読めなくてもよい */ }
+        try { const t = ((await primary().clone().json()) as { error?: { message?: string } }).error?.message ?? ""; hint = /use\s+models\/(gemini-[0-9A-Za-z.\-]+?)(?=\s|\.\s|,|$)/.exec(t)?.[1]?.replace(/\.$/, "") ?? null; } catch { /* 読めなくてもよい */ }
         if (hint && !new RegExp(`-${tier}$`).test(hint)) hint = null;
         const nm = (await discoverGeminiModel(f, key, ctl.signal, tier)) ?? hint;
         if (nm && nm !== model) { found[tier] = nm; model = nm; first = null; res = await tryModel(model); }

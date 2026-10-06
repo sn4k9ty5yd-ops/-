@@ -103,4 +103,17 @@ describe("AIのカギ（アプリ制作者だけ）", () => {
     expect(calls.some((c) => c.includes("gemini-3.8-flash:generateContent"))).toBe(true);
     resetGeminiModel();
   });
+  it("「AQ.」のカギで、入口1が404・入口2が403でも、モデルを切りかえる", async () => {
+    resetGeminiModel();
+    const calls: string[] = [];
+    const fake = (async (u: string) => {
+      calls.push(u);
+      if (u.includes("aiplatform")) return new Response('{"error":{"status":"PERMISSION_DENIED","message":"disabled"}}', { status: 403 });
+      if (u.includes("/models?pageSize")) return new Response("{}", { status: 403 });
+      return u.includes("gemini-2.5-flash") ? new Response(JSON.stringify({ error: { message: "Please update your code to use models/gemini-3.8-flash for the latest" } }), { status: 404 }) : new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: "返事" }] } }] }), { status: 200 });
+    }) as unknown as typeof fetch;
+    expect(await callAi("やあ", { env: { GEMINI_API_KEY: "AQ.Ab8" + "x".repeat(30) }, fetchFn: fake })).toBe("返事");
+    expect(calls.some((c) => c.includes("generativelanguage") && c.includes("gemini-3.8-flash:generateContent"))).toBe(true);
+    resetGeminiModel();
+  });
 });
