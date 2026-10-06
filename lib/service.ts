@@ -1,5 +1,6 @@
 import { aiStatus, callAi, callAiChat, providerOfKey, setStoredAiKey, type ChatTurn } from "./ai";
 import { findTemplate } from "./interview-sheets";
+import { fortunePrompt, type FortuneInput } from "./fortune-ai";
 import { heavyNote, isMbti, MENTOR_MAX_TURNS, MENTOR_OPENER, mentorSystemPrompt } from "./mentor";
 import { describeActivity, isOfficeReport, NOT_LOGGED } from "./activity";
 import { discussionPrompt, minutesPrompt, mindmapPrompt, parseMindmap, summaryPrompt, themePrompt } from "./meeting-prompts";
@@ -3024,4 +3025,19 @@ export async function testAiKey(db: Database, userId: string, aiFn: (p: string) 
   await ownerOnly(db, userId); await loadAiKey(db, true);
   try { const t = await aiFn("「OK」とだけ、返事してください。"); return { ok: true, message: `AIから返事が来ました：${t.slice(0, 40)}` }; }
   catch (e) { return { ok: false, message: (e as Error).message }; }
+}
+
+
+// ------------------------------------------------------------------ くわしい占い（AI）— 保存しない。使ったことも記録しない
+const fortuneUse = new Map<string, number[]>();
+export async function runFortuneAi(db: Database, userId: string, input: Omit<FortuneInput, "today">, aiFn: (prompt: string) => Promise<string> = (p) => callAi(p, { timeoutMs: 90000 })): Promise<{ text: string }> {
+  const me = await getMe(db, userId);
+  if (!me || me.displayOnly) throw new ForbiddenError();
+  const today = new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10);
+  const prompt = fortunePrompt({ ...input, today });           // 入力の検査もここで
+  const now = Date.now(); const list = (fortuneUse.get(userId) ?? []).filter((t) => now - t < 3600000);
+  if (list.length >= 8) throw new Error("占いを、短い時間にたくさん使いすぎです。しばらくしてから、もう一度どうぞ");
+  list.push(now); fortuneUse.set(userId, list);
+  await loadAiKey(db);
+  return { text: await aiFn(prompt) };
 }
