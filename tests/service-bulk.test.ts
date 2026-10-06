@@ -29,7 +29,7 @@ describe("スタッフのまとめて登録", () => {
     expect(new Set(r.created.map((c) => c.passcode)).size).toBeGreaterThan(1);
     for (const c of r.created) expect((await login(db, { companyCode: "x-co", employeeCode: c.employeeCode, passcode: c.passcode })).ok).toBe(true);
     const staff = await svc.listStaff(db, id.office);
-    expect(staff.find((s) => s.employeeCode === "2003")).toMatchObject({ level: 3, storeId: st.s2, name: "店長太郎" });
+    expect(staff.find((s) => s.employeeCode === "2003")).toMatchObject({ storeId: st.s2, name: "店長太郎" });
   });
   it("チェックだけ(dryRun): 何も作らず、履歴も残さない。問題があれば、同じように断る", async () => {
     const before = await count();

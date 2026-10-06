@@ -163,10 +163,11 @@ export default function StaffPage() {
                 </button>
               )}
               {me.level === 4 && s.status === "active" && s.id !== me.id && !s.displayOnly && !s.appOwner && (tierOf(s) < 4 || me.appOwner) ? (
-                <select value={tierOf(s)} onChange={(e) => run(() => api(`/api/staff/${s.id}/level`, { level: Number(e.target.value) }))}>
+                <select value={s.level ? tierOf(s) : ""} onChange={(e) => e.target.value && run(() => api(`/api/staff/${s.id}/level`, { level: Number(e.target.value) }))}>
+                  {!s.level && <option value="">レベルを変える</option>}
                   {LEVEL_CHOICES.map((l) => <option key={l} value={l}>{TIER_NAMES[l]}</option>)}
                 </select>
-              ) : <span className="chip">{levelLabel(me, s)}</span>}
+              ) : (me.appOwner || s.id === me.id) && s.level ? <span className="chip">{levelLabel(me, s)}</span> : null}
               {s.manageable && s.status === "active" && (
                 <>
                   <button className="ghost" style={{ color: "var(--blue)" }}

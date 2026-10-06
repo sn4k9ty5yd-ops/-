@@ -26,6 +26,13 @@ describe("レベル4（社長・見るだけ）・5（事務員さん）・6（�
     const edu = async (k: string) => (await asUser(d, u[k], (q) => q.query<{ v: boolean }>("select app.is_edu($1) as v", [sid]))).rows[0].v;
     expect([await edu("office"), await edu("boss"), await edu("owner")]).toEqual([false, true, true]);
   });
+  it("他の人のレベルは見えない（制作者だけ全員分・自分の分は見える）", async () => {
+    const lv = async (viewer: string, target: string) => (await svc.listStaff(d, u[viewer])).find((s) => s.id === u[target])?.level;
+    expect(await lv("office", "boss")).toBe(0);
+    expect(await lv("office", "office")).toBe(4);
+    expect(await lv("owner", "boss")).toBe(4);
+    expect(await lv("staff", "office")).toBe(0);
+  });
   it("レベル4・5に決められるのは、アプリ制作者だけ。事務員さんは社長のアカウントを変えられない", async () => {
     await expect(svc.setStaffLevel(d, u.office, u.staff, 4)).rejects.toThrow(svc.ForbiddenError);
     await expect(svc.setStaffLevel(d, u.office, u.staff, 5)).rejects.toThrow(svc.ForbiddenError);

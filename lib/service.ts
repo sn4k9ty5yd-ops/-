@@ -23,7 +23,7 @@ export type Presence = "online" | "idle" | "loggedout" | "never";
 export const ONLINE_SECONDS = 120; // これ以内に開いていれば「オンライン」
 export interface StaffRow {
   presence?: Presence; seenAgoSec?: number | null; retireOn?: string | null;
-  id: string; name: string; employeeCode: string; storeId: string; level: Level; status: "active" | "disabled"; manageable: boolean; onShift: boolean; displayOnly: boolean; execView?: boolean; canEvaluate?: boolean; materialManager?: boolean; eduLead?: boolean; appOwner?: boolean; rank?: "assistant" | "stylist" | null; shortName?: string | null;
+  id: string; name: string; employeeCode: string; storeId: string; /** 0＝見せない（自分のレベルと、アプリ制作者以外には、ほかの人のレベルは見せない） */ level: Level | 0; status: "active" | "disabled"; manageable: boolean; onShift: boolean; displayOnly: boolean; execView?: boolean; canEvaluate?: boolean; materialManager?: boolean; eduLead?: boolean; appOwner?: boolean; rank?: "assistant" | "stylist" | null; shortName?: string | null;
 }
 
 export class ForbiddenError extends Error {
@@ -140,11 +140,12 @@ export async function listStaff(db: Database, userId: string): Promise<StaffRow[
     }
   }
   // 「操作できる人」かは、画面のボタン表示のための目安（本当の判定はDBが行う）。社員番号の小さい順に並べる
-  return rows.map((r) => ({
-    ...r,
-    ...(pres.get(r.id) ?? {}),
-    manageable: (me.level === 4 || (me.level === 3 && r.storeId === me.storeId && r.level < me.level)) && (!r.appOwner || r.id === userId) && (!r.execView || me.appOwner || r.id === userId),
-  })).sort(compareEmployeeCode);
+  return rows.map((r) => {
+    const manageable = (me.level === 4 || (me.level === 3 && r.storeId === me.storeId && (r.level as number) < me.level)) && (!r.appOwner || r.id === userId) && (!r.execView || me.appOwner || r.id === userId);
+    // レベルは、自分のものと、アプリ制作者の画面だけに出す。ほかの人のレベルは、返事にも入れない
+    const hide = !me.appOwner && r.id !== userId;
+    return { ...r, ...(pres.get(r.id) ?? {}), manageable, ...(hide ? { level: 0 as const, execView: undefined, appOwner: undefined } : {}) };
+  }).sort(compareEmployeeCode);
 }
 
 /** 社員番号の小さい順（数字は数として比べる。数字でないものは最後） */
@@ -485,10 +486,12 @@ export async function setOnShift(db: Database, userId: string, targetId: string,
 }
 
 /** シフト表に載せる人（その店舗の在籍者でシフトに入る人） */
-export async function listRoster(db: Database, userId: string, storeId: string): Promise<{ id: string; name: string; level: Level; shortName: string | null }[]> {
-  return (await asUser(db, userId, (q) =>
+export async function listRoster(db: Database, userId: string, storeId: string): Promise<{ id: string; name: string; level: Level | 0; shortName: string | null }[]> {
+  const me = await getMe(db, userId);
+  const rows = (await asUser(db, userId, (q) =>
     q.query<{ id: string; name: string; level: Level; shortName: string | null }>(
       "select id, name, level, short_name as \"shortName\" from memberships where store_id = $1 and status = 'active' and on_shift order by level desc, name", [storeId]))).rows;
+  return rows.map((r) => (me?.appOwner || r.id === userId ? r : { ...r, level: 0 as const }));   // ほかの人のレベルの数字は、返事に入れない
 }
 
 export async function listShifts(db: Database, userId: string, periodId: string, storeId: string): Promise<ShiftRow[]> {
