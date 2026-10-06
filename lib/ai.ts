@@ -24,6 +24,17 @@ export function aiStatus(env: Record<string, string | undefined> = effectiveEnv(
   return { available: false, provider: null };
 }
 
+/** AIの会社から、エラーが返ってきたとき。detail は、向こうの説明（原因をつかむため。カギは含めない） */
+export class AiHttpError extends Error {
+  constructor(message: string, public status: number, public detail: string) { super(message); }
+}
+async function httpError(res: Response, key: string): Promise<AiHttpError> {
+  let detail = "";
+  try { const j = (await res.clone().json()) as { error?: { message?: string; status?: string } }; detail = [j.error?.status, j.error?.message].filter(Boolean).join("："); } catch { /* 読めなくてもよい */ }
+  detail = detail.split(key).join("（カギ）").slice(0, 300);
+  return new AiHttpError(aiHttpMessage(res.status), res.status, detail);
+}
+
 export class AiUnavailableError extends Error {
   constructor() { super("AIの準備がまだです（管理者がカギを設定すると使えます）。いまは「プロンプトをコピー」で、ほかのAIに貼って使えます"); }
 }
@@ -57,11 +68,13 @@ export async function callAiChat(system: string, turns: ChatTurn[], opts: { env?
       const m = encodeURIComponent(model);
       let res = await call(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent`);
       // 新しい形のカギ（「AQ.」で始まる）は、Googleの別の入り口（Vertex AI）でしか通らないことがあるので、通らなければ、そちらでも試す
+      let first: Response | null = null;
       if (!res.ok && [400, 401, 403, 404].includes(res.status) && env.GEMINI_API_KEY!.startsWith("AQ.")) {
+        first = res;
         const alt = await call(`https://aiplatform.googleapis.com/v1/publishers/google/models/${m}:generateContent`);
-        if (alt.ok) res = alt;
+        if (alt.ok) res = alt; else { const alt2 = await f(`https://aiplatform.googleapis.com/v1/publishers/google/models/${m}:generateContent?key=${encodeURIComponent(env.GEMINI_API_KEY!)}`, { method: "POST", signal: ctl.signal, headers: { "content-type": "application/json" }, body }); if (alt2.ok) res = alt2; else res = alt; }
       }
-      if (!res.ok) throw new Error(aiHttpMessage(res.status));
+      if (!res.ok) { const e = await httpError(res, env.GEMINI_API_KEY!); if (first) { const e1 = await httpError(first, env.GEMINI_API_KEY!); e.detail = `入口1（${first.status}）${e1.detail} ／ 入口2（${res.status}）${e.detail}`.slice(0, 500); } throw e; }
       const j = (await res.json()) as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
       const text = (j.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? "").join("").trim();
       if (!text) throw new Error("AIから、答えが返ってきませんでした。もう一度ためしてください");
@@ -72,7 +85,7 @@ export async function callAiChat(system: string, turns: ChatTurn[], opts: { env?
       headers: { "content-type": "application/json", "x-api-key": env.ANTHROPIC_API_KEY!, "anthropic-version": "2023-06-01" },
       body: JSON.stringify({ model: env.AI_MODEL || "claude-haiku-4-5-20251001", max_tokens: maxTokens, ...(system ? { system } : {}), messages: turns }),
     });
-    if (!res.ok) throw new Error(aiHttpMessage(res.status));
+    if (!res.ok) throw await httpError(res, env.ANTHROPIC_API_KEY!);
     const j = (await res.json()) as { content?: { type: string; text?: string }[] };
     const text = (j.content ?? []).filter((c) => c.type === "text").map((c) => c.text ?? "").join("").trim();
     if (!text) throw new Error("AIから、答えが返ってきませんでした。もう一度ためしてください");
@@ -86,5 +99,6 @@ export async function callAiChat(system: string, turns: ChatTurn[], opts: { env?
 function aiHttpMessage(status: number): string {
   if (status === 429) return "AIの無料の利用回数を、いったん使いきりました。しばらくしてから、もう一度ためしてください";
   if (status === 401 || status === 403) return "AIのカギが正しくないようです（管理者に伝えてください）";
+  if (status === 404) return "AIの宛先（モデル）が見つかりませんでした（404）。カギの種類か、AIの名前が合っていないようです";
   return `AIがうまく動きませんでした（${status}）。しばらくしてから、もう一度ためしてください`;
 }

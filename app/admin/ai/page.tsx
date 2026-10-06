@@ -39,7 +39,7 @@ export default function AiKeyPage() {
           <button className="ghost" style={{ width: "auto", color: "var(--blue)" }} disabled={busy || !st?.available} onClick={() => run({ action: "test" }, "")}>ためす</button>
           {st?.source === "screen" && <button className="ghost" style={{ width: "auto", color: "#b91c1c" }} disabled={busy} onClick={() => { if (confirm("この画面で入れたカギを、消しますか？（消すと、AIは使えなくなります）")) run({ action: "clear" }, "カギを消しました"); }}>カギを消す</button>}
         </div>
-        {msg && <p className="sub"><b>{msg}</b></p>}
+        {msg && <p className="sub" style={{ whiteSpace: "pre-wrap" }}><b>{msg}</b></p>}
         <p className="hint">※ 保存したカギは、アプリの中のデータベースにだけ入り、画面には先頭と最後の4文字しか出ません。ほかの人には、この画面もカギも見えません。</p>
       </div>
     </>

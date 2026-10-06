@@ -3024,7 +3024,7 @@ export async function clearAiKey(db: Database, userId: string): Promise<void> {
 export async function testAiKey(db: Database, userId: string, aiFn: (p: string) => Promise<string> = (p) => callAi(p, { timeoutMs: 30000 })): Promise<{ ok: boolean; message: string }> {
   await ownerOnly(db, userId); await loadAiKey(db, true);
   try { const t = await aiFn("「OK」とだけ、返事してください。"); return { ok: true, message: `AIから返事が来ました：${t.slice(0, 40)}` }; }
-  catch (e) { return { ok: false, message: (e as Error).message }; }
+  catch (e) { const d = (e as { detail?: string }).detail; return { ok: false, message: (e as Error).message + (d ? `\n（くわしい原因：${d}）` : "") }; }
 }
 
 
