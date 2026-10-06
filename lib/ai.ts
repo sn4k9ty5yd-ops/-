@@ -2,7 +2,22 @@
  *  GEMINI_API_KEY（Google・無料枠あり）か ANTHROPIC_API_KEY（Claude・有料）のどちらかがあれば使える。 */
 export interface AiStatus { available: boolean; provider: "gemini" | "anthropic" | null }
 
-export function aiStatus(env: Record<string, string | undefined> = process.env): AiStatus {
+// アプリの画面（制作者だけの「AIのカギ」）から入れたカギ。サーバーの設定よりも優先する
+let stored: string | null = null;
+export function setStoredAiKey(k: string | null) { stored = k && k.trim() ? k.trim() : null; }
+/** カギの形から、どのサービスのカギかを見分ける */
+export function providerOfKey(k: string): "gemini" | "anthropic" | null {
+  if (/^AIza[0-9A-Za-z_-]{20,}$/.test(k)) return "gemini";
+  if (/^sk-ant-[0-9A-Za-z_-]{20,}$/.test(k)) return "anthropic";
+  return null;
+}
+export function effectiveEnv(): Record<string, string | undefined> {
+  const p = stored ? providerOfKey(stored) : null;
+  if (!stored || !p) return process.env;
+  return p === "gemini" ? { ...process.env, GEMINI_API_KEY: stored, ANTHROPIC_API_KEY: undefined } : { ...process.env, ANTHROPIC_API_KEY: stored, GEMINI_API_KEY: undefined };
+}
+
+export function aiStatus(env: Record<string, string | undefined> = effectiveEnv()): AiStatus {
   if (env.GEMINI_API_KEY) return { available: true, provider: "gemini" };
   if (env.ANTHROPIC_API_KEY) return { available: true, provider: "anthropic" };
   return { available: false, provider: null };
@@ -22,7 +37,7 @@ export async function callAi(prompt: string, opts: { env?: Record<string, string
 
 /** 会話（やりとりの続き）を渡して、次の返事をもらう。system は、キャラや決まり */
 export async function callAiChat(system: string, turns: ChatTurn[], opts: { env?: Record<string, string | undefined>; fetchFn?: Fetch; timeoutMs?: number; maxTokens?: number } = {}): Promise<string> {
-  const env = opts.env ?? process.env;
+  const env = opts.env ?? effectiveEnv();
   const f = opts.fetchFn ?? fetch;
   const st = aiStatus(env);
   if (!st.available) throw new AiUnavailableError();

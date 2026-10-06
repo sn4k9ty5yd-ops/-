@@ -20,6 +20,7 @@ const TABS: { href: string; label: string; min: number; sub?: boolean; owner?: b
   { href: "/admin/settings", label: "設定", min: 3 },
   { href: "/admin/records", label: "税務署用の書面", min: 4 },
   { href: "/admin/guide", label: "説明書", min: 4, owner: true },
+  { href: "/admin/ai", label: "AIのカギ", min: 4, owner: true },
   { href: "/admin/feedback", label: "ご要望", min: 4, owner: true },
   { href: "/admin/activity", label: "変更の記録", min: 4, owner: true },
 ];

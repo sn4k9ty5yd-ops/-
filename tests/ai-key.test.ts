@@ -1,0 +1,45 @@
+import { beforeAll, describe, expect, it } from "vitest";
+import { migrate } from "../lib/db/migrate";
+import { newDb } from "./helpers";
+import type { Database } from "../lib/db/types";
+import * as svc from "../lib/service";
+import { aiStatus, providerOfKey, setStoredAiKey } from "../lib/ai";
+import { asUser } from "../lib/db/user-context";
+
+describe("AIのカギ（アプリ制作者だけ）", () => {
+  let d: Database; const u: Record<string, string> = {};
+  beforeAll(async () => {
+    d = await newDb(); await migrate(d);
+    const co = (await d.query<{ id: string }>("insert into companies (code, name) values ('ai-co','T') returning id")).rows[0].id;
+    const sid = (await d.query<{ id: string }>("insert into stores (company_id, name) values ($1,'A') returning id", [co])).rows[0].id;
+    const mk = async (k: string, code: string, level: number, extra = "") => {
+      u[k] = (await d.query<{ id: string }>("insert into memberships (company_id, store_id, employee_code, name, level) values ($1,$2,$3,$4,$5) returning id", [co, sid, code, k, level])).rows[0].id;
+      if (extra) await d.query(`update memberships set ${extra} where id = $1`, [u[k]]);
+    };
+    await mk("owner", "1", 4, "app_owner = true"); await mk("office", "2", 4);
+  });
+  const KEY = "AIzaSyDUMMYDUMMYDUMMYDUMMY12345678";
+  it("形が正しいカギだけ保存でき、画面には先頭と最後の4文字しか出ない", async () => {
+    expect(providerOfKey(KEY)).toBe("gemini"); expect(providerOfKey("hello")).toBeNull();
+    await expect(svc.setAiKey(d, u.owner, "hello")).rejects.toThrow("形が正しくありません");
+    await svc.setAiKey(d, u.owner, `  ${KEY}\n`);
+    const s = await svc.getAiSettings(d, u.owner);
+    expect(s).toMatchObject({ available: true, provider: "gemini", source: "screen", masked: "AIza…5678" });
+    expect(JSON.stringify(s)).not.toContain("DUMMYDUMMY");
+    expect(aiStatus().provider).toBe("gemini");
+  });
+  it("制作者以外（事務員さんも）は、見る・入れる・ためす・消すが、できない。DBも見せない", async () => {
+    await expect(svc.getAiSettings(d, u.office)).rejects.toThrow(svc.ForbiddenError);
+    await expect(svc.setAiKey(d, u.office, KEY)).rejects.toThrow(svc.ForbiddenError);
+    await expect(svc.testAiKey(d, u.office)).rejects.toThrow(svc.ForbiddenError);
+    await expect(svc.clearAiKey(d, u.office)).rejects.toThrow(svc.ForbiddenError);
+    await expect(asUser(d, u.owner, (q) => q.query("select * from app_secrets"))).rejects.toThrow();
+  });
+  it("ためす: 返事が来れば成功、失敗は日本語の知らせ。消すとAIは使えなくなる", async () => {
+    expect(await svc.testAiKey(d, u.owner, async () => "OK")).toMatchObject({ ok: true });
+    expect(await svc.testAiKey(d, u.owner, async () => { throw new Error("カギが正しくないようです"); })).toEqual({ ok: false, message: "カギが正しくないようです" });
+    await svc.clearAiKey(d, u.owner);
+    setStoredAiKey(null);
+    expect((await svc.getAiSettings(d, u.owner)).source).toBe(process.env.GEMINI_API_KEY || process.env.ANTHROPIC_API_KEY ? "server" : "none");
+  });
+});

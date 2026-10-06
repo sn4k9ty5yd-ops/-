@@ -1,4 +1,4 @@
-import { callAi, callAiChat, type ChatTurn } from "./ai";
+import { aiStatus, callAi, callAiChat, providerOfKey, setStoredAiKey, type ChatTurn } from "./ai";
 import { findTemplate } from "./interview-sheets";
 import { heavyNote, isMbti, MENTOR_MAX_TURNS, MENTOR_OPENER, mentorSystemPrompt } from "./mentor";
 import { describeActivity, isOfficeReport, NOT_LOGGED } from "./activity";
@@ -2737,6 +2737,7 @@ function aiThrottle(userId: string) {
 export type MeetingAiAction = "minutes" | "summary" | "mindmap" | "theme" | "discussion";
 /** AIで、議事録・要約・マインドマップをつくる／課題（テーマ）を取り出す／AI会議をひらく。作ったものは、会議に保存する（書ける人だけ）。 */
 export async function runMeetingAi(db: Database, userId: string, input: { id: string; action: MeetingAiAction; theme?: string }, aiFn: (prompt: string) => Promise<string> = (p) => callAi(p)): Promise<{ text: string }> {
+  await loadAiKey(db);
   const g = await getMeeting(db, userId, input.id);
   if (!g) throw new ForbiddenError();
   if (!g.canEdit) throw new ForbiddenError("会議を直せるのは、店長と事務員さんです");
@@ -2860,6 +2861,7 @@ export async function setMentorMbti(db: Database, userId: string, mbti: string |
 
 /** メンター（Monday）に話しかける。返事は、AIがつくる。会話は、本人の分として保存される */
 export async function sendMentorMessage(db: Database, userId: string, input: { sessionId: string; text: string }, aiFn: (system: string, turns: ChatTurn[]) => Promise<string> = (s, t) => callAiChat(s, t, { maxTokens: 1024 })): Promise<{ reply: string }> {
+  await loadAiKey(db);
   const me = await getMe(db, userId);
   if (!me || me.displayOnly) throw new ForbiddenError();
   const text = input.text.trim();
@@ -2974,4 +2976,51 @@ export async function listMbtiDirectory(db: Database, userId: string): Promise<{
   const me = await getMe(db, userId);
   if (!me || me.displayOnly || me.rank !== "stylist") throw new ForbiddenError("みんなのMBTIは、スタイリストが見られます");
   return (await asUser(db, userId, (q) => q.query<{ name: string; storeName: string; mbti: string }>("select name, store_name as \"storeName\", mbti from public.mbti_directory()"))).rows;
+}
+
+
+// ------------------------------------------------------------------ AIのカギ（アプリ制作者だけ）
+let aiKeyLoadedAt = 0;
+/** 保存してあるAIのカギを読み込む（30秒おぼえておく）。サーバーの設定より、こちらを優先する */
+export async function loadAiKey(db: Database, force = false): Promise<void> {
+  if (!force && Date.now() - aiKeyLoadedAt < 30000) return;
+  const r = (await db.query<{ value: string }>("select value from app_secrets where name = 'ai_key'").catch(() => ({ rows: [] as { value: string }[] }))).rows[0];
+  setStoredAiKey(r?.value ?? null);
+  aiKeyLoadedAt = Date.now();
+}
+
+async function ownerOnly(db: Database, userId: string): Promise<Me> {
+  const me = await getMe(db, userId);
+  if (!me?.appOwner) throw new ForbiddenError("この画面は、アプリ制作者だけが使えます");
+  return me;
+}
+
+export interface AiSettings { available: boolean; provider: "gemini" | "anthropic" | null; source: "screen" | "server" | "none"; masked: string | null; updatedAt: string | null }
+
+export async function getAiSettings(db: Database, userId: string): Promise<AiSettings> {
+  await ownerOnly(db, userId); await loadAiKey(db, true);
+  const r = (await db.query<{ value: string; updated_at: string }>("select value, updated_at::text from app_secrets where name = 'ai_key'")).rows[0];
+  const st = aiStatus();
+  return { available: st.available, provider: st.provider, source: r ? "screen" : st.available ? "server" : "none", masked: r ? `${r.value.slice(0, 4)}…${r.value.slice(-4)}` : null, updatedAt: r?.updated_at ?? null };
+}
+
+export async function setAiKey(db: Database, userId: string, key: string): Promise<void> {
+  await ownerOnly(db, userId);
+  const k = key.trim();
+  if (!providerOfKey(k)) throw new Error("カギの形が正しくありません。Google AI Studio の「AIza」で始まるカギ（またはClaudeの「sk-ant-」で始まるカギ）を、まるごと貼ってください");
+  await db.query("insert into app_secrets (name, value, updated_by) values ('ai_key', $1, $2) on conflict (name) do update set value = excluded.value, updated_at = now(), updated_by = excluded.updated_by", [k, userId]);
+  await loadAiKey(db, true);
+}
+
+export async function clearAiKey(db: Database, userId: string): Promise<void> {
+  await ownerOnly(db, userId);
+  await db.query("delete from app_secrets where name = 'ai_key'");
+  await loadAiKey(db, true);
+}
+
+/** 本当に動くか、ためす（短い質問を1回送る） */
+export async function testAiKey(db: Database, userId: string, aiFn: (p: string) => Promise<string> = (p) => callAi(p, { timeoutMs: 30000 })): Promise<{ ok: boolean; message: string }> {
+  await ownerOnly(db, userId); await loadAiKey(db, true);
+  try { const t = await aiFn("「OK」とだけ、返事してください。"); return { ok: true, message: `AIから返事が来ました：${t.slice(0, 40)}` }; }
+  catch (e) { return { ok: false, message: (e as Error).message }; }
 }

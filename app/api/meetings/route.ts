@@ -1,4 +1,5 @@
 import { aiStatus } from "@/lib/ai";
+import { loadAiKey } from "@/lib/service";
 import { getDb } from "@/lib/db";
 import { authed, json } from "@/lib/http";
 import { createMeeting, deleteMeeting, getMeeting, listMeetings, runMeetingAi, saveMeetingAiResult, updateMeeting, type MeetingAiAction } from "@/lib/service";
@@ -6,6 +7,7 @@ import { createMeeting, deleteMeeting, getMeeting, listMeetings, runMeetingAi, s
 // GET ?storeId=… → 会議の一覧 / ?id=… → 1つの会議（文字起こし・議事録・要約・マインドマップ・AI会議）
 export const GET = authed(async (userId, req) => {
   const u = new URL(req.url); const db = await getDb();
+  await loadAiKey(await getDb());
   const ai = aiStatus();
   const id = u.searchParams.get("id");
   if (id) { const g = await getMeeting(db, userId, id); if (!g) throw new Error("会議が見つかりません"); return json({ meeting: g.meeting, discussions: g.ai, canEdit: g.canEdit, aiStatus: ai }); }
