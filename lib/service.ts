@@ -2515,7 +2515,7 @@ export async function sendFeedback(db: Database, userId: string, body: string): 
 /** 自分が送ったご要望（制作者は全員分） */
 export async function listFeedback(db: Database, userId: string): Promise<FeedbackRow[]> {
   return (await asUser(db, userId, (q) => q.query<FeedbackRow>(
-    `select f.id, f.body, f.status, f.reply, f.created_at::text as "createdAt", m.name as "fromName"
+    `select f.id, f.body, f.status, f.reply, to_char(f.created_at at time zone 'Asia/Tokyo', 'YYYY-MM-DD HH24:MI') as "createdAt", m.name as "fromName"
        from feedback f join memberships m on m.id = f.from_id order by f.created_at desc limit 200`))).rows;
 }
 
@@ -2688,7 +2688,7 @@ export async function getMeeting(db: Database, userId: string, id: string): Prom
   return asUser(db, userId, async (q) => {
     const m = (await q.query<MeetingRow>(`select ${MEETING_COLS} from meetings m left join memberships u on u.id = m.created_by where m.id = $1`, [id])).rows[0];
     if (!m) return null;
-    const ai = (await q.query<MeetingAiRow>(`select a.id, a.meeting_id as "meetingId", a.theme, a.result, u.name as "byName", a.created_at::text as "createdAt" from meeting_ai a left join memberships u on u.id = a.created_by where a.meeting_id = $1 order by a.created_at desc`, [id])).rows;
+    const ai = (await q.query<MeetingAiRow>(`select a.id, a.meeting_id as "meetingId", a.theme, a.result, u.name as "byName", to_char(a.created_at at time zone 'Asia/Tokyo', 'YYYY-MM-DD HH24:MI') as "createdAt" from meeting_ai a left join memberships u on u.id = a.created_by where a.meeting_id = $1 order by a.created_at desc`, [id])).rows;
     const canEdit = (await q.query<{ v: boolean }>("select app.meeting_edit($1) as v", [m.storeId])).rows[0].v;
     return { meeting: m, ai, canEdit };
   });
@@ -2845,10 +2845,10 @@ export async function getMentor(db: Database, userId: string, sessionId?: string
   return asUser(db, userId, async (q) => {
     const mbti = (await q.query<{ mbti: string | null }>("select mbti from mentor_profiles where membership_id = $1", [userId])).rows[0]?.mbti ?? null;
     const sessions = (await q.query<MentorSessionRow>(
-      `select session_id as "sessionId", (array_agg(content order by id) filter (where role = 'user'))[1] as first, max(created_at)::text as last, count(*)::int as count
+      `select session_id as "sessionId", (array_agg(content order by id) filter (where role = 'user'))[1] as first, to_char(max(created_at) at time zone 'Asia/Tokyo', 'YYYY-MM-DD HH24:MI') as last, count(*)::int as count
          from mentor_messages group by session_id order by max(id) desc limit 30`)).rows;
     const sid = sessionId ?? sessions[0]?.sessionId ?? crypto.randomUUID();
-    const messages = (await q.query<MentorMessage>(`select id, role, content, created_at::text as at from mentor_messages where session_id = $1 order by id`, [sid])).rows;
+    const messages = (await q.query<MentorMessage>(`select id, role, content, to_char(created_at at time zone 'Asia/Tokyo', 'YYYY-MM-DD HH24:MI') as at from mentor_messages where session_id = $1 order by id`, [sid])).rows;
     return { mbti, sessionId: sid, messages, sessions };
   });
 }
@@ -3001,7 +3001,7 @@ export interface AiSettings { available: boolean; provider: "gemini" | "anthropi
 
 export async function getAiSettings(db: Database, userId: string): Promise<AiSettings> {
   await ownerOnly(db, userId); await loadAiKey(db, true);
-  const r = (await db.query<{ value: string; updated_at: string }>("select value, updated_at::text from app_secrets where name = 'ai_key'")).rows[0];
+  const r = (await db.query<{ value: string; updated_at: string }>("select value, to_char(updated_at at time zone 'Asia/Tokyo', 'YYYY-MM-DD HH24:MI') as updated_at from app_secrets where name = 'ai_key'")).rows[0];
   const st = aiStatus();
   return { available: st.available, provider: st.provider, source: r ? "screen" : st.available ? "server" : "none", masked: r ? `${r.value.slice(0, 4)}…${r.value.slice(-4)}` : null, updatedAt: r?.updated_at ?? null };
 }
