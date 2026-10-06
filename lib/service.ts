@@ -1,4 +1,4 @@
-import { aiStatus, callAi, callAiChat, providerOfKey, setStoredAiKey, type ChatTurn } from "./ai";
+import { aiStatus, callAi, callAiChat, providerOfKey, resetGeminiModel, setStoredAiKey, type ChatTurn } from "./ai";
 import { findTemplate } from "./interview-sheets";
 import { fortunePrompt, type FortuneInput } from "./fortune-ai";
 import { heavyNote, isMbti, MENTOR_MAX_TURNS, MENTOR_OPENER, mentorSystemPrompt } from "./mentor";
@@ -3022,7 +3022,7 @@ export async function clearAiKey(db: Database, userId: string): Promise<void> {
 
 /** 本当に動くか、ためす（短い質問を1回送る） */
 export async function testAiKey(db: Database, userId: string, aiFn: (p: string) => Promise<string> = (p) => callAi(p, { timeoutMs: 30000 })): Promise<{ ok: boolean; message: string }> {
-  await ownerOnly(db, userId); await loadAiKey(db, true);
+  await ownerOnly(db, userId); await loadAiKey(db, true); resetGeminiModel();
   try { const t = await aiFn("「OK」とだけ、返事してください。"); return { ok: true, message: `AIから返事が来ました：${t.slice(0, 40)}` }; }
   catch (e) { const d = (e as { detail?: string }).detail; return { ok: false, message: (e as Error).message + (d ? `\n（くわしい原因：${d}）` : "") }; }
 }

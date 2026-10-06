@@ -3,7 +3,7 @@ import { migrate } from "../lib/db/migrate";
 import { newDb } from "./helpers";
 import type { Database } from "../lib/db/types";
 import * as svc from "../lib/service";
-import { aiStatus, callAi, providerOfKey, setStoredAiKey } from "../lib/ai";
+import { aiStatus, callAi, providerOfKey, resetGeminiModel, setStoredAiKey } from "../lib/ai";
 import { asUser } from "../lib/db/user-context";
 
 describe("AIのカギ（アプリ制作者だけ）", () => {
@@ -53,5 +53,30 @@ describe("AIのカギ（アプリ制作者だけ）", () => {
     const bad = (async (u: string) => { urls2.push(u); return new Response("{}", { status: 403 }); }) as unknown as typeof fetch;
     await expect(callAi("やあ", { env: { GEMINI_API_KEY: "AIza" + "x".repeat(30) }, fetchFn: bad })).rejects.toThrow("カギが正しくない");
     expect(urls2).toHaveLength(1);   // AQ.以外は、そのまま失敗
+  });
+  it("モデルの名前が古くて404のときは、使えるモデルを調べて、いちばん新しいflashに切りかえる", async () => {
+    resetGeminiModel();
+    const calls: string[] = [];
+    const ok = (t: string) => new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: t }] } }] }), { status: 200 });
+    const fake = (async (u: string) => {
+      calls.push(u);
+      if (u.includes("/models?pageSize")) return new Response(JSON.stringify({ models: [
+        { name: "models/gemini-2.5-flash", supportedGenerationMethods: ["generateContent"] },
+        { name: "models/gemini-3-flash", supportedGenerationMethods: ["generateContent"] },
+        { name: "models/gemini-3-flash-lite", supportedGenerationMethods: ["generateContent"] },
+        { name: "models/gemini-3.5-flash-image", supportedGenerationMethods: ["generateContent"] },
+        { name: "models/embedding-001", supportedGenerationMethods: ["embedContent"] }] }), { status: 200 });
+      return u.includes("gemini-2.5-flash") ? new Response('{"error":{"status":"NOT_FOUND","message":"models/gemini-2.5-flash is not found"}}', { status: 404 }) : ok("新しいモデルの返事");
+    }) as unknown as typeof fetch;
+    expect(await callAi("やあ", { env: { GEMINI_API_KEY: "AIza" + "x".repeat(30) }, fetchFn: fake })).toBe("新しいモデルの返事");
+    expect(calls.some((c) => c.includes("gemini-3-flash:generateContent"))).toBe(true);
+    // 次からは、見つけたモデルを、最初から使う
+    calls.length = 0;
+    await callAi("やあ", { env: { GEMINI_API_KEY: "AIza" + "x".repeat(30) }, fetchFn: fake });
+    expect(calls).toHaveLength(1); expect(calls[0]).toContain("gemini-3-flash:generateContent");
+    // AI_MODEL を決めているときは、勝手に変えない
+    resetGeminiModel();
+    await expect(callAi("やあ", { env: { GEMINI_API_KEY: "AIza" + "x".repeat(30), AI_MODEL: "gemini-2.5-flash" }, fetchFn: fake })).rejects.toThrow("宛先");
+    resetGeminiModel();
   });
 });
