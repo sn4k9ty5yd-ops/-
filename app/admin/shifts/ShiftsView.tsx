@@ -12,6 +12,7 @@ import type { Period } from "@/lib/periods";
 import { attendanceLines, shiftHours, cellText, hoursText, sortRoster, KIND_BUTTONS, kindClass, longText } from "@/lib/shift-ui";
 import { STATUS_LABEL, type AttendanceRow, type PeriodRow, type RequestRow, type ShiftEntry, type ShiftKind, type ShiftRow, type StoreRow } from "@/lib/service";
 import { ShiftSheet } from "./ShiftSheet";
+import { PrintButton } from "@/app/PrintButton";
 
 /** 出勤簿確定の1日分を、表の形（ShiftRow）にそろえる */
 const asShift = (r: AttendanceRow): ShiftRow => ({ id: r.id, membershipId: r.membershipId, storeId: r.storeId, periodId: r.periodId, day: r.day, kind: r.kind, start: r.clockIn, end: r.clockOut, breakMin: r.kind === "work" ? r.breakMin : null });
@@ -128,7 +129,7 @@ export function ShiftsView({ final = false }: { final?: boolean }) {
       <SubTabs items={[{ href: "/admin/periods", label: "やること" }, { href: "/admin/shifts", label: "出勤簿予定" }, { href: "/admin/attendance", label: "出勤簿確定" }]} />
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
         <h1 style={{ margin: 0 }}>{final ? "出勤簿確定" : "出勤簿予定"}</h1>
-        <button className="ghost noprint" style={{ width: "auto", margin: 0 }} onClick={() => window.print()}>🖨 プリント</button>
+        <PrintButton />
       </div>
       <p className="printonly" style={{ fontSize: 12, margin: "2px 0 6px" }}>{store?.name}　{view.label}</p>
       <p className="hint">{final ? "実際の勤務の出勤簿です（同期・税務署に出す用）。はじめは出勤簿予定のとおりに入ります。実際に変わったところを、ここで直します。" : "シフトの予定です。"}表で直します。<b>日付を押す</b>＝その日の全員をまとめて直す　<b>名前を押す</b>＝その人の日をまとめて直す　<b>マスを押す</b>＝1か所だけ直す</p>
