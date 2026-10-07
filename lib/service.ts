@@ -2987,7 +2987,7 @@ export async function reopenInterview(db: Database, userId: string, id: string):
   try { await asUser(db, userId, (q) => q.query("select public.interview_reopen($1)", [id])); } catch { throw new ForbiddenError("取り下げられません（提出前か、店長が確認ずみです）"); }
 }
 
-/** みんなのMBTI（スタイリストは全店、ほかの人は自分のお店だけ。名前・お店・MBTIだけ） */
+/** みんなのMBTI（社長以上は全店、ほかの人は自分のお店だけ。名前・お店・MBTIだけ） */
 export async function listMbtiDirectory(db: Database, userId: string): Promise<{ name: string; storeName: string; mbti: string }[]> {
   const me = await getMe(db, userId);
   if (!me || me.displayOnly) throw new ForbiddenError();

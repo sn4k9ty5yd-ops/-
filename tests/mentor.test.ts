@@ -145,7 +145,8 @@ describe("面談シートの編集・削除", () => {
   });
 });
 
-describe("みんなのMBTI（スタイリストは全店・ほかは自分のお店）", () => {
+describe("みんなのMBTI（社長以上は全店・ほかは自分のお店）", () => {
+  let mkOffice: () => Promise<void> = async () => {};
   let d: Database; const u: Record<string, string> = {};
   beforeAll(async () => {
     d = await newDb(); await migrate(d);
@@ -154,11 +155,15 @@ describe("みんなのMBTI（スタイリストは全店・ほかは自分のお
     const b = (await d.query<{ id: string }>("insert into stores (company_id, name) values ($1,'B') returning id", [co])).rows[0].id;
     const mk = async (k: string, code: string, level: number, s: string, extra = "") => { u[k] = (await d.query<{ id: string }>("insert into memberships (company_id, store_id, employee_code, name, level) values ($1,$2,$3,$4,$5) returning id", [co, s, code, k, level])).rows[0].id; if (extra) await d.query(`update memberships set ${extra} where id = $1`, [u[k]]); };
     await mk("styA", "1", 1, a, "rank = 'stylist'"); await mk("styB", "2", 1, b, "rank = 'stylist'"); await mk("kid", "3", 1, a, "rank = 'assistant'"); await mk("mgr", "4", 3, a);
+    mkOffice = async () => { if (!u.office) await mk("office", "9", 4, a); };
+    mkOffice = async () => { if (!u.office) await mk("office", "9", 4, a); };
     await svc.setMentorMbti(d, u.kid, "ENFP"); await svc.setMentorMbti(d, u.styB, "ISTJ");
   });
-  it("スタイリストは、お店がちがう人のMBTIも見られる。会話は見えない", async () => {
-    const r = await svc.listMbtiDirectory(d, u.styA);
+  it("社長以上は、お店がちがう人のMBTIも見られる。スタイリストも自分のお店だけ。会話は見えない", async () => {
+    await mkOffice();
+    const r = await svc.listMbtiDirectory(d, u.office);
     expect(r.map((x) => [x.name, x.mbti]).sort()).toEqual([["kid", "ENFP"], ["styB", "ISTJ"]]);
+    expect((await svc.listMbtiDirectory(d, u.styA)).map((x) => x.name)).toEqual(["kid"]);
     expect((await svc.getMentor(d, u.styA)).messages).toHaveLength(0);
   });
   it("スタイリスト以外（アシスタント・店長）は、自分のお店の人だけ見られる", async () => {
