@@ -137,4 +137,21 @@ describe("AIのカギ（アプリ制作者だけ）", () => {
     expect(calls.some((c) => c.includes("gemini-3.5-flash:generateContent"))).toBe(true);
     resetGeminiModel();
   });
+  it("考える時間を切る設定を、モデルが受けつけない(400)ときは、別の書き方・設定なしで送り直し、おぼえる", async () => {
+    resetGeminiModel();
+    const bodies: string[] = [];
+    const fake = (async (_u: string, init: RequestInit) => {
+      const b = String(init.body); bodies.push(b);
+      if (b.includes("thinkingBudget")) return new Response('{"error":{"status":"INVALID_ARGUMENT","message":"thinking_budget not supported"}}', { status: 400 });
+      if (b.includes("thinkingLevel")) return new Response('{"error":{"status":"INVALID_ARGUMENT","message":"bad"}}', { status: 400 });
+      return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: "ok" }] } }] }), { status: 200 });
+    }) as unknown as typeof fetch;
+    const env = { GEMINI_API_KEY: "AIza" + "x".repeat(30), AI_MODEL: "m" };
+    expect(await callAi("やあ", { env, fetchFn: fake })).toBe("ok");
+    expect(bodies).toHaveLength(3); expect(bodies[0]).toContain("thinkingBudget"); expect(bodies[2]).not.toContain("thinking");
+    bodies.length = 0;
+    await callAi("もういちど", { env, fetchFn: fake });
+    expect(bodies).toHaveLength(1); expect(bodies[0]).not.toContain("thinking");   // おぼえているので、最初から設定なし
+    resetGeminiModel();
+  });
 });

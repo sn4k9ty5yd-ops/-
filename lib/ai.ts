@@ -41,7 +41,10 @@ export function setAiTier(t: string | null | undefined) { tier = t === "pro" ? "
 export const getAiTier = (): AiTier => tier;
 const found: Record<AiTier, string | null> = { flash: null, pro: null };
 const foundAt: Record<AiTier, number> = { flash: 0, pro: 0 };   // 混んでいて切りかえた先は、10分だけ、そのまま使う（毎回、混んでいる方を試して待たないため）   // 自動で見つけたモデル（サーバーを再起動するまで、おぼえておく）
-export const resetGeminiModel = () => { found.flash = null; found.pro = null; foundAt.flash = 0; foundAt.pro = 0; };
+// 「考える時間」を切ると、返事がずっと速くなる。モデルによって書き方がちがうので、受けつけられる書き方を順に試して、おぼえる（0=予算0／1=最小レベル／2=設定なし）
+const THINK: (Record<string, unknown> | null)[] = [{ thinkingBudget: 0 }, { thinkingLevel: "minimal" }, null];
+const thinkIdx: Record<AiTier, number> = { flash: 0, pro: 2 };
+export const resetGeminiModel = () => { found.flash = null; found.pro = null; foundAt.flash = 0; foundAt.pro = 0; thinkIdx.flash = 0; thinkIdx.pro = 2; };
 const DEFAULT_MODEL: Record<AiTier, string> = { flash: "gemini-2.5-flash", pro: "gemini-2.5-pro" };
 
 /** 使えるモデルの一覧（generateContent が使える gemini）。いちばん新しい「flash」「pro」から順に（lite・画像・音声・実験版は、あとまわし） */
@@ -68,7 +71,7 @@ type Fetch = typeof fetch;
 
 export interface ChatTurn { role: "user" | "assistant"; content: string }
 
-export async function callAi(prompt: string, opts: { env?: Record<string, string | undefined>; fetchFn?: Fetch; timeoutMs?: number; retryDelayMs?: number } = {}): Promise<string> {
+export async function callAi(prompt: string, opts: { env?: Record<string, string | undefined>; fetchFn?: Fetch; timeoutMs?: number; retryDelayMs?: number; maxTokens?: number } = {}): Promise<string> {
   return callAiChat("", [{ role: "user", content: prompt }], opts);
 }
 
@@ -83,16 +86,21 @@ export async function callAiChat(system: string, turns: ChatTurn[], opts: { env?
   const maxTokens = opts.maxTokens ?? 8192;
   try {
     if (st.provider === "gemini") {
-      const body = JSON.stringify({
+      const makeBody = () => JSON.stringify({
         ...(system ? { systemInstruction: { parts: [{ text: system }] } } : {}),
         contents: turns.map((t) => ({ role: t.role === "assistant" ? "model" : "user", parts: [{ text: t.content }] })),
-        generationConfig: { temperature: 0.8, maxOutputTokens: maxTokens },
+        generationConfig: { temperature: 0.8, maxOutputTokens: maxTokens, ...(THINK[thinkIdx[tier]] ? { thinkingConfig: THINK[thinkIdx[tier]] } : {}) },
       });
+      let body = makeBody();
       const key = env.GEMINI_API_KEY!;
-      const post = (url: string, extra: Record<string, string> = { "x-goog-api-key": key }) => f(url, { method: "POST", signal: ctl.signal, headers: { "content-type": "application/json", ...extra }, body });
+      const post = async (url: string, extra: Record<string, string> = { "x-goog-api-key": key }): Promise<Response> => {
+        const go = () => f(url, { method: "POST", signal: ctl.signal, headers: { "content-type": "application/json", ...extra }, body });
+        try { return await go(); }
+        catch (e) { if ((e as Error).name === "AbortError") throw e; return await go(); }   // 回線がとぎれたときは、1回だけ、すぐやり直す
+      };
       let first: Response | null = null;
       // 1つのモデルを、入口をかえながら試す（「AQ.」のカギは、ふつうの入り口で通らないことがあるので、Vertex AI の入り口でも試す）
-      const tryModel = async (model: string): Promise<Response> => {
+      const tryModelOnce = async (model: string): Promise<Response> => {
         const m = encodeURIComponent(model);
         const r = await post(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent`);
         if (r.ok || !key.startsWith("AQ.") || ![400, 401, 403, 404].includes(r.status)) return r;
@@ -101,6 +109,11 @@ export async function callAiChat(system: string, turns: ChatTurn[], opts: { env?
         if (alt.ok) return alt;
         const alt2 = await post(`https://aiplatform.googleapis.com/v1/publishers/google/models/${m}:generateContent?key=${encodeURIComponent(key)}`, {});
         return alt2.ok ? alt2 : alt;
+      };
+      const tryModel = async (model: string): Promise<Response> => {
+        let r = await tryModelOnce(model);
+        while (r.status === 400 && thinkIdx[tier] < THINK.length - 1) { thinkIdx[tier]++; body = makeBody(); first = null; r = await tryModelOnce(model); }   // 考える時間の設定を受けつけないときは、ほかの書き方・設定なしで
+        return r;
       };
       if (found[tier] && foundAt[tier] && Date.now() - foundAt[tier] > 600000 && !env.AI_MODEL) { found[tier] = null; }   // 10分たったら、また最新を試す
       let model = env.AI_MODEL || found[tier] || DEFAULT_MODEL[tier];

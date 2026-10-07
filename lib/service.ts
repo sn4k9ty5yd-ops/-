@@ -3039,7 +3039,7 @@ export async function testAiKey(db: Database, userId: string, aiFn: (p: string) 
 
 // ------------------------------------------------------------------ くわしい占い（AI）— 保存しない。使ったことも記録しない
 const fortuneUse = new Map<string, number[]>();
-export async function runFortuneAi(db: Database, userId: string, input: Omit<FortuneInput, "today">, aiFn: (prompt: string) => Promise<string> = (p) => callAi(p, { timeoutMs: 90000 })): Promise<{ text: string }> {
+export async function runFortuneAi(db: Database, userId: string, input: Omit<FortuneInput, "today">, aiFn: (prompt: string) => Promise<string> = (p) => callAi(p, { timeoutMs: 100000, maxTokens: 4096 })): Promise<{ text: string }> {
   const me = await getMe(db, userId);
   if (!me || me.displayOnly) throw new ForbiddenError();
   const today = new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10);
