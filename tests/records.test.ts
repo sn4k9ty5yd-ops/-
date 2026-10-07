@@ -55,4 +55,17 @@ describe("税務署などに出す書面", () => {
     const d = await svc.exportRecords(db, id.office, { from: "2026-01-01", to: "2026-12-31", sections: svc.RECORD_SECTIONS.map(([k]) => k), detail: true });
     for (const k of ["staff", "attendance", "attendanceDaily", "sales", "materials", "stocktake", "stocktakeLines", "leavePlans", "leaveChanges", "lessons", "audit"] as const) expect(Array.isArray(d[k]), k).toBe(true);
   });
+
+  it("社員と、書類ごとの期間をえらべる（えらんだ人の分だけ・書類ごとに期間がちがう）", async () => {
+    const d = await svc.exportRecords(db, id.office, { from: "2026-01-01", to: "2026-12-31", sections: ["staff", "sales", "materials"], staffIds: [id.a], ranges: { sales: { from: "2026-06-01", to: "2026-06-30" } } });
+    expect(d.staff?.map((r) => r["氏名"])).toEqual(["山田"]);
+    expect(d.sales).toHaveLength(0);                       // 売上は6月だけ（5月の分は入らない）
+    expect(d.materials).toHaveLength(2);                   // 材料費は人にひもづかない・全体の期間
+    expect(d.meta.staff).toEqual(["山田（3）"]);
+    expect(d.meta.ranges?.sales).toEqual({ from: "2026-06-01", to: "2026-06-30" });
+    const all = await svc.exportRecords(db, id.office, { from: "2026-01-01", to: "2026-12-31", sections: ["sales"], staffIds: [id.a] });
+    expect(all.sales).toHaveLength(1);
+    const other = await svc.exportRecords(db, id.office, { from: "2026-01-01", to: "2026-12-31", sections: ["sales"], staffIds: [id.b] });
+    expect(other.sales).toHaveLength(0);
+  });
 });

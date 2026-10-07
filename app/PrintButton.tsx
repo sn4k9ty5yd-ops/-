@@ -3,15 +3,19 @@ import { useState } from "react";
 
 /** 「プリント」ボタン。押すと、その端末のプリント画面を開く。
  *  iPhoneのホーム画面アプリ（Safariの外）などでは、端末の仕組みで開けないことがあるため、そのときの案内も出す */
-export function PrintButton({ label = "🖨 プリント" }: { label?: string }) {
+export function PrintButton({ label = "🖨 プリント", fit }: { label?: string; fit?: string }) {
   const [help, setHelp] = useState(false);
   const [note, setNote] = useState("");
   const standalone = () => typeof navigator !== "undefined" && ((navigator as unknown as { standalone?: boolean }).standalone === true || window.matchMedia("(display-mode: standalone)").matches);
   const mobile = () => typeof navigator !== "undefined" && /iPhone|iPad|Android/i.test(navigator.userAgent);
   const go = () => {
     setNote("");
+    const undo = fit ? fitToA4(fit) : () => {};
+    const done = () => { undo(); window.removeEventListener("afterprint", done); };
+    window.addEventListener("afterprint", done);
     try { window.print(); } catch { /* 下の案内を出す */ }
-    if (mobile() || standalone()) setHelp(true);
+    if (!(mobile() || standalone())) setTimeout(() => { /* print()が戻ったら元に戻す（afterprintが来ない端末用） */ done(); }, 0);
+    else setHelp(true);
   };
   const copy = async () => { try { await navigator.clipboard.writeText(location.href); setNote("リンクをコピーしました。Safari（またはChrome）に貼りつけて開いてください。"); } catch { setNote("コピーできませんでした"); } };
   return (
@@ -34,4 +38,22 @@ export function PrintButton({ label = "🖨 プリント" }: { label?: string })
       )}
     </>
   );
+}
+
+/** 表をA4の1枚に収める。紙の向き（横／縦）を、大きく印刷できるほうに自動で決める。戻す関数を返す */
+function fitToA4(sel: string): () => void {
+  const table = document.querySelector<HTMLElement>(sel);
+  if (!table) return () => {};
+  table.classList.add("pfit");
+  (table as HTMLElement).style.zoom = "1";
+  const w = table.scrollWidth, h = table.scrollHeight;
+  const HEAD = 60, MM = 3.7795;           // 見出しの分と、1mmあたりのpx
+  const land = Math.min(1, ((297 - 16) * MM) / w, ((210 - 16) * MM - HEAD) / h);
+  const port = Math.min(1, ((210 - 16) * MM) / w, ((297 - 16) * MM - HEAD) / h);
+  const useLand = land >= port;
+  table.style.zoom = String(Math.max(0.2, (useLand ? land : port) * 0.98));
+  const st = document.createElement("style");
+  st.textContent = `@media print{@page{size:A4 ${useLand ? "landscape" : "portrait"};margin:8mm}}`;
+  document.head.appendChild(st);
+  return () => { table.style.zoom = ""; table.classList.remove("pfit"); st.remove(); };
 }

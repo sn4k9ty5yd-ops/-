@@ -32,8 +32,8 @@ describe("商品マスターの登録", () => {
     expect((await svc.listProducts(db, id.office, "retail")).length).toBe(3);
     expect((await svc.listProducts(db, id.office, "supply")).length).toBe(1);   // 店販と業務は別の一覧
   });
-  it("シフト担当・スタッフは登録できない（店長は登録できる＝別のテストで確認）。おかしな仕入値は断る", async () => {
-    for (const u of [id.shift1, id.staff]) await expect(svc.createProducts(db, u, "retail", [{ name: "x", costPrice: 1 }], [st.s1])).rejects.toThrow(svc.ForbiddenError);
+  it("シフト担当・スタッフも登録できるが、自分のお店だけ（他店には入れられない）。おかしな仕入値は断る", async () => {
+    for (const u of [id.shift1, id.staff]) await expect(svc.createProducts(db, u, "retail", [{ name: "x", costPrice: 1 }], [st.s2])).rejects.toThrow(svc.ForbiddenError);
     await expect(svc.createProducts(db, id.office, "retail", [{ name: "x", costPrice: 12.5 }], [st.s1])).rejects.toThrow("整数");
     await expect(svc.createProducts(db, id.office, "retail", [{ name: "x", costPrice: -1 }], [st.s1])).rejects.toThrow("整数");
     await expect(svc.createProducts(db, id.office, "retail", [{ name: " ", costPrice: 1 }], [st.s1])).rejects.toThrow("品名");
@@ -96,6 +96,14 @@ describe("棚卸し", () => {
     const e = (await svc.getStocktake(db, id.mgr1, stId))!;
     await svc.saveQuantities(db, id.mgr1, stId, [{ lineId: e.items.find((i) => i.name === "新商品")!.id, quantity: 0 }]);   // 0も「入力済み」
     expect((await svc.getStocktake(db, id.mgr1, stId))!.counted).toBe(3);
+    // スタッフ(Lv1)も、自分のお店の商品を、棚卸し表の中で追加して表に入れられる
+    await svc.createProducts(db, id.staff, "retail", [{ name: "スタッフが足した商品", costPrice: 300 }], [st.s1]);
+    expect(await svc.syncStocktakeProducts(db, id.staff, stId)).toBe(1);
+    expect((await svc.getStocktake(db, id.staff, stId))!.items.some((i) => i.name === "スタッフが足した商品")).toBe(true);
+    // 後のテストに影響しないよう、取り扱いをやめて、行ごと消す
+    const np = (await svc.listProducts(db, id.office, "retail")).find((x) => x.name === "スタッフが足した商品")!;
+    await svc.updateProduct(db, id.office, np.id, { maker: np.maker, name: np.name, spec: np.spec, costPrice: np.costPrice, status: "discontinued" });
+    await db.query("delete from stocktake_lines where stocktake_id = $1 and name = 'スタッフが足した商品'", [stId]);
   });
   it("取扱い終了の商品は、次の棚卸しには出てこない", async () => {
     const t2 = await svc.startStocktake(db, id.office, st.s1, "retail", "2026-11-30");

@@ -129,7 +129,7 @@ export function ShiftsView({ final = false }: { final?: boolean }) {
       <SubTabs items={[{ href: "/admin/periods", label: "やること" }, { href: "/admin/shifts", label: "出勤簿予定" }, { href: "/admin/attendance", label: "出勤簿確定" }]} />
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
         <h1 style={{ margin: 0 }}>{final ? "出勤簿確定" : "出勤簿予定"}</h1>
-        <PrintButton />
+        <PrintButton fit=".atttable" label="🖨 A4に1枚で印刷" />
       </div>
       <p className="printonly" style={{ fontSize: 12, margin: "2px 0 6px" }}>{store?.name}　{view.label}</p>
       <p className="hint">{final ? "実際の勤務の出勤簿です（同期・税務署に出す用）。はじめは出勤簿予定のとおりに入ります。実際に変わったところを、ここで直します。" : "シフトの予定です。"}表で直します。<b>日付を押す</b>＝その日の全員をまとめて直す　<b>名前を押す</b>＝その人の日をまとめて直す　<b>マスを押す</b>＝1か所だけ直す</p>

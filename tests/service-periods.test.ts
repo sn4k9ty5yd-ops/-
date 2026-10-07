@@ -167,8 +167,9 @@ describe("商品の追加・このお店で使わない・全体から消す", (
       (u[k] = (await d.query<{ id: string }>("insert into memberships (company_id, store_id, employee_code, name, level) values ($1,$2,$3,$4,$5) returning id", [co, s, code, k, level])).rows[0].id);
     await mk("office", "1", 4, sid.a); await mk("mgrA", "2", 3, sid.a); await mk("mgrB", "3", 3, sid.b); await mk("maker", "4", 2, sid.a);
   });
-  it("追加できるのは店長以上。追加した商品は、えらんだお店（全店）の一覧に入る。同じ商品は飛ばす", async () => {
-    await expect(svc.createProducts(d, u.maker, "retail", [{ name: "シャンプー", costPrice: 1000 }], [sid.a])).rejects.toThrow(svc.ForbiddenError);
+  it("追加はだれでもできる（自分のお店だけ。事務員さんと店長は選んだお店）。追加した商品は、えらんだお店の一覧に入る。同じ商品は飛ばす", async () => {
+    await expect(svc.createProducts(d, u.maker, "retail", [{ name: "シャンプー", costPrice: 1000 }], [sid.b])).rejects.toThrow(svc.ForbiddenError);   // 他店には入れられない
+    expect(await svc.createProducts(d, u.maker, "supply", [{ name: "自分のお店の材料", costPrice: 100 }], [sid.a])).toEqual({ created: 1, skipped: 0 });
     const r = await svc.createProducts(d, u.mgrA, "retail", [{ maker: "ミルボン", name: "シャンプー", spec: "500ml", costPrice: 1200 }, { name: "トリートメント", costPrice: 900 }], [sid.a, sid.b]);
     expect(r).toEqual({ created: 2, skipped: 0 });
     expect(await svc.createProducts(d, u.mgrB, "retail", [{ maker: "ミルボン", name: "シャンプー", spec: "500ml", costPrice: 1200 }], [sid.a])).toEqual({ created: 0, skipped: 1 });

@@ -563,3 +563,7 @@ main .card{animation:popIn .4s cubic-bezier(.2,.8,.2,1) both}
 .sheet{animation:popIn .25s cubic-bezier(.2,.8,.2,1) both}
 @media (prefers-reduced-motion:reduce){main,main .card,.sheet,main.home .tile,main.home .row{animation:none !important}}
 @media print{main,main .card{animation:none !important}}
+
+/* A4に1枚で印刷（PrintButtonのfit）: 印刷と同じ小さい字・表は中身の幅 */
+.atttable.pfit{width:max-content}
+.atttable.pfit td,.atttable.pfit th{font-size:8px;padding:1px 2px}

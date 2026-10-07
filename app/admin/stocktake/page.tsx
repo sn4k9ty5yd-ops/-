@@ -48,9 +48,7 @@ export default function StocktakePage() {
           <li>商品ごとに、<b>数</b>を入れる（＋ − ボタンでも入ります。自動で保存されます）</li>
           <li>全部入れたら、<b>「提出する」</b>を押す（店長・事務員さん）</li>
         </ol>
-        {me.level >= 3
-          ? <p style={{ margin: "8px 0 0" }}>商品が足りないときは、棚卸し表を開いて、その中の<b>「＋ 商品を追加する」</b>で入れられます。</p>
-          : <p className="sub" style={{ margin: "8px 0 0" }}>商品が表にないときは、店長か事務員さんに、商品の追加をお願いしてください。</p>}
+        <p style={{ margin: "8px 0 0" }}>商品が足りないときは、棚卸し表を開いて、その中の<b>「＋ 商品を追加する」</b>で、だれでも入れられます。</p>
       </div>
       <div className="seg"><button className={view === "list" ? "on" : ""} onClick={() => setView("list")}>棚卸し表（お店・種類ごと）</button><button className={view === "summary" ? "on" : ""} onClick={() => setView("summary")}>合算（店販・業務・全店）</button></div>
       {view === "summary" ? <Summary stores={me.level >= 3 ? stores : stores.filter((s) => s.id === me.storeId)} onOpen={(id) => { setOpenId(id); }} /> : <>
@@ -205,9 +203,7 @@ function Detail({ id, storeName, onBack }: { id: string; storeName: string; onBa
             : counted < live.length ? <>商品ごとの<b>数</b>を入れてください（ない商品は <b>0</b>）。入れた分は、自動で保存されます。<b>黄色</b>の商品が、まだ入っていません。</>
             : <>全部入りました。{d.canManage ? <b>上の「提出する」を押してください。</b> : "店長が提出します。"}</>}
         </p>
-        {live.length === 0 && (me.level >= 3
-          ? <p style={{ margin: "8px 0 0" }}>下の「＋ 商品を追加する」から、この画面で商品を入れられます。</p>
-          :<p className="sub" style={{ margin: "8px 0 0" }}>店長か事務員さんに、商品の追加をお願いしてください。</p>)}
+        {live.length === 0 && <p style={{ margin: "8px 0 0" }}>下の「＋ 商品を追加する」から、この画面で商品を入れられます。</p>}
       </div>
       <div className="actions noprint" style={{ marginBottom: 10 }}>
         {d.editable && d.canManage && <button className="ghost" style={{ color: "var(--blue)" }} onClick={() => run({ action: "sync" })}>商品を追加（新しく増えた分）</button>}
@@ -220,7 +216,7 @@ function Detail({ id, storeName, onBack }: { id: string; storeName: string; onBa
         {note && <span className="sub">{note}</span>}
       </div>
       {msg && <p className="err">{msg}</p>}
-      {d.editable && d.canManage && (
+      {d.editable && (
         <div className="card noprint" style={{ margin: "0 0 10px" }}>
           {!adding
             ? <button className="ghost" style={{ color: "var(--blue)", padding: 0, fontWeight: 700 }} onClick={() => setAdding(true)}>＋ 商品を追加する（この表にすぐ入ります）</button>

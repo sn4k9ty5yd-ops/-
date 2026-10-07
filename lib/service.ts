@@ -807,7 +807,7 @@ export async function createProducts(db: Database, userId: string, kind: Product
   items.forEach(checkProduct);
   if (storeIds.length === 0) throw new Error("使うお店を1つ以上えらんでください");
   const me = await getMe(db, userId);
-  if (!me || me.level < 3) throw new ForbiddenError();
+  if (!me || me.displayOnly) throw new ForbiddenError();
   try {
     const r = await asUser(db, userId, (q) => q.query<{ r: { created: number; skipped: number } }>("select public.product_create($1, $2::jsonb, $3::uuid[]) as r", [kind, JSON.stringify(items), storeIds]));
     return r.rows[0].r;
@@ -2423,13 +2423,13 @@ export async function securityOverview(db: Database, userId: string): Promise<Se
 
 
 // ------------------------------------------------------------------ 税務署などに出す「全情報の書面」（管理者のみ）
-export interface RecordsOptions { from: string; to: string; sections: string[]; detail?: boolean }
+export interface RecordsOptions { from: string; to: string; sections: string[]; detail?: boolean; staffIds?: string[]; ranges?: Record<string, { from?: string; to?: string }> }
 export const RECORD_SECTIONS: [string, string][] = [
   ["staff", "スタッフ名簿"], ["attendance", "出勤簿（月ごとのまとめ）"], ["sales", "売上と歩合"], ["materials", "材料費（発注の記録）"],
   ["stocktake", "棚卸し"], ["leave", "有給の提出と変更の記録"], ["lessons", "レッスン記録（回数）"], ["audit", "大切な操作の記録"],
 ];
 export interface RecordsDoc {
-  meta: { company: string; from: string; to: string; generatedAt: string; by: string; sections: string[]; detail: boolean; hash: string };
+  meta: { company: string; from: string; to: string; generatedAt: string; by: string; sections: string[]; detail: boolean; hash: string; staff?: string[]; ranges?: Record<string, { from: string; to: string }> };
   staff?: Record<string, unknown>[]; attendance?: Record<string, unknown>[]; attendanceDaily?: Record<string, unknown>[]; sales?: Record<string, unknown>[];
   materials?: Record<string, unknown>[]; materialsByMonth?: Record<string, unknown>[]; stocktake?: Record<string, unknown>[]; stocktakeLines?: Record<string, unknown>[];
   leavePlans?: Record<string, unknown>[]; leaveChanges?: Record<string, unknown>[]; lessons?: Record<string, unknown>[]; audit?: Record<string, unknown>[];
@@ -2442,58 +2442,66 @@ export async function exportRecords(db: Database, userId: string, o: RecordsOpti
   const sections = o.sections.filter((x) => RECORD_SECTIONS.some(([k]) => k === x));
   if (sections.length === 0) throw new Error("出す項目を1つ以上えらんでください");
   const has = (k: string) => sections.includes(k);
+  // 書類ごとに期間を変えられる（決めなければ、全体の期間）
+  const ymd = /^\d{4}-\d{2}-\d{2}$/;
+  const rg = (k: string) => { const r = o.ranges?.[k]; const f = r?.from && ymd.test(r.from) ? r.from : o.from; const t = r?.to && ymd.test(r.to) ? r.to : o.to; if (t < f) throw new Error("期間が正しくありません"); return { from: f, to: t }; };
+  const ranges: Record<string, { from: string; to: string }> = Object.fromEntries(sections.map((k) => [k, rg(k)]));
+  // 社員をえらんだときは、その人たちの分だけ（えらばなければ全員）
+  const ids = (o.staffIds ?? []).filter((x) => /^[0-9a-f-]{36}$/i.test(x));
+  const sel = ids.length ? ids : null;
+  const staffNames = sel ? (await db.query<{ name: string; code: string }>("select name, employee_code as code from memberships where company_id = $1 and id = any($2::uuid[]) order by employee_code", [me.companyId, sel])).rows.map((r) => `${r.name}（${r.code}）`) : undefined;
   const co = (await db.query<{ name: string }>("select name from companies where id = $1", [me.companyId])).rows[0]?.name ?? "";
   const staffRows = has("staff") ? (await db.query(`select m.employee_code as "社員番号", m.name as "氏名", s.name as "店舗", case m.level when 1 then 'スタッフ' when 2 then 'シフト担当' when 3 then '店長' else '管理者' end as "レベル", case when m.status = 'active' then '在籍' else '退職' end as "在籍", m.hired_on::text as "入社日", m.left_on::text as "退職日", m.retire_on::text as "退職予定日"
-      from memberships m join stores s on s.id = m.store_id where m.company_id = $1 order by s.sort_order, m.employee_code`, [me.companyId])).rows : undefined;   // 管理用の接続（退職予定日は、アプリ用ロールからは読めないため）。会社で絞る
+      from memberships m join stores s on s.id = m.store_id where m.company_id = $1 and ($2::uuid[] is null or m.id = any($2)) order by s.sort_order, m.employee_code`, [me.companyId, sel])).rows : undefined;   // 管理用の接続（退職予定日は、アプリ用ロールからは読めないため）。会社で絞る
   const doc: Omit<RecordsDoc, "meta"> = await asUser(db, userId, async (q) => {
     const out: Omit<RecordsDoc, "meta"> = {};
     if (staffRows) out.staff = staffRows;
     if (has("attendance")) {
       out.attendance = (await q.query(`select to_char(a.day, 'YYYY-MM') as "月", s.name as "店舗", m.name as "氏名", count(*) filter (where a.kind = 'work')::int as "出勤日数", round(sum(a.work_minutes)::numeric / 60, 2)::float8 as "実働時間",
         count(*) filter (where a.kind = 'paid')::int as "有給日数", count(*) filter (where a.kind in ('holiday','off'))::int as "休みの日数"
-        from attendance_records a join memberships m on m.id = a.membership_id join stores s on s.id = a.store_id where a.day between $1 and $2
-        group by 1, s.name, m.name, s.sort_order, m.employee_code order by 1, s.sort_order, m.employee_code`, [o.from, o.to])).rows;
+        from attendance_records a join memberships m on m.id = a.membership_id join stores s on s.id = a.store_id where a.day between $1 and $2 and ($3::uuid[] is null or m.id = any($3))
+        group by 1, s.name, m.name, s.sort_order, m.employee_code order by 1, s.sort_order, m.employee_code`, [ranges.attendance.from, ranges.attendance.to, sel])).rows;
       if (o.detail) out.attendanceDaily = (await q.query(`select a.day::text as "日付", s.name as "店舗", m.name as "氏名", a.kind as "種類", to_char(a.clock_in, 'HH24:MI') as "入店", to_char(a.clock_out, 'HH24:MI') as "退店", a.break_minutes as "休憩(分)", a.work_minutes as "実働(分)"
-        from attendance_records a join memberships m on m.id = a.membership_id join stores s on s.id = a.store_id where a.day between $1 and $2 order by a.day, s.sort_order, m.employee_code`, [o.from, o.to])).rows;
+        from attendance_records a join memberships m on m.id = a.membership_id join stores s on s.id = a.store_id where a.day between $1 and $2 and ($3::uuid[] is null or m.id = any($3)) order by a.day, s.sort_order, m.employee_code`, [ranges.attendance.from, ranges.attendance.to, sel])).rows;
     }
     if (has("sales")) out.sales = (await q.query(`select to_char(x.month, 'YYYY-MM') as "月", s.name as "店舗", m.name as "氏名", case x.status when 'draft' then '下書き' when 'submitted' then '提出済み' when 'manager_ok' then '店長確認済み' when 'office_ok' then '確定' else '差し戻し' end as "状態", x.total_sales as "総合売上", x.free_sales as "フリー売上", x.nominated_sales as "指名技術売上",
         x.retail_sales as "店販売上", x.retail_count as "店販人数", x.customers as "客数", x.new_customers as "新規", x.repeat_customers as "再来",
         x.kitsuke_count as "着付け人数", x.kitsuke_sales as "着付け売上", x.makeup_count as "メイク人数", x.makeup_sales as "メイク売上", x.spa_count as "スパ人数", x.spa_sales as "スパ売上", x.commission_amount as "歩合"
-        from sales_stats x join memberships m on m.id = x.membership_id join stores s on s.id = x.store_id where x.month between date_trunc('month', $1::date) and $2::date order by x.month, s.sort_order, m.employee_code`, [o.from, o.to])).rows;
+        from sales_stats x join memberships m on m.id = x.membership_id join stores s on s.id = x.store_id where x.month between date_trunc('month', $1::date) and $2::date and ($3::uuid[] is null or m.id = any($3)) order by x.month, s.sort_order, m.employee_code`, [ranges.sales.from, ranges.sales.to, sel])).rows;
     if (has("materials")) {
       out.materials = (await q.query(`select o.ordered_on::text as "発注日", s.name as "店舗", o.supplier as "発注先", o.item as "内容", case o.kind when 'supply' then '材料(業務)' when 'retail' then '店販' else 'その他' end as "種類",
         o.amount as "金額(税抜)", case o.tax_mode when 'in' then '税込で入力' else '税抜で入力' end as "入力", o.entered_amount as "入力した税込額", u.name as "記入した人", to_char(o.created_at at time zone 'Asia/Tokyo', 'YYYY-MM-DD HH24:MI') as "記入日時",
         case when o.deleted_at is not null then '取り消し ' || to_char(o.deleted_at at time zone 'Asia/Tokyo', 'YYYY-MM-DD') else '' end as "取り消し", (select string_agg((l->>'name') || '×' || (l->>'qty') || ' ' || (l->>'amount') || '円', ' / ') from jsonb_array_elements(o.lines) l) as "明細"
-        from material_orders o join stores s on s.id = o.store_id left join memberships u on u.id = o.created_by where o.ordered_on between $1 and $2 order by o.ordered_on, s.sort_order, o.created_at`, [o.from, o.to])).rows;
+        from material_orders o join stores s on s.id = o.store_id left join memberships u on u.id = o.created_by where o.ordered_on between $1 and $2 order by o.ordered_on, s.sort_order, o.created_at`, [ranges.materials.from, ranges.materials.to])).rows;
       out.materialsByMonth = (await q.query(`select to_char(o.ordered_on, 'YYYY-MM') as "月", s.name as "店舗", sum(o.amount)::bigint as "合計(税抜)", count(*)::int as "件数"
-        from material_orders o join stores s on s.id = o.store_id where o.deleted_at is null and o.ordered_on between $1 and $2 group by 1, s.name, s.sort_order order by 1, s.sort_order`, [o.from, o.to])).rows;
+        from material_orders o join stores s on s.id = o.store_id where o.deleted_at is null and o.ordered_on between $1 and $2 group by 1, s.name, s.sort_order order by 1, s.sort_order`, [ranges.materials.from, ranges.materials.to])).rows;
     }
     if (has("stocktake")) {
       out.stocktake = (await q.query(`select t.taken_on::text as "棚卸日", s.name as "店舗", case t.kind when 'retail' then '店販' else '業務' end as "種類", case t.status when 'open' then '作成中' when 'submitted' then '提出済み' else '確認済み' end as "状態",
         coalesce(sum(l.amount), 0)::bigint as "棚卸金額(仕入値×数量)" from stocktakes t join stores s on s.id = t.store_id left join stocktake_lines l on l.stocktake_id = t.id
-        where t.taken_on between $1 and $2 group by t.id, s.name, s.sort_order order by t.taken_on, s.sort_order`, [o.from, o.to])).rows;
+        where t.taken_on between $1 and $2 group by t.id, s.name, s.sort_order order by t.taken_on, s.sort_order`, [ranges.stocktake.from, ranges.stocktake.to])).rows;
       if (o.detail) out.stocktakeLines = (await q.query(`select t.taken_on::text as "棚卸日", s.name as "店舗", case t.kind when 'retail' then '店販' else '業務' end as "種類", l.maker as "メーカー", l.name as "品名", l.spec as "規格", l.cost_price as "仕入値", l.quantity as "数量", l.amount as "金額"
-        from stocktake_lines l join stocktakes t on t.id = l.stocktake_id join stores s on s.id = t.store_id where t.taken_on between $1 and $2 order by t.taken_on, s.sort_order, l.sort_order`, [o.from, o.to])).rows;
+        from stocktake_lines l join stocktakes t on t.id = l.stocktake_id join stores s on s.id = t.store_id where t.taken_on between $1 and $2 order by t.taken_on, s.sort_order, l.sort_order`, [ranges.stocktake.from, ranges.stocktake.to])).rows;
     }
     if (has("leave")) {
       out.leavePlans = (await q.query(`select w.label as "回", s.name as "店舗", m.name as "氏名", p.day::text as "有給の日" from leave_plans p join leave_windows w on w.id = p.window_id join memberships m on m.id = p.membership_id join stores s on s.id = p.store_id
-        where p.day between $1 and $2 order by p.day, s.sort_order, m.employee_code`, [o.from, o.to])).rows;
+        where p.day between $1 and $2 and ($3::uuid[] is null or m.id = any($3)) order by p.day, s.sort_order, m.employee_code`, [ranges.leave.from, ranges.leave.to, sel])).rows;
       out.leaveChanges = (await q.query(`select to_char(c.created_at at time zone 'Asia/Tokyo', 'YYYY-MM-DD') as "申請日", w.label as "回", s.name as "店舗", m.name as "氏名", c.from_day::text as "変更前", c.to_day::text as "変更後", c.reason as "理由",
         case c.status when 'approved' then '許可' when 'rejected' then '却下' when 'cancelled' then '取り消し' when 'pending_manager' then '店長確認待ち' else '事務員確認待ち' end as "結果", mm.name as "店長", om.name as "事務員"
         from leave_changes c join leave_windows w on w.id = c.window_id join memberships m on m.id = c.membership_id join stores s on s.id = c.store_id left join memberships mm on mm.id = c.manager_id left join memberships om on om.id = c.office_id
-        where c.created_at::date between $1 and $2 order by c.created_at`, [o.from, o.to])).rows;
+        where c.created_at::date between $1 and $2 and ($3::uuid[] is null or m.id = any($3)) order by c.created_at`, [ranges.leave.from, ranges.leave.to, sel])).rows;
     }
     if (has("lessons")) out.lessons = (await q.query(`select to_char(l.day, 'YYYY-MM') as "月", s.name as "店舗", m.name as "氏名", case when pc.name is null then c.name else pc.name || '・' || c.name end as "内容", count(*)::int as "回数", coalesce(sum(l.minutes), 0)::int as "時間(分)"
         from lesson_logs l join memberships m on m.id = l.assistant_id join stores s on s.id = l.store_id join lesson_categories c on c.id = l.category_id left join lesson_categories pc on pc.id = c.parent_id
-        where l.deleted_at is null and l.day between $1 and $2 group by 1, s.name, s.sort_order, m.name, m.employee_code, pc.name, c.name order by 1, s.sort_order, m.employee_code`, [o.from, o.to])).rows;
+        where l.deleted_at is null and l.day between $1 and $2 and ($3::uuid[] is null or m.id = any($3)) group by 1, s.name, s.sort_order, m.name, m.employee_code, pc.name, c.name order by 1, s.sort_order, m.employee_code`, [ranges.lessons.from, ranges.lessons.to, sel])).rows;
     if (has("audit")) out.audit = (await q.query(`select to_char(a.at at time zone 'Asia/Tokyo', 'YYYY-MM-DD HH24:MI') as "日時", case a.action when 'staff.create' then 'スタッフを登録' when 'staff.update' then 'レベル・在籍を変更' when 'records.export' then '全情報の書面を作成' else a.action end as "操作", ma.name as "した人", mt.name as "対象の人", a.detail as "くわしく"
-        from audit_logs a left join memberships ma on ma.id = a.actor_id left join memberships mt on mt.id = a.target_id where a.at::date between $1 and $2 order by a.at`, [o.from, o.to])).rows;
+        from audit_logs a left join memberships ma on ma.id = a.actor_id left join memberships mt on mt.id = a.target_id where a.at::date between $1 and $2 and ($3::uuid[] is null or a.actor_id = any($3) or a.target_id = any($3)) order by a.at`, [ranges.audit.from, ranges.audit.to, sel])).rows;
     return out;
   });
   const generatedAt = new Date().toISOString();
-  const hash = createHash("sha256").update(JSON.stringify({ co, o: { ...o, sections }, doc })).digest("hex");
-  await db.query("insert into audit_logs (company_id, actor_id, action, detail) values ($1,$2,'records.export',$3::jsonb)", [me.companyId, userId, JSON.stringify({ from: o.from, to: o.to, sections, detail: !!o.detail, hash: hash.slice(0, 16) })]);
-  return { meta: { company: co, from: o.from, to: o.to, generatedAt, by: me.name, sections, detail: !!o.detail, hash }, ...doc };
+  const hash = createHash("sha256").update(JSON.stringify({ co, o: { from: o.from, to: o.to, sections, detail: !!o.detail, staffIds: sel, ranges }, doc })).digest("hex");
+  await db.query("insert into audit_logs (company_id, actor_id, action, detail) values ($1,$2,'records.export',$3::jsonb)", [me.companyId, userId, JSON.stringify({ from: o.from, to: o.to, sections, detail: !!o.detail, staff: staffNames ?? '全員', ranges, hash: hash.slice(0, 16) })]);
+  return { meta: { company: co, from: o.from, to: o.to, generatedAt, by: me.name, sections, detail: !!o.detail, hash, staff: staffNames, ranges }, ...doc };
 }
 
 // ---------------------------------------------------------------- ご要望（こうしてほしい）
