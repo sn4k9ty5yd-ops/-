@@ -49,7 +49,7 @@ export default function StocktakePage() {
           <li>全部入れたら、<b>「提出する」</b>を押す（店長・事務員さん）</li>
         </ol>
         {me.level >= 3
-          ? <p style={{ margin: "8px 0 0" }}><a href="/admin/products" style={{ fontWeight: 700 }}>▶ 商品が足りないとき：商品を追加する（写真から読み込むこともできます）</a></p>
+          ? <p style={{ margin: "8px 0 0" }}>商品が足りないときは、棚卸し表を開いて、その中の<b>「＋ 商品を追加する」</b>で入れられます。</p>
           : <p className="sub" style={{ margin: "8px 0 0" }}>商品が表にないときは、店長か事務員さんに、商品の追加をお願いしてください。</p>}
       </div>
       <div className="seg"><button className={view === "list" ? "on" : ""} onClick={() => setView("list")}>棚卸し表（お店・種類ごと）</button><button className={view === "summary" ? "on" : ""} onClick={() => setView("summary")}>合算（店販・業務・全店）</button></div>
@@ -134,6 +134,8 @@ function Detail({ id, storeName, onBack }: { id: string; storeName: string; onBa
   const [msg, setMsg] = useState(""); const [note, setNote] = useState("");
   const [sameDay, setSameDay] = useState<StocktakeSummary | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [nf, setNf] = useState({ maker: "", name: "", spec: "", cost: "" });
 
   const apply = useCallback((r: StocktakeDetail) => {
     setD(r);
@@ -204,8 +206,8 @@ function Detail({ id, storeName, onBack }: { id: string; storeName: string; onBa
             : <>全部入りました。{d.canManage ? <b>上の「提出する」を押してください。</b> : "店長が提出します。"}</>}
         </p>
         {live.length === 0 && (me.level >= 3
-          ? <p style={{ margin: "8px 0 0" }}><a href="/admin/products" style={{ fontWeight: 700 }}>▶ 商品を追加する（商品一覧へ）</a>　追加したあと、ここで「商品を追加（新しく増えた分）」を押します。</p>
-          : <p className="sub" style={{ margin: "8px 0 0" }}>店長か事務員さんに、商品の追加をお願いしてください。</p>)}
+          ? <p style={{ margin: "8px 0 0" }}>下の「＋ 商品を追加する」から、この画面で商品を入れられます。</p>
+          :<p className="sub" style={{ margin: "8px 0 0" }}>店長か事務員さんに、商品の追加をお願いしてください。</p>)}
       </div>
       <div className="actions noprint" style={{ marginBottom: 10 }}>
         {d.editable && d.canManage && <button className="ghost" style={{ color: "var(--blue)" }} onClick={() => run({ action: "sync" })}>商品を追加（新しく増えた分）</button>}
@@ -218,6 +220,34 @@ function Detail({ id, storeName, onBack }: { id: string; storeName: string; onBa
         {note && <span className="sub">{note}</span>}
       </div>
       {msg && <p className="err">{msg}</p>}
+      {d.editable && d.canManage && (
+        <div className="card noprint" style={{ margin: "0 0 10px" }}>
+          {!adding
+            ? <button className="ghost" style={{ color: "var(--blue)", padding: 0, fontWeight: 700 }} onClick={() => setAdding(true)}>＋ 商品を追加する（この表にすぐ入ります）</button>
+            : <>
+              <b>商品を追加（{PRODUCT_KIND_LABEL[d.kind]}・{storeName}）</b>
+              <div className="actions" style={{ marginTop: 8, flexWrap: "wrap" }}>
+                <input aria-label="メーカー" placeholder="メーカー（なくてもOK）" value={nf.maker} onChange={(e) => setNf({ ...nf, maker: e.target.value })} style={{ flex: 1, minWidth: 130 }} />
+                <input aria-label="品名" placeholder="品名" value={nf.name} onChange={(e) => setNf({ ...nf, name: e.target.value })} style={{ flex: 2, minWidth: 160 }} />
+                <input aria-label="規格" placeholder="規格（なくてもOK）" value={nf.spec} onChange={(e) => setNf({ ...nf, spec: e.target.value })} style={{ flex: 1, minWidth: 110 }} />
+                <input aria-label="仕入値" inputMode="numeric" placeholder="仕入値（税抜・円）" value={nf.cost} onChange={(e) => setNf({ ...nf, cost: e.target.value.replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0)).replace(/[^\d]/g, "") })} style={{ flex: 1, minWidth: 130 }} />
+              </div>
+              <div className="actions" style={{ marginTop: 8 }}>
+                <button style={{ width: "auto", margin: 0, padding: "10px 14px", fontSize: 14 }} disabled={!nf.name.trim() || nf.cost === ""} onClick={async () => {
+                  try {
+                    await flush();
+                    await api("/api/products", { kind: d.kind, items: [{ maker: nf.maker.trim(), name: nf.name.trim(), spec: nf.spec.trim(), costPrice: Number(nf.cost) }], storeIds: [d.storeId] });
+                    setNf({ maker: "", name: "", spec: "", cost: "" });
+                    await run({ action: "sync" });
+                    setNote(`「${nf.name.trim()}」を追加しました。数を入れてください`);
+                  } catch (e) { setMsg((e as Error).message); }
+                }}>追加して表に入れる</button>
+                <button className="ghost" onClick={() => setAdding(false)}>閉じる</button>
+              </div>
+              <p className="sub" style={{ margin: "6px 0 0" }}>このお店の{PRODUCT_KIND_LABEL[d.kind]}の商品として登録され、そのまま棚卸し表に入ります。たくさん入れるときや写真から読み込むときは<a href="/admin/products">商品一覧</a>へ。</p>
+            </>}
+        </div>
+      )}
       <div className="toolbar noprint">
         <input aria-label="さがす" placeholder="メーカー・品名でさがす" value={q} onChange={(e) => setQ(e.target.value)} style={{ flex: 2, minWidth: 180 }} />
         <label className="sub" style={{ margin: 0, display: "flex", gap: 6, alignItems: "center" }}><input type="checkbox" style={{ width: 18, height: 18 }} checked={onlyEmpty} onChange={(e) => setOnlyEmpty(e.target.checked)} />未入力だけ表示</label>
