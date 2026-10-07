@@ -4,6 +4,6 @@ export function mentorTabs(displayOnly = false, rank?: string | null): { href: s
     { href: "/mentor", label: "チャット", show: !displayOnly },
     { href: "/interviews", label: "面談シート", show: !displayOnly },
     { href: "/mentor/fortune", label: "🔮 占い", show: !displayOnly },
-    { href: "/mentor/mbti", label: "みんなのMBTI", show: !displayOnly && rank === "stylist" },
+    { href: "/mentor/mbti", label: "みんなのMBTI", show: !displayOnly },
   ];
 }

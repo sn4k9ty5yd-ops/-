@@ -145,7 +145,7 @@ describe("面談シートの編集・削除", () => {
   });
 });
 
-describe("みんなのMBTI（スタイリストだけ）", () => {
+describe("みんなのMBTI（スタイリストは全店・ほかは自分のお店）", () => {
   let d: Database; const u: Record<string, string> = {};
   beforeAll(async () => {
     d = await newDb(); await migrate(d);
@@ -161,9 +161,9 @@ describe("みんなのMBTI（スタイリストだけ）", () => {
     expect(r.map((x) => [x.name, x.mbti]).sort()).toEqual([["kid", "ENFP"], ["styB", "ISTJ"]]);
     expect((await svc.getMentor(d, u.styA)).messages).toHaveLength(0);
   });
-  it("スタイリスト以外（アシスタント・店長）は見られない", async () => {
-    await expect(svc.listMbtiDirectory(d, u.kid)).rejects.toThrow(svc.ForbiddenError);
-    await expect(svc.listMbtiDirectory(d, u.mgr)).rejects.toThrow(svc.ForbiddenError);
+  it("スタイリスト以外（アシスタント・店長）は、自分のお店の人だけ見られる", async () => {
+    expect((await svc.listMbtiDirectory(d, u.kid)).map((x) => x.name)).toEqual(["kid"]);   // Aの店は kid だけ（B店の styB は見えない）
+    expect((await svc.listMbtiDirectory(d, u.mgr)).map((x) => x.name)).toEqual(["kid"]);
   });
 });
 

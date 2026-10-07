@@ -54,7 +54,7 @@ function Page() {
           </select>
         </label>
         {!st.mbti && <p className="sub" style={{ margin: "6px 0 0" }}>わからないときは、「16Personalities」などの無料の診断で調べられます。</p>}
-        <p className="sub" style={{ margin: "6px 0 0" }}>※ 入れたMBTIは、スタイリストのみんなが見られます（会話の内容は、見えません）。</p>
+        <p className="sub" style={{ margin: "6px 0 0" }}>※ 入れたMBTIは、同じお店のみんなと、スタイリストが見られます（会話の内容は、見えません）。</p>
       </div>
 
       <div className="toolbar">
