@@ -1,5 +1,6 @@
 "use client";
 import { SubTabs } from "@/app/SubTabs";
+import { viewTabs } from "@/lib/shift-tabs";
 import { PasteOff } from "./PasteOff";
 import { LimitAll } from "./LimitAll";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -126,7 +127,7 @@ export function ShiftsView({ final = false }: { final?: boolean }) {
 
   return (
     <>
-      <SubTabs items={[{ href: "/admin/periods", label: "やること" }, { href: "/admin/shifts", label: "出勤簿予定" }, { href: "/admin/attendance", label: "出勤簿確定" }]} />
+      <SubTabs items={viewTabs(me.level)} />
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
         <h1 style={{ margin: 0 }}>{final ? "出勤簿確定" : "出勤簿予定"}</h1>
         <PrintButton fit=".atttable" label="🖨 A4に1枚で印刷" />
