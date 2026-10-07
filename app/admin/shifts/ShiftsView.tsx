@@ -34,6 +34,7 @@ export function ShiftsView({ final = false }: { final?: boolean }) {
   const [editable, setEditable] = useState(false);
   const [reqs, setReqs] = useState<RequestRow[]>([]);
   const [day, setDay] = useState("");
+  const [fillBreak, setFillBreak] = useState<{ day: string; v: string } | null>(null);   // 一括の休憩（分）。空=自動
   const [personId, setPersonId] = useState("");
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [fillTime, setFillTime] = useState<{ day: string; start: string; end: string } | null>(null);
@@ -176,29 +177,32 @@ export function ShiftsView({ final = false }: { final?: boolean }) {
               {editable && (() => {
                 const dd = day || days[0];
                 const t = fillTime && fillTime.day === dd ? fillTime : { day: dd, ...hoursOn(store, dd) };
+                const bv = fillBreak && fillBreak.day === dd ? fillBreak.v : "";
                 return (
                   <div style={{ marginTop: 10 }}>
                     <div className="times">
                       <label>入店<input type="time" step={300} value={t.start} onChange={(e) => setFillTime({ ...t, start: e.target.value })} /></label>
                       <label>退店<input type="time" step={300} value={t.end} onChange={(e) => setFillTime({ ...t, end: e.target.value })} /></label>
+                      <label>休憩（分）<input type="number" inputMode="numeric" min={0} max={600} step={5} value={bv} placeholder="自動" onChange={(e) => setFillBreak({ day: dd, v: e.target.value })} /></label>
                     </div>
-                    <div className="sub" style={{ margin: "6px 0" }}>{hoursText(t.start, t.end, me.breakRule)}（この日だけの時間です。休み・有給の人は変わりません。ちがう時間の人は、名前を押して、ひとりずつ直せます）</div>
-                    <button style={{ padding: 12, fontSize: 15 }} disabled={!t.start || !t.end || t.end <= t.start} onClick={async () => { const n = await post({ action: "fill", days: [dd], start: t.start, end: t.end, overwrite: true, keepOff: true }); setNote(`${n}人分を、${t.start}〜${t.end} に直しました（休み・有給の人は、そのままです）`); }}>
+                    <div className="sub" style={{ margin: "6px 0" }}>{hoursText(t.start, t.end, me.breakRule)}（この日だけの時間です。休憩は、空なら自動。休み・有給の人は変わりません。ちがう人は、下の一覧で、ひとりずつ直せます）</div>
+                    <button style={{ padding: 12, fontSize: 15 }} disabled={!t.start || !t.end || t.end <= t.start} onClick={async () => {
+                      const brk = bv === "" ? null : Math.max(0, Math.min(600, Math.round(Number(bv))));
+                      const entries = roster.filter((p) => { const c = byKey.get(`${p.id}|${dd}`); return (!c || c.kind === "work") && !(!c && reqKey.get(`${p.id}|${dd}`)); }).map((p) => ({ membershipId: p.id, day: dd, kind: "work" as ShiftKind, start: t.start, end: t.end, breakMin: brk }));
+                      if (entries.length === 0) { setNote("出勤の人がいません"); return; }
+                      await save(entries); setNote(`${entries.length}人分を、${t.start}〜${t.end}${brk === null ? "" : `（休憩${brk}分）`} に直しました（休み・有給の人は、そのままです）`);
+                    }}>
                       この日の出勤の人を、全員 {t.start}〜{t.end} に直す
                     </button>
                   </div>
                 );
               })()}
               <ul className="list" style={{ margin: "10px 0 0" }}>
-                {roster.map((p) => {
-                  const s = byKey.get(`${p.id}|${day}`), r = reqKey.get(`${p.id}|${day}`);
-                  return (
-                    <li key={p.id} className="rowbtn" onClick={() => editable && setTarget({ person: p, days: [day] })} style={{ cursor: editable ? "pointer" : "default" }}>
-                      <div><b>{p.name}</b>{r && <span className="chip warn">{r === "paid" ? "有給希望" : "希望休"}</span>}</div>
-                      <span className={`pill ${kindClass(s)}`}>{longText(s)}</span>
-                    </li>
-                  );
-                })}
+                {roster.map((p) => (
+                  <DayRow key={`${p.id}|${day}|${byKey.get(`${p.id}|${day}`)?.start ?? ""}|${byKey.get(`${p.id}|${day}`)?.end ?? ""}|${byKey.get(`${p.id}|${day}`)?.breakMin ?? ""}|${byKey.get(`${p.id}|${day}`)?.kind ?? ""}`}
+                    person={p} cur={byKey.get(`${p.id}|${day}`)} req={reqKey.get(`${p.id}|${day}`)} def={hoursOn(store, day)} editable={editable} rule={me.breakRule}
+                    onSave={(e) => save([{ membershipId: p.id, day, ...e }])} onClear={() => post({ action: "clear", items: [{ membershipId: p.id, day }] })} />
+                ))}
               </ul>
             </div>
           </>
@@ -289,5 +293,48 @@ export function ShiftsView({ final = false }: { final?: boolean }) {
         />
       )}
     </>
+  );
+}
+
+/** 日ごとの画面の、ひとり分（その場で、出勤・休み・入店・退店・休憩を直せる） */
+function DayRow({ person, cur, req, def, editable, rule, onSave, onClear }: {
+  person: { id: string; name: string }; cur?: ShiftRow; req?: string; def: { start: string; end: string }; editable: boolean; rule: Parameters<typeof shiftHours>[1];
+  onSave(e: Pick<ShiftEntry, "kind" | "start" | "end" | "breakMin">): Promise<void>; onClear(): Promise<unknown>;
+}) {
+  const [kind, setKind] = useState<ShiftKind>(cur?.kind ?? "work");
+  const [start, setStart] = useState(cur?.start ?? def.start);
+  const [end, setEnd] = useState(cur?.end ?? def.end);
+  const [brk, setBrk] = useState(cur?.breakMin == null ? "" : String(cur.breakMin));
+  const [busy, setBusy] = useState(false);
+  const dirty = !cur ? false : kind !== cur.kind || (kind === "work" && (start !== (cur.start ?? "") || end !== (cur.end ?? "") || brk !== (cur.breakMin == null ? "" : String(cur.breakMin))));
+  const ok = kind !== "work" || (start && end && end > start);
+  const h = kind === "work" && start && end && end > start ? shiftHours({ start, end, breakMin: brk === "" ? null : Number(brk) }, rule) : null;
+  const go = async (fn: () => Promise<unknown>) => { setBusy(true); try { await fn(); } finally { setBusy(false); } };
+  return (
+    <li style={{ display: "block", padding: "10px 4px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+        <div><b>{person.name}</b>{!cur && req && <span className="chip warn">{req === "paid" ? "有給希望" : "希望休"}</span>}{!cur && !req && <span className="sub">　まだ入っていません</span>}</div>
+        {editable ? (
+          <div className="seg" style={{ margin: 0 }}>
+            {KIND_BUTTONS.map((k) => <button key={k.kind} className={kind === k.kind ? "on" : ""} style={{ padding: "6px 10px", fontSize: 13 }} onClick={() => setKind(k.kind)}>{k.label}</button>)}
+          </div>
+        ) : <span className={`pill ${kindClass(cur)}`}>{longText(cur)}</span>}
+      </div>
+      {editable && kind === "work" && (
+        <div className="times" style={{ marginTop: 6 }}>
+          <label>入店<input type="time" step={300} value={start} onChange={(e) => setStart(e.target.value)} /></label>
+          <label>退店<input type="time" step={300} value={end} onChange={(e) => setEnd(e.target.value)} /></label>
+          <label>休憩（分）<input type="number" inputMode="numeric" min={0} max={600} step={5} value={brk} placeholder={h ? `自動：${shiftHours({ start, end }, rule).breakMin}` : "自動"} onChange={(e) => setBrk(e.target.value)} /></label>
+        </div>
+      )}
+      {editable && (
+        <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 6, flexWrap: "wrap" }}>
+          <button style={{ width: "auto", margin: 0, padding: "8px 14px", fontSize: 14 }} disabled={busy || !ok || (!!cur && !dirty)}
+            onClick={() => go(() => onSave({ kind, start: kind === "work" ? start : null, end: kind === "work" ? end : null, breakMin: kind === "work" && brk !== "" ? Math.round(Number(brk)) : null }))}>{cur ? "この人を保存" : "この人に入れる"}</button>
+          {cur && <button className="ghost" style={{ width: "auto", margin: 0 }} disabled={busy} onClick={() => go(onClear)}>消す</button>}
+          {h && <span className="sub">在店 {fmt(h.stay)}　休憩 {fmt(h.breakMin)}　実働 <b>{fmt(h.work)}</b></span>}
+        </div>
+      )}
+    </li>
   );
 }
