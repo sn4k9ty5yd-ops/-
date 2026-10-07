@@ -572,3 +572,12 @@ main .card{animation:popIn .4s cubic-bezier(.2,.8,.2,1) both}
 .mcal .mday{position:relative}
 .mcal .wcount{position:absolute;right:3px;bottom:2px;font-size:10px;font-weight:700;color:var(--sub);background:rgba(0,0,0,.05);border-radius:8px;padding:0 5px;line-height:15px}
 @media print{.mcal .wcount{background:none}}
+
+/* iPhoneがダークモードでも、画面はいつも明るい配色（カレンダーの背景だけ黒くなって、日付が見えない問題の対策） */
+:root{color-scheme:light}
+@media (prefers-color-scheme: dark){
+  .tint{background:hsl(var(--h) 75% 96%)}
+  .tintbox{background:hsl(var(--h) 75% 96%)}
+  .mcal .h{color:var(--sub)}
+  .mcal .h.su{color:#d70015}.mcal .h.sa{color:#0071e3}
+}
