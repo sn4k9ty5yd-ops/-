@@ -4,6 +4,7 @@ import { viewTabs } from "@/lib/shift-tabs";
 import { PasteOff } from "./PasteOff";
 import { LimitAll } from "./LimitAll";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { api, useAutoRefresh, useMe } from "@/lib/client";
 import { fmt } from "@/lib/hours";
 import { holidayName } from "@/lib/holidays";
@@ -157,8 +158,8 @@ export function ShiftsView({ final = false }: { final?: boolean }) {
 
       <div className="tintbox" style={tintStyle(view.start)}>
         {/* ------------------------------------------------ 日ごと */}
-        {mode === "day" && (
-          <div className="sheet-bg" onClick={() => setMode("table")}><div className="sheet" onClick={(e) => e.stopPropagation()} style={{ maxHeight: "92vh", overflow: "auto", width: "100%", maxWidth: 760 }}>
+        {mode === "day" && typeof document !== "undefined" && (
+          createPortal(<div className="sheet-bg" onClick={() => setMode("table")}><div className="sheet" onClick={(e) => e.stopPropagation()} style={{ maxHeight: "92vh", overflow: "auto", width: "100%", maxWidth: 760 }}>
           <button className="ghost" style={{ width: "auto", margin: "0 0 8px" }} onClick={() => setMode("table")}>✕ 表にもどる</button>
           <>
             <div className="daystrip">
@@ -206,12 +207,12 @@ export function ShiftsView({ final = false }: { final?: boolean }) {
               </ul>
             </div>
           </>
-          </div></div>
+          </div></div>, document.body)
         )}
 
         {/* ------------------------------------------------ 人ごと */}
-        {mode === "person" && (
-          <div className="sheet-bg" onClick={() => setMode("table")}><div className="sheet" onClick={(e) => e.stopPropagation()} style={{ maxHeight: "92vh", overflow: "auto", width: "100%", maxWidth: 760 }}>
+        {mode === "person" && typeof document !== "undefined" && (
+          createPortal(<div className="sheet-bg" onClick={() => setMode("table")}><div className="sheet" onClick={(e) => e.stopPropagation()} style={{ maxHeight: "92vh", overflow: "auto", width: "100%", maxWidth: 760 }}>
           <button className="ghost" style={{ width: "auto", margin: "0 0 8px" }} onClick={() => setMode("table")}>✕ 表にもどる</button>
           <>
             <select aria-label="スタッフ" value={personId} onChange={(e) => { setPersonId(e.target.value); setPicked(new Set()); }}>
@@ -251,14 +252,14 @@ export function ShiftsView({ final = false }: { final?: boolean }) {
               </div>
             )}
           </>
-          </div></div>
+          </div></div>, document.body)
         )}
 
         {/* ------------------------------------------------ 一覧表 */}
         {(
           <div className="scroll">
             <table className="shifttable atttable">
-              <thead><tr><th style={{ position: "sticky", left: 0, background: "#fff", zIndex: 2 }}>名前</th><th></th>{days.map((d) => <th key={d} title="押すと、この日の全員を一括・個別で直せます" style={{ cursor: "pointer" }} onClick={() => { setDay(d); setMode("day"); window.scrollTo({ top: 0, behavior: "smooth" }); }} className={dow(d) === 0 || holidayName(d) ? "su" : dow(d) === 6 ? "sa" : ""}>{md(d)}<br /><small>{WEEKDAYS[dow(d)]}</small>{holidayName(d) && <><br /><small className="holname" style={{ fontSize: 9 }}>{holidayName(d)}</small></>}</th>)}<th>合計</th></tr></thead>
+              <thead><tr><th style={{ position: "sticky", left: 0, background: "#fff", zIndex: 2 }}>名前</th><th></th>{days.map((d) => <th key={d} title="押すと、この日の全員を一括・個別で直せます" style={{ cursor: "pointer" }} onClick={() => { setDay(d); setMode("day"); }} className={dow(d) === 0 || holidayName(d) ? "su" : dow(d) === 6 ? "sa" : ""}>{md(d)}<br /><small>{WEEKDAYS[dow(d)]}</small>{holidayName(d) && <><br /><small className="holname" style={{ fontSize: 9 }}>{holidayName(d)}</small></>}</th>)}<th>合計</th></tr></thead>
               <tbody>
                 {roster.map((p) => {
                   const tot = days.reduce((a, d) => { const s = byKey.get(`${p.id}|${d}`); if (s?.kind === "work") { a.days++; a.min += shiftHours(s, me.breakRule).work; } else if (s?.kind === "paid") a.paid++; return a; }, { days: 0, min: 0, paid: 0 });
