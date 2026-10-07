@@ -145,6 +145,11 @@ export async function callAiChat(system: string, turns: ChatTurn[], opts: { env?
           if (r2.ok) { res = r2; model = alt; found[tier] = alt; foundAt[tier] = Date.now(); break; }
         }
       }
+      // 「少しのあいだ使いすぎ」（1分あたりの回数）のときは、少し待ってから、もう一度だけ送る
+      if (!res.ok && primary().status === 429) {
+        await new Promise((ok) => setTimeout(ok, (opts.retryDelayMs ?? 500) * 5));
+        first = null; const r3 = await tryModel(model); if (r3.ok) res = r3; else res = r3;
+      }
       if (!res.ok) { const e = await httpError(res, key); if (first) { const e1 = await httpError(first, key); e.detail = `入口1（${(first as Response).status}）${e1.detail} ／ 入口2（${res.status}）${e.detail}`.slice(0, 500); } e.detail = `モデル：${model} ／ ${e.detail}`.slice(0, 600); throw e; }
       const j = (await res.json()) as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
       const text = (j.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? "").join("").trim();
@@ -168,7 +173,7 @@ export async function callAiChat(system: string, turns: ChatTurn[], opts: { env?
 }
 
 function aiHttpMessage(status: number): string {
-  if (status === 429) return "AIの無料の利用回数を、いったん使いきりました。しばらくしてから、もう一度ためしてください";
+  if (status === 429) return "AIの利用回数が、いまいっぱいです（アプリ全体で、みんなが分け合っている回数です。あなたの回数が減ったわけではありません）。少し待って、もう一度ためしてください。何度もこうなるときは、管理者に伝えてください";
   if (status === 401 || status === 403) return "AIのカギが正しくないようです（管理者に伝えてください）";
   if (status === 503 || status === 500) return "Googleのサーバーが、いま混んでいます（" + status + "）。少し待ってから、もう一度送ってください";
   if (status === 404) return "AIの宛先（モデル）が見つかりませんでした（404）。カギの種類か、AIの名前が合っていないようです";

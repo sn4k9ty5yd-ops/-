@@ -34,7 +34,7 @@ describe("ミーティングの指示文・マインドマップの読み取り�
     expect(await callAi("質問", { env: { GEMINI_API_KEY: "k1" }, fetchFn: fake })).toBe("答え");
     expect(sent).toMatchObject({ key: "k1" });
     const busy = (async () => new Response("{}", { status: 429 })) as unknown as typeof fetch;
-    await expect(callAi("質問", { env: { GEMINI_API_KEY: "k1" }, fetchFn: busy })).rejects.toThrow("無料の利用回数");
+    await expect(callAi("質問", { env: { GEMINI_API_KEY: "k1" }, fetchFn: busy })).rejects.toThrow("利用回数が");
   });
 });
 

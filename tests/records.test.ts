@@ -68,4 +68,10 @@ describe("税務署などに出す書面", () => {
     const other = await svc.exportRecords(db, id.office, { from: "2026-01-01", to: "2026-12-31", sections: ["sales"], staffIds: [id.b] });
     expect(other.sales).toHaveLength(0);
   });
+
+  it("出勤簿予定（シフト）と希望休も、書面に入る（人でも絞れる）", async () => {
+    const d = await svc.exportRecords(db, id.office, { from: "2026-11-01", to: "2027-12-31", sections: ["shifts"], staffIds: [id.a] });
+    expect(Array.isArray(d.shiftsPlan)).toBe(true);
+    expect(Array.isArray(d.offRequests)).toBe(true);
+  });
 });

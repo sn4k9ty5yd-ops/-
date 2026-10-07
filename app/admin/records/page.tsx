@@ -120,6 +120,8 @@ export default function RecordsPage() {
             <p className="sub">この書面は、株式会社ALBUMの業務システムに記録されている内容を、そのまま出力したものです。金額は、とくに書いてなければ円（税抜）です。パスコードなどの秘密の情報は含みません。</p>
           </header>
           <Table title="1. スタッフ名簿" rows={doc.staff} />
+          <Table title="1-2. 出勤簿予定（シフト）" rows={doc.shiftsPlan} />
+          <Table title="1-3. 希望休" rows={doc.offRequests} />
           <Table title="2. 出勤簿（月ごとのまとめ）" rows={doc.attendance} />
           <Table title="2-2. 出勤簿（1日ごと）" rows={doc.attendanceDaily} />
           <Table title="3. 売上と歩合" rows={doc.sales} />

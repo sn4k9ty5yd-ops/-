@@ -2425,12 +2425,12 @@ export async function securityOverview(db: Database, userId: string): Promise<Se
 // ------------------------------------------------------------------ 税務署などに出す「全情報の書面」（管理者のみ）
 export interface RecordsOptions { from: string; to: string; sections: string[]; detail?: boolean; staffIds?: string[]; ranges?: Record<string, { from?: string; to?: string }> }
 export const RECORD_SECTIONS: [string, string][] = [
-  ["staff", "スタッフ名簿"], ["attendance", "出勤簿（月ごとのまとめ）"], ["sales", "売上と歩合"], ["materials", "材料費（発注の記録）"],
+  ["staff", "スタッフ名簿"], ["shifts", "出勤簿予定（シフト）と希望休"], ["attendance", "出勤簿（月ごとのまとめ）"], ["sales", "売上と歩合"], ["materials", "材料費（発注の記録）"],
   ["stocktake", "棚卸し"], ["leave", "有給の提出と変更の記録"], ["lessons", "レッスン記録（回数）"], ["audit", "大切な操作の記録"],
 ];
 export interface RecordsDoc {
   meta: { company: string; from: string; to: string; generatedAt: string; by: string; sections: string[]; detail: boolean; hash: string; staff?: string[]; ranges?: Record<string, { from: string; to: string }> };
-  staff?: Record<string, unknown>[]; attendance?: Record<string, unknown>[]; attendanceDaily?: Record<string, unknown>[]; sales?: Record<string, unknown>[];
+  staff?: Record<string, unknown>[]; shiftsPlan?: Record<string, unknown>[]; offRequests?: Record<string, unknown>[]; attendance?: Record<string, unknown>[]; attendanceDaily?: Record<string, unknown>[]; sales?: Record<string, unknown>[];
   materials?: Record<string, unknown>[]; materialsByMonth?: Record<string, unknown>[]; stocktake?: Record<string, unknown>[]; stocktakeLines?: Record<string, unknown>[];
   leavePlans?: Record<string, unknown>[]; leaveChanges?: Record<string, unknown>[]; lessons?: Record<string, unknown>[]; audit?: Record<string, unknown>[];
 }
@@ -2456,6 +2456,12 @@ export async function exportRecords(db: Database, userId: string, o: RecordsOpti
   const doc: Omit<RecordsDoc, "meta"> = await asUser(db, userId, async (q) => {
     const out: Omit<RecordsDoc, "meta"> = {};
     if (staffRows) out.staff = staffRows;
+    if (has("shifts")) {
+      out.shiftsPlan = (await q.query(`select h.day::text as "日付", s.name as "店舗", m.name as "氏名", case h.kind when 'work' then '出勤' when 'off' then '休み' when 'paid' then '有給' when 'holiday' then '公休' else 'その他' end as "種類", to_char(h.start_time, 'HH24:MI') as "入店", to_char(h.end_time, 'HH24:MI') as "退店", h.break_min as "休憩(分)"
+        from shifts h join memberships m on m.id = h.membership_id join stores s on s.id = h.store_id where h.day between $1 and $2 and ($3::uuid[] is null or m.id = any($3)) order by h.day, s.sort_order, m.employee_code`, [ranges.shifts.from, ranges.shifts.to, sel])).rows;
+      out.offRequests = (await q.query(`select r.day::text as "日付", s.name as "店舗", m.name as "氏名", case r.kind when 'paid' then '有給' else '公休' end as "希望", to_char(r.created_at at time zone 'Asia/Tokyo', 'YYYY-MM-DD HH24:MI') as "出した日時"
+        from time_off_requests r join memberships m on m.id = r.membership_id join stores s on s.id = r.store_id where r.day between $1 and $2 and ($3::uuid[] is null or m.id = any($3)) order by r.day, s.sort_order, m.employee_code`, [ranges.shifts.from, ranges.shifts.to, sel])).rows;
+    }
     if (has("attendance")) {
       out.attendance = (await q.query(`select to_char(a.day, 'YYYY-MM') as "月", s.name as "店舗", m.name as "氏名", count(*) filter (where a.kind = 'work')::int as "出勤日数", round(sum(a.work_minutes)::numeric / 60, 2)::float8 as "実働時間",
         count(*) filter (where a.kind = 'paid')::int as "有給日数", count(*) filter (where a.kind in ('holiday','off'))::int as "休みの日数"
@@ -2815,7 +2821,7 @@ export async function logActivity(db: Database, userId: string, path: string, bo
   if (sid && sid !== u.store_id) storeName = (await db.query<{ name: string }>("select name from stores where id = $1 and company_id = $2", [sid, u.company_id])).rows[0]?.name ?? storeName;
   const level = tierOf({ level: u.level, appOwner: u.app_owner, execView: u.exec_view });
   await db.query("insert into activity_log (company_id, user_id, user_name, user_level, store_name, area, what, path) values ($1,$2,$3,$4,$5,$6,$7,$8)", [u.company_id, userId, u.name, `レベル${level}`, storeName, area, what, path]);
-  if (Date.now() - lastActivityPurge > 3600000) { lastActivityPurge = Date.now(); await db.query("delete from activity_log where at < now() - interval '400 days'"); }
+  if (Date.now() - lastActivityPurge > 3600000) { lastActivityPurge = Date.now(); await db.query("delete from activity_log where at < now() - interval '1100 days'"); }
   if (isOfficeReport(path, body)) {
     const owners = (await db.query<{ id: string }>("select id from memberships where company_id = $1 and app_owner and status = 'active'", [u.company_id])).rows.map((r) => r.id);
     const title = `${u.name}さん（${storeName ?? ""}）が「${area}」を${what}しました`;
