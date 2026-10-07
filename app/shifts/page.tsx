@@ -113,6 +113,7 @@ function Page() {
                 <div key={d} role="button" tabIndex={0} aria-label={`${md(d)}の詳細`} onClick={() => { setLimitInput(""); setLimitMsg(""); setDetail(d); }} onKeyDown={(e) => { if (e.key === "Enter") setDetail(d); }}
                   className={`mday ${d === today ? "today" : ""} ${myOff.has(d) ? "myoff" : ""} ${holidayName(d) ? "hol" : ""} ${dow(d) === 0 ? "sun" : dow(d) === 6 ? "sat" : ""}`} style={{ cursor: "pointer" }}>
                   <div className="num"><span>{md(d)}</span>{holidayName(d) && <small className="holname"> {holidayName(d)}</small>}{myOff.has(d) && <small className="myoff-tag"> 休み</small>}{conflicts.has(d) && <small style={{ color: "#d70015", fontWeight: 800 }}> ⚠{conflicts.get(d)!.count}/{conflicts.get(d)!.maxOff}</small>}</div>
+                  {(byDay.get(d) ?? []).length > 0 && <span className="wcount" title="この日の出勤人数">{(byDay.get(d) ?? []).filter((s) => s.kind === "work").length}人</span>}
                   {list.length === 0 && show === "off" ? <small className="sub">なし</small> : (
                     <div className="names">
                       {list.map((s, i) => (

@@ -567,3 +567,8 @@ main .card{animation:popIn .4s cubic-bezier(.2,.8,.2,1) both}
 /* A4に1枚で印刷（PrintButtonのfit）: 印刷と同じ小さい字・表は中身の幅 */
 .atttable.pfit{width:max-content}
 .atttable.pfit td,.atttable.pfit th{font-size:8px;padding:1px 2px}
+
+/* カレンダーの端に、その日の出勤人数を小さく */
+.mcal .mday{position:relative}
+.mcal .wcount{position:absolute;right:3px;bottom:2px;font-size:10px;font-weight:700;color:var(--sub);background:rgba(0,0,0,.05);border-radius:8px;padding:0 5px;line-height:15px}
+@media print{.mcal .wcount{background:none}}
