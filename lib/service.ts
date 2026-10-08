@@ -160,7 +160,9 @@ export async function listStaff(db: Database, userId: string): Promise<StaffRow[
     const manageable = (me.level === 4 || (me.level === 3 && r.storeId === me.storeId && (r.level as number) < me.level)) && (!r.appOwner || r.id === userId) && (!r.execView || me.appOwner || r.id === userId);
     // レベルは、自分のものと、アプリ制作者の画面だけに出す。ほかの人のレベルは、返事にも入れない
     const hide = !me.appOwner && r.id !== userId;
-    return { ...r, ...(pres.get(r.id) ?? {}), manageable, ...(hide ? { level: 0 as const, execView: undefined, appOwner: undefined } : {}) };
+    // 制作者が「見え方」を切りかえているときは、自分の行も、その見え方のとおりに出す（ほんとうのレベル6を出さない）
+    const asView = r.id === userId && me.viewAs ? { level: me.level, appOwner: false, execView: me.execView, rank: me.rank ?? null, eduLead: false, materialManager: false, displayOnly: me.displayOnly } : {};
+    return { ...r, ...(pres.get(r.id) ?? {}), manageable, ...asView, ...(hide ? { level: 0 as const, execView: undefined, appOwner: undefined } : {}) };
   }).sort(compareEmployeeCode);
 }
 
@@ -507,7 +509,7 @@ export async function listRoster(db: Database, userId: string, storeId: string):
   const rows = (await asUser(db, userId, (q) =>
     q.query<{ id: string; name: string; level: Level; shortName: string | null }>(
       "select id, name, level, short_name as \"shortName\" from memberships where store_id = $1 and status = 'active' and on_shift order by level desc, name", [storeId]))).rows;
-  return sortRoster(rows.map((r) => (me?.appOwner || r.id === userId ? r : { ...r, level: 0 as const })));   // ほかの人のレベルの数字は、返事に入れない。並びは、決めた順
+  return sortRoster(rows.map((r) => (r.id === userId && me?.viewAs ? { ...r, level: me.level as Level } : me?.appOwner || r.id === userId ? r : { ...r, level: 0 as const })));   // ほかの人のレベルの数字は、返事に入れない。並びは、決めた順
 }
 
 export async function listShifts(db: Database, userId: string, periodId: string, storeId: string): Promise<ShiftRow[]> {

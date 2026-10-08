@@ -42,4 +42,13 @@ describe("アプリ制作者の見え方の切りかえ", () => {
     setViewAsKey(staff, null);
     expect(r.l).toBe(1);
   });
+  it("見え方を切りかえているときは、自分の行も、その見え方のレベルで出る。本物の店長には、制作者のレベルは見えない", async () => {
+    const mgr = (await db.query<{ id: string }>("insert into memberships (company_id, store_id, employee_code, name, level) select company_id, store_id, '3', '店長', 3 from memberships where id = $1 returning id", [owner])).rows[0].id;
+    await svc.setViewAs(db, owner, "manager");
+    const mine = (await svc.listStaff(db, owner)).find((s) => s.id === owner)!;
+    expect(mine.level).toBe(3); expect(mine.appOwner).toBe(false);
+    await svc.setViewAs(db, owner, null);
+    const seen = (await svc.listStaff(db, mgr)).find((s) => s.id === owner)!;
+    expect(seen.level).toBe(0); expect(seen.appOwner).toBeUndefined(); expect(seen.execView).toBeUndefined();
+  });
 });
