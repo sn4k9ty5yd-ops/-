@@ -43,6 +43,7 @@ function Cards() {
     { href: "/admin/staff", title: "スタッフ", sub: "登録・退職・パスコード", show: me.level >= 3 },
     { href: "/security", title: "セキュリティ", sub: "パスコードを変える・ログインの記録", show: true },
     { href: "/admin/records", title: "税務署用の書面", sub: "全情報を、期間をえらんで書面（印刷・PDF）にする", show: me.level === 4 },
+    { big: true, href: "/help", title: "ヘルプ", sub: "このアプリでできることと、やり方・ご要望を送る", show: true },
     { href: "/admin/activity", title: "変更の記録", sub: "だれが・どこを・いつ変更したか（制作者だけ）", show: !!me.appOwner },
     { href: "/admin/feedback", title: "届いたご要望", sub: "みんなからの「こうしてほしい」（制作者だけ）", show: !!me.appOwner },
     { href: "/admin/guide", title: "アプリの説明書", sub: "社長用・事務員さん用・全社員Zoom台本（印刷・コピー）", show: !!me.appOwner },
@@ -68,7 +69,7 @@ function Cards() {
         {q.trim() && (
           <div className="hresults">
             {hits.length === 0 ? <p className="sub" style={{ margin: 8 }}>見つかりませんでした。ちがう言葉（例：「休み」「売上」「出勤簿」）で、ためしてください。</p> : hits.map((h) => (
-              <Link key={h.href + h.title} href={h.href} className="hrow"><span className="ic" style={{ ["--h" as string]: 210 }} aria-hidden>{h.icon}</span><span className="rt"><b>{h.title}</b><small>{h.sub}</small></span><i>›</i></Link>
+              <Link key={h.href + h.title} href={h.href} className="hrow"><span className="ic" style={{ ["--h" as string]: 210 }} aria-hidden>{h.icon}</span><span className="rt"><b>{h.title}</b><small>{h.kind === "help" ? "やり方：" : ""}{h.sub}</small></span><i>›</i></Link>
             ))}
           </div>
         )}

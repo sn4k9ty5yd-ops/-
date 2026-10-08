@@ -20,7 +20,7 @@ describe("ホームの検索", () => {
     expect(searchAll("AIのカギ", me({ level: 4, appOwner: true })).some((h) => h.href === "/admin/ai")).toBe(true);
   });
   it("ヘルプのやり方も探せる。空・見つからないは空", () => {
-    expect(searchAll("ご要望", me()).some((h) => h.href === "/home")).toBe(true);
+    expect(searchAll("共有 ホーム画面に追加", me()).some((h) => h.kind === "help")).toBe(true);
     expect(searchAll("", me())).toEqual([]);
     expect(searchAll("ぜんぜんない言葉xyz", me())).toEqual([]);
   });
