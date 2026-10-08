@@ -591,3 +591,7 @@ main.home .tile:nth-child(n+7),main.home .row:nth-child(n+7){animation-delay:.28
 .asst-in{display:flex;gap:8px;padding:8px 12px 12px;border-top:1px solid #eee}
 .asst-in input{flex:1;margin:0;font-size:16px}
 .asst-in button{width:auto;margin:0;padding:0 16px}
+
+/* アプリ制作者の「見え方」ボタン（左下） */
+.vas-chip{position:fixed;left:12px;bottom:calc(14px + env(safe-area-inset-bottom));z-index:60;width:auto;margin:0;padding:8px 12px;border-radius:999px;font-size:13px;font-weight:700;color:#3b2fa0;background:#fff;border:2px solid #d9d2f5;box-shadow:0 4px 12px rgba(60,40,160,.18)}
+.vas-chip.on{background:#ff8a3d;border-color:#ff8a3d;color:#fff}

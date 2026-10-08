@@ -1,3 +1,4 @@
+import { getViewAs } from "./db/view-as";
 import { AiHttpError } from "./ai";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
@@ -53,7 +54,7 @@ export function authed<P = Record<string, never>>(
     }
     // 社長のアカウント（レベル4）は、見るだけ。書き込みの操作は止める（パスコード・通知・ご要望は除く）
     if (opts.write && !["/api/security", "/api/notifications", "/api/push/subscribe", "/api/push/test", "/api/feedback", "/api/mentor/fortune"].includes(path)) {
-      const ro = (await (await getDb()).query<{ x: boolean }>("select exec_view as x from memberships where id = $1", [userId])).rows[0]?.x;
+      const ro = getViewAs(userId)?.execView ?? (await (await getDb()).query<{ x: boolean }>("select exec_view as x from memberships where id = $1", [userId])).rows[0]?.x;
       if (ro) return json({ error: "この操作は、できません（権限がありません）" }, 403);
     }
     const cloned = opts.write && Number(req.headers.get("content-length") ?? 0) < 200000 ? req.clone() : null;   // 記録のために、中身のうち action・status・storeId だけを見る

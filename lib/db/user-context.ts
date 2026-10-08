@@ -1,4 +1,5 @@
 import type { Database, Queryable } from "./types";
+import { getViewAs } from "./view-as";
 
 /**
  * ログイン中の人として実行する。
@@ -9,6 +10,8 @@ export function asUser<T>(db: Database, userId: string, fn: (q: Queryable) => Pr
   return db.tx(async (q) => {
     await q.query("set local role app_user");
     await q.query("select set_config('app.user_id', $1, true)", [userId]);
+    const v = getViewAs(userId);   // アプリ制作者が「見え方」を切りかえているとき（DB側でも、本人がアプリ制作者のときだけ効く）
+    if (v) await q.query("select set_config('app.view_level', $1, true), set_config('app.view_rank', $2, true), set_config('app.view_display', $3, true), set_config('app.view_exec', $4, true)", [String(v.level), v.rank ?? "", String(v.displayOnly), String(v.execView)]);
     return fn(q);
   });
 }

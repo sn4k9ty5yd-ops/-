@@ -1,6 +1,7 @@
 import { AiUnavailableError, aiStatus, callAi, callAiChat, getAiTier, providerOfKey, resetGeminiModel, setAiTier, setStoredAiKey, type AiTier, type ChatTurn } from "./ai";
 import { findTemplate } from "./interview-sheets";
 import { fortunePrompt, type FortuneInput } from "./fortune-ai";
+import { getViewAs, setViewAsKey } from "./db/view-as";
 import { assistantSystemPrompt, localAnswer, pickTopics, topicsFor } from "./assistant";
 import { heavyNote, isMbti, MENTOR_MAX_TURNS, MENTOR_OPENER, mentorSystemPrompt } from "./mentor";
 import { describeActivity, isOfficeReport, NOT_LOGGED } from "./activity";
@@ -18,7 +19,7 @@ import { tierOf, type Level } from "./permissions";
 
 // 画面(API)から呼ばれる業務処理。権限の判定はすべてDB側(RLS)で行い、ここでは再実装しない。
 
-export interface Me { mustChangePasscode?: boolean; id: string; name: string; level: Level; storeId: string; companyId: string; companyName: string; closingStartDay: number; breakRule: BreakRule; displayOnly: boolean; materialManager?: boolean; execView?: boolean; appOwner?: boolean; rank?: "assistant" | "stylist" | null; eduLead?: boolean; }
+export interface Me { /** アプリ制作者だけ：見え方の切りかえができる／いま切りかえているときの名前 */ canViewAs?: boolean; viewAs?: { key: string; label: string } | null; mustChangePasscode?: boolean; id: string; name: string; level: Level; storeId: string; companyId: string; companyName: string; closingStartDay: number; breakRule: BreakRule; displayOnly: boolean; materialManager?: boolean; execView?: boolean; appOwner?: boolean; rank?: "assistant" | "stylist" | null; eduLead?: boolean; }
 export interface StoreRow { id: string; name: string; status: "active" | "closed"; defaultOpen: string; defaultClose: string; satOpen: string | null; satClose: string | null; }
 /** 管理者だけが見られる、ログインの状況 */
 export type Presence = "online" | "idle" | "loggedout" | "never";
@@ -42,7 +43,20 @@ export async function getMe(db: Database, userId: string): Promise<Me | null> {
   const r = rows[0];
   if (!r) return null;
   const { cap, tiers, ...me } = r;
-  return { ...me, breakRule: { capMinutes: cap, tiers: tiers ?? DEFAULT_BREAK_RULE.tiers } };
+  const base: Me = { ...me, breakRule: { capMinutes: cap, tiers: tiers ?? DEFAULT_BREAK_RULE.tiers } };
+  if (!r.appOwner) return base;
+  // アプリ制作者は、ほかのレベルの見え方で画面を確かめられる（DBの判定も、同じ見え方になる）
+  const v = getViewAs(userId);
+  if (!v) return { ...base, canViewAs: true, viewAs: null };
+  return { ...base, level: v.level, rank: v.rank, displayOnly: v.displayOnly, execView: v.execView, appOwner: false, eduLead: false, materialManager: false, canViewAs: true, viewAs: { key: v.key, label: v.label } };
+}
+
+/** 見え方を切りかえる（アプリ制作者だけ）。key=null で、もとの制作者にもどる */
+export async function setViewAs(db: Database, userId: string, key: string | null): Promise<Me | null> {
+  const owner = (await db.query<{ x: boolean }>("select app_owner as x from memberships where id = $1 and status = 'active'", [userId])).rows[0]?.x;
+  if (!owner) throw new ForbiddenError();
+  setViewAsKey(userId, key);
+  return getMe(db, userId);
 }
 
 /** 休憩・実働のルールを変更する（オフィスのみ） */
