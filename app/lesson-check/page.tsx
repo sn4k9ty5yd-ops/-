@@ -63,7 +63,7 @@ function Page() {
         {sheets.map((s) => {
           const at = attOf(s.id); const st = sheetStatus(s, at);
           return (
-            <div key={s.id} className="card" style={{ cursor: "pointer" }} onClick={() => setOpen(s.id)}>
+            <div key={s.id} className="card" style={{ cursor: "pointer" }} onClick={() => { if (!data.trainee) { setMsg(data.trainees.length > 0 ? "先に、上の一覧から、チェックを受ける人（アシスタント）をえらんでください。" : "レッスンチェックは、アシスタントのためのものです。自分のお店にアシスタントがいると、ここに一覧が出ます。"); window.scrollTo({ top: 0, behavior: "smooth" }); return; } setOpen(s.id); }}>
               <b>{s.name}</b>
               <p className="sub" style={{ margin: "4px 0" }}>{s.maxPoints}点満点・合格 {s.passPoints}点以上</p>
               {st.passedAt ? <span className="chip" style={{ color: "var(--ok)" }}>✅ {st.passedAt}回目で合格</span>
