@@ -548,10 +548,6 @@ main.login .err{color:var(--bad);font-weight:700}
 p.err{white-space:pre-wrap;word-break:break-word}
 
 /* ページを開いたときの動き（ふわっと上がって出る）。動きが苦手な人の設定（視差を減らす）のときは、止める */
-@keyframes pageIn{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
-@keyframes popIn{from{opacity:0;transform:translateY(10px) scale(.97)}to{opacity:1;transform:none}}
-main{animation:pageIn .38s cubic-bezier(.2,.8,.2,1) both}
-main.home .tile,main.home .row{animation:popIn .42s cubic-bezier(.2,.8,.2,1) both}
 main.home .tile:nth-child(1),main.home .row:nth-child(1){animation-delay:.04s}
 main.home .tile:nth-child(2),main.home .row:nth-child(2){animation-delay:.08s}
 main.home .tile:nth-child(3),main.home .row:nth-child(3){animation-delay:.12s}
@@ -559,8 +555,6 @@ main.home .tile:nth-child(4),main.home .row:nth-child(4){animation-delay:.16s}
 main.home .tile:nth-child(5),main.home .row:nth-child(5){animation-delay:.2s}
 main.home .tile:nth-child(6),main.home .row:nth-child(6){animation-delay:.24s}
 main.home .tile:nth-child(n+7),main.home .row:nth-child(n+7){animation-delay:.28s}
-main .card{animation:popIn .4s cubic-bezier(.2,.8,.2,1) both}
-.sheet{animation:popIn .25s cubic-bezier(.2,.8,.2,1) both}
 @media (prefers-reduced-motion:reduce){main,main .card,.sheet,main.home .tile,main.home .row{animation:none !important}}
 @media print{main,main .card{animation:none !important}}
 
