@@ -1,4 +1,3 @@
-import { HELP } from "./help";
 import { isOfficeOnly } from "./permissions";
 import type { Me } from "./service";
 
@@ -34,7 +33,7 @@ export const SEARCH_ITEMS: SearchItem[] = [
   { icon: "🔔", title: "お知らせ", sub: "休みのかぶり・話し合い・有給などのお知らせ", href: "/inbox", keys: "お知らせ 通知 かぶり 話し合い 受信箱", show: (me) => !me.displayOnly },
   { icon: "📣", title: "スマホの通知を設定する", sub: "通知をオン・毎朝の通知の時刻", href: "/notify", keys: "通知 プッシュ スマホ オン 朝 毎朝 ホーム画面 iphone android", show: (me) => !me.displayOnly },
   { icon: "🔐", title: "パスコードを変える・ログインの記録", sub: "自分のパスコード・ログインの履歴", href: "/security", keys: "パスコード 変える 変更 パスワード セキュリティ ログイン 記録 忘れた" },
-  { icon: "❓", title: "ヘルプ・ご要望", sub: "やり方の説明・「こうしてほしい」を送る", href: "/help", keys: "ヘルプ 使い方 やり方 ご要望 要望 困った 質問 問い合わせ" },
+  { icon: "❓", title: "わからないとき・ご要望", sub: "画面の右下の「？」を押すと、何でも聞けます。ご要望も、そこから送れます", href: "/home", keys: "ヘルプ 使い方 やり方 ご要望 要望 困った 質問 問い合わせ アシスタント ？ ai" },
   { icon: "🧑‍🤝‍🧑", title: "スタッフ", sub: "登録・退職・パスコード再発行・異動・シフトから外す", href: "/admin/staff", keys: "スタッフ 登録 退職 退職予定日 パスコード 再発行 異動 所属 店舗 シフトから外す 社員番号 名前 ランク 教育担当 材料担当", show: (me) => me.level >= 3 },
   { icon: "🏬", title: "店舗の編集", sub: "お店の追加・名前・営業時間・閉店", href: "/admin/stores", keys: "店舗 お店 追加 名前 営業時間 土曜 閉店 オープン クローズ", show: (me) => me.level >= 4 },
   { icon: "⚙️", title: "設定（休憩のルール）", sub: "休憩・実働のルール・バックアップ", href: "/admin/settings", keys: "設定 休憩 実働 ルール 8時間 バックアップ ダウンロード", show: (me) => me.level >= 3 },
@@ -54,7 +53,7 @@ export function norm(s: string): string {
 const READINGS: Record<string, string> = { 有給: "ゆうきゅう", 希望休: "きぼうきゅう", 出勤簿: "しゅっきんぼ", 出勤: "しゅっきん", 棚卸: "たなおろし", 在庫: "ざいこ", 売上: "うりあげ", 材料費: "ざいりょうひ", 退職: "たいしょく", 休憩: "きゅうけい", 通知: "つうち", 面談: "めんだん", 議事録: "ぎじろく", 会議: "かいぎ", 税務署: "ぜいむしょ", 店舗: "てんぽ", 発注: "はっちゅう", 商品: "しょうひん", 歩合: "ぶあい", 採点: "さいてん", 異動: "いどう", 要望: "ようぼう", 印刷: "いんさつ", 実働: "じつどう", 入店: "にゅうてん", 退店: "たいてん", 締切: "しめきり", 公開: "こうかい", 確定: "かくてい", 提出: "ていしゅつ", 設定: "せってい", 占い: "うらない", 動画: "どうが", 教育: "きょういく", 営業: "えいぎょう", 休み: "やすみ", 今日: "きょう", 数え直し: "かぞえなおし" };
 const withReadings = (text: string) => text + " " + Object.entries(READINGS).filter(([k]) => text.includes(k)).map(([, v]) => v).join(" ");
 
-export interface SearchHit { kind: "page" | "help"; title: string; sub: string; href: string; icon: string }
+export interface SearchHit { kind: "page"; title: string; sub: string; href: string; icon: string }
 
 export function searchAll(query: string, me: Me, limit = 10): SearchHit[] {
   const tokens = norm(query).split(" ").filter(Boolean);
@@ -65,12 +64,6 @@ export function searchAll(query: string, me: Me, limit = 10): SearchHit[] {
     const title = norm(withReadings(it.title)), all = norm(withReadings(`${it.title} ${it.sub} ${it.keys}`));
     if (!tokens.every((t) => all.includes(t))) continue;
     scored.push({ hit: { kind: "page", title: it.title, sub: it.sub, href: it.href, icon: it.icon }, score: tokens.reduce((s, t) => s + (title.includes(t) ? 10 : 3), 0) });
-  }
-  for (const t of HELP) {
-    if (me.level < (t.min ?? 1) || (t.flag === "material" && !(me.level === 4 || me.materialManager)) || (t.flag === "edu" && !(me.level >= 3 || me.eduLead))) continue;
-    const title = norm(withReadings(t.title)), all = norm(withReadings(`${t.title} ${t.what} ${t.steps.join(" ")} ${(t.tips ?? []).join(" ")}`));
-    if (!tokens.every((k) => all.includes(k))) continue;
-    scored.push({ hit: { kind: "help", title: t.title, sub: t.what, href: `/help#h-${t.id}`, icon: t.icon }, score: tokens.reduce((s, k) => s + (title.includes(k) ? 6 : 1), 0) });
   }
   scored.sort((a, b) => b.score - a.score);
   return scored.slice(0, limit).map((s) => s.hit);

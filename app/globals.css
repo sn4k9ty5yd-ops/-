@@ -575,3 +575,19 @@ main.home .tile:nth-child(n+7),main.home .row:nth-child(n+7){animation-delay:.28
   .mcal .h{color:var(--sub)}
   .mcal .h.su{color:#d70015}.mcal .h.sa{color:#0071e3}
 }
+
+/* 右下の「？」アシスタント */
+.asst-fab{position:fixed;right:14px;bottom:calc(14px + env(safe-area-inset-bottom));z-index:60;width:54px;height:54px;border-radius:50%;border:0;padding:0;margin:0;font-size:26px;font-weight:800;color:#fff;background:linear-gradient(135deg,#2f6bff,#8a4dff);box-shadow:0 6px 18px rgba(60,40,160,.35);cursor:pointer}
+.asst{position:fixed;z-index:70;right:0;bottom:0;width:100%;max-width:420px;height:min(78vh,640px);background:#fff;color:#23223f;border-radius:22px 22px 0 0;box-shadow:0 -8px 30px rgba(40,30,100,.25);display:flex;flex-direction:column;padding-bottom:env(safe-area-inset-bottom)}
+@media (min-width:700px){.asst{right:16px;bottom:16px;border-radius:22px;height:min(70vh,620px)}}
+.asst-head{display:flex;justify-content:space-between;align-items:center;padding:14px 14px 8px 16px;font-size:16px}
+.asst-x{width:auto;margin:0;padding:6px 10px;background:none;border:0;box-shadow:none;color:#6d6a8c;font-size:18px}
+.asst-body{flex:1;overflow:auto;padding:4px 14px 10px}
+.asst-m{white-space:pre-wrap;line-height:1.7;font-size:15px;padding:9px 12px;border-radius:16px;margin:6px 0;max-width:92%}
+.asst-m.user{background:#2f6bff;color:#fff;margin-left:auto}
+.asst-m.assistant{background:#f1eefb}
+.asst-ex{display:flex;flex-wrap:wrap;gap:8px}
+.asst-ex button{width:auto;margin:0;padding:8px 12px;font-size:14px;background:#f1eefb;color:#3b2fa0;border:0;box-shadow:none}
+.asst-in{display:flex;gap:8px;padding:8px 12px 12px;border-top:1px solid #eee}
+.asst-in input{flex:1;margin:0;font-size:16px}
+.asst-in button{width:auto;margin:0;padding:0 16px}

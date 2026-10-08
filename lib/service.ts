@@ -1,6 +1,7 @@
-import { aiStatus, callAi, callAiChat, getAiTier, providerOfKey, resetGeminiModel, setAiTier, setStoredAiKey, type AiTier, type ChatTurn } from "./ai";
+import { AiUnavailableError, aiStatus, callAi, callAiChat, getAiTier, providerOfKey, resetGeminiModel, setAiTier, setStoredAiKey, type AiTier, type ChatTurn } from "./ai";
 import { findTemplate } from "./interview-sheets";
 import { fortunePrompt, type FortuneInput } from "./fortune-ai";
+import { assistantSystemPrompt, localAnswer, pickTopics, topicsFor } from "./assistant";
 import { heavyNote, isMbti, MENTOR_MAX_TURNS, MENTOR_OPENER, mentorSystemPrompt } from "./mentor";
 import { describeActivity, isOfficeReport, NOT_LOGGED } from "./activity";
 import { discussionPrompt, minutesPrompt, mindmapPrompt, parseMindmap, summaryPrompt, themePrompt } from "./meeting-prompts";
@@ -3063,4 +3064,29 @@ export async function runFortuneAi(db: Database, userId: string, input: Omit<For
   list.push(now); fortuneUse.set(userId, list);
   await loadAiKey(db);
   return { text: await aiFn(prompt) };
+}
+
+// ---------------------------------------------------------------- 右下の「？」アシスタント（やり方を答える）
+/** 質問に答える。AIのカギがあればAIが、なければ近い説明をそのまま返す。会話の中身は、サーバーに保存しない */
+export async function askAssistant(db: Database, userId: string, input: { question: string; history?: ChatTurn[] }, aiFn: (system: string, turns: ChatTurn[]) => Promise<string> = (s, t) => callAiChat(s, t, { maxTokens: 700, timeoutMs: 40000 })): Promise<{ answer: string; ai: boolean }> {
+  await loadAiKey(db);
+  const me = await getMe(db, userId);
+  if (!me) throw new ForbiddenError();
+  const q = (input.question ?? "").trim();
+  if (!q) throw new Error("聞きたいことを入れてください");
+  if (q.length > 500) throw new Error("長すぎます（500文字まで）");
+  const topics = topicsFor(me);
+  if (!aiStatus().available) return { answer: localAnswer(q, topics), ai: false };
+  aiThrottle(userId);
+  const past = (input.history ?? []).slice(-6).map((h) => ({ role: h.role === "assistant" ? "assistant" as const : "user" as const, content: String(h.content).slice(0, 1500) }));
+  const picked = pickTopics([...past.filter((p) => p.role === "user").slice(-1).map((p) => p.content), q].join(" "), topics, 4);
+  const turns: ChatTurn[] = [...past, { role: "user", content: q }];
+  const first = turns[0].role === "user" ? turns : [{ role: "user" as const, content: "（質問をはじめます）" }, ...turns];
+  try {
+    return { answer: await aiFn(assistantSystemPrompt(me, topics, picked), first), ai: true };
+  } catch (e) {
+    if (e instanceof AiUnavailableError) return { answer: localAnswer(q, topics), ai: false };
+    // AIが混んでいる・回数がいっぱいのときも、近い説明は出せる
+    return { answer: `（いま、AIがつかれています。近い説明を出します）\n\n${localAnswer(q, topics)}`, ai: false };
+  }
 }
