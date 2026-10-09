@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 import { PrintButton } from "@/app/PrintButton";
 import { Stepper } from "@/app/Stepper";
 import { DateStepper } from "@/app/DateStepper";
+import { YearSwitch } from "@/app/YearSwitch";
 import { ShareMenu } from "@/app/ShareMenu";
 import { api, useAutoRefresh, useMe } from "@/lib/client";
 import { reiwaDot } from "@/lib/era";
@@ -31,7 +32,7 @@ export default function StocktakePage() {
   const setOpenId = useCallback((id: string | null) => { setOpenIdRaw(id); try { history.replaceState(null, "", id ? `${location.pathname}?id=${id}` : location.pathname); } catch { /* 無視 */ } }, []);
   useEffect(() => { const id = new URLSearchParams(location.search).get("id"); if (id) setOpenIdRaw(id); }, []);
   const [view, setView] = useState<"list" | "summary">("list");
-  const [takenOn, setTakenOn] = useState(monthEnd());
+  const [takenOn, setTakenOn] = useState(`${new Date(Date.now() + 9 * 3600e3).getUTCFullYear()}-10-31`);
   const [msg, setMsg] = useState("");
   const [imp, setImp] = useState<{ text: string; date: string; busy: boolean; res: string } | null>(null);
   const store = stores.find((s) => s.id === storeId);
@@ -65,21 +66,22 @@ export default function StocktakePage() {
         <div className="card">
           <b>新しい棚卸しを始める（{store?.name}　{PRODUCT_KIND_LABEL[kind]}）</b>
           <p className="sub" style={{ margin: "4px 0 8px" }}>このお店で使う商品の一覧が、そのまま棚卸し表になります。前回の棚卸しがあれば、棚卸し表の中の「数量を今年にまとめてコピー」で、昨年の数をそのまま入れられます（1つずつ直せます）。</p>
-          <div className="actions"><div style={{ margin: 0 }}><span className="sub">棚卸日</span><br /><DateStepper label="棚卸日" value={takenOn} onChange={setTakenOn} /></div>
-            <button style={{ width: "auto", margin: 0, alignSelf: "flex-end" }} onClick={async () => {
+          <YearSwitch label="棚卸の年" value={takenOn} onChange={setTakenOn} />
+          {list.some((x) => x.takenOn === takenOn) && <p className="sub" style={{ color: "var(--warn)", textAlign: "center" }}>この年の棚卸しは、もうあります（下の一覧から開けます）。</p>}
+          <div className="actions" style={{ justifyContent: "center" }}>
+            <button style={{ width: "auto", margin: 0 }} disabled={list.some((x) => x.takenOn === takenOn)} onClick={async () => {
               try { const r = await api<{ id: string }>("/api/stocktakes", { storeId, kind, takenOn }); setMsg(""); setOpenId(r.id); } catch (e) { setMsg((e as Error).message); }
-            }}>始める</button></div>
-          {takenOn && <p className="sub" style={{ margin: "6px 0 0" }}>{reiwaDot(takenOn)} 棚卸</p>}
-        </div>
+            }}>{reiwaDot(takenOn)} の棚卸しを始める</button></div>
+                  </div>
       )}
       {me.level === 4 && (
         <div className="card">
-          <b>昨年のデータを取り込む（{store?.name}　{PRODUCT_KIND_LABEL[kind]}）</b>
+          <b>Excelからデータを取り込む（{store?.name}　{PRODUCT_KIND_LABEL[kind]}）</b>
           {!imp ? <div style={{ marginTop: 6 }}><button className="ghost" style={{ width: "auto" }} onClick={() => setImp({ text: "", date: "2025-10-31", busy: false, res: "" })}>取り込み画面をひらく</button>
-            <p className="sub" style={{ margin: "6px 0 0" }}>昨年の「メーカー・品名・規格・仕入値・数量」の表を貼ると、今年の棚卸しが、その数量から始まります（数量を直して提出します。金額は数量を変えると自動で変わります）。</p></div> : (
+            <p className="sub" style={{ margin: "6px 0 0" }}>Excelの表（メーカー・品名・規格・仕入値・数量。全店まとめの表も可）を貼ると、その年の棚卸しとして取り込まれます。取り込んだあと、ほかの年の棚卸し表で「数量を、今年にまとめてコピー」を押すと、その数が入ります（メーカー・品名・仕入値も、1行ずつ直せます）。</p></div> : (
             <div style={{ marginTop: 6 }}>
-              <div style={{ margin: 0 }}><span className="sub">昨年の棚卸日</span><br /><DateStepper label="昨年の棚卸日" value={imp.date} onChange={(v) => setImp({ ...imp, date: v })} /></div>
-              <textarea aria-label="昨年の表" rows={8} placeholder={"Excelの表をコピーして貼り付け\n・全店まとめて：店舗名 区分 メーカー 品名 規格 単価 数量 金額 備考（見出しの行ごと貼る）\n・1つのお店だけ：メーカー 品名 規格 仕入値 数量"} style={{ width: "100%", fontSize: 14, padding: 10, borderRadius: 12, border: "1px solid var(--line)", marginTop: 6 }} value={imp.text} onChange={(e) => setImp({ ...imp, text: e.target.value })} />
+              <div style={{ margin: 0 }}><span className="sub">取り込む表の棚卸日</span><YearSwitch label="取り込む表の棚卸日" value={imp.date} onChange={(v) => setImp({ ...imp, date: v })} /></div>
+              <textarea aria-label="Excelの表" rows={8} placeholder={"Excelの表をコピーして貼り付け\n・全店まとめて：店舗名 区分 メーカー 品名 規格 単価 数量 金額 備考（見出しの行ごと貼る）\n・1つのお店だけ：メーカー 品名 規格 仕入値 数量"} style={{ width: "100%", fontSize: 14, padding: 10, borderRadius: 12, border: "1px solid var(--line)", marginTop: 6 }} value={imp.text} onChange={(e) => setImp({ ...imp, text: e.target.value })} />
               {imp.res && <p className="sub" style={{ color: "var(--ok)" }}>✅ {imp.res}</p>}
               <div className="actions">
                 <button disabled={imp.busy || !imp.text.trim() || !imp.date} onClick={async () => {
@@ -292,6 +294,7 @@ function Detail({ id, storeName, onBack }: { id: string; storeName: string; onBa
             <label>品名<input value={el.name} onChange={(e) => setEl({ ...el, name: e.target.value })} /></label>
             <label>規格<input value={el.spec} onChange={(e) => setEl({ ...el, spec: e.target.value })} /></label>
             <label>仕入値（税抜・円）<Stepper label="仕入値" unit="円" step={10} bigStep={100} max={9999999} value={el.cost} onChange={(x) => setEl({ ...el, cost: x })} /></label>
+            <label>数量<Stepper label="数量" placeholder="数" value={qty[el.id] ?? ""} onChange={(x) => change(el.id, x)} /></label>
             <p className="sub">この棚卸し表の中だけが変わります。数量を入れていれば、金額も自動で変わります。</p>
             <div className="toolbar">
               <button disabled={!el.name.trim() || el.cost === ""} onClick={async () => { try { await flush(); await api(`/api/stocktakes/${id}`, { action: "edit-line", lineId: el.id, maker: el.maker, name: el.name, spec: el.spec, costPrice: Number(el.cost) }); setEl(null); setMsg(""); await load(); } catch (e) { setMsg((e as Error).message); } }}>直す</button>
@@ -308,7 +311,7 @@ function Detail({ id, storeName, onBack }: { id: string; storeName: string; onBa
       <ul className="stcards noprint">
         {shown.map((i) => (
           <li key={i.id} className={i.quantity === null ? "empty" : ""}>
-            <div className="stinfo"><b>{i.name}</b><span className="sub">{[i.maker, i.spec].filter(Boolean).join("　")}　仕入値 {i.costPrice.toLocaleString("ja-JP")}円</span></div>
+            <div className="stinfo" style={d.editable ? { cursor: "pointer" } : undefined} onClick={() => d.editable && setEl({ id: i.id, maker: i.maker, name: i.name, spec: i.spec, cost: String(i.costPrice) })}><b>{i.name}{d.editable && <span className="sub" style={{ fontWeight: 400 }}> ✎</span>}</b><span className="sub">{[i.maker, i.spec].filter(Boolean).join("　")}　仕入値 {i.costPrice.toLocaleString("ja-JP")}円</span></div>
             <div className="stctl">
               {d.editable ? (
                 <Stepper label={`${i.name}の数量`} placeholder="数" step={1} value={qty[i.id] ?? ""} onChange={(x) => change(i.id, x)} />
@@ -325,10 +328,11 @@ function Detail({ id, storeName, onBack }: { id: string; storeName: string; onBa
         <tbody>
           {shown.map((i) => (
             <tr key={i.id} className={i.quantity === null ? "empty" : ""}>
-              <td className="maker">{i.maker}</td>
-              <td className="nm">{i.name}<div className="sub subline">{[i.maker, i.spec].filter(Boolean).join("　")}</div></td>
-              <td className="spec">{i.spec}</td>
-              <td className="r">{i.costPrice.toLocaleString("ja-JP")}</td>
+              {(() => { const edit = () => d.editable && setEl({ id: i.id, maker: i.maker, name: i.name, spec: i.spec, cost: String(i.costPrice) }); const cs = d.editable ? { cursor: "pointer" } : undefined; return (<>
+              <td className="maker editcell" style={cs} title="タップで直す" onClick={edit}>{i.maker}</td>
+              <td className="nm editcell" style={cs} title="タップで直す" onClick={edit}>{i.name}<div className="sub subline">{[i.maker, i.spec].filter(Boolean).join("　")}</div></td>
+              <td className="spec editcell" style={cs} title="タップで直す" onClick={edit}>{i.spec}</td>
+              <td className="r editcell" style={cs} title="タップで直す" onClick={edit}>{i.costPrice.toLocaleString("ja-JP")}</td></>); })()}
               <td className="q">
                 {d.editable ? (
                   <Stepper className="cellstp" label={`${i.name}の数量`} placeholder="—" step={1} value={qty[i.id] ?? ""} onChange={(x) => change(i.id, x)} />

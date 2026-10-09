@@ -628,3 +628,17 @@ main.home .tile:nth-child(n+7),main.home .row:nth-child(n+7){animation-delay:.28
 .stp-in.ph::placeholder { color: var(--sub, #999); font-weight: 600; font-size: 15px; }
 .stp-u { font-size: 12px; color: var(--sub, #777); margin: 0 2px; }
 .stp.cellstp .stp-in { height: 30px; font-size: 15px; min-width: 40px; border-radius: 9px; }
+
+/* 年のえらび方（矢印で前の年・次の年へ。まんなかが選んでいる年） */
+.yswitch{margin:6px 0}
+.yrow{display:flex;align-items:center;justify-content:center;gap:6px}
+.yarrow{width:44px;height:44px;min-width:44px;padding:0;margin:0;border-radius:50%;font-size:28px;line-height:1;background:#fff;color:var(--blue,#0a84ff);border:1.5px solid color-mix(in srgb,var(--blue,#0a84ff) 40%,#ddd);box-shadow:none}
+.yside{width:auto;margin:0;padding:6px 8px;font-size:14px;background:none;color:var(--sub,#888);border:0;box-shadow:none;opacity:.7}
+.ymid{min-width:120px;text-align:center;padding:6px 10px;border-radius:16px;background:color-mix(in srgb,var(--blue,#0a84ff) 12%,#fff);border:2px solid var(--blue,#0a84ff)}
+.ymid b{display:block;font-size:24px;font-weight:800;color:var(--ink,#111)}
+.ymid small{display:block;font-size:12px;font-weight:700;color:var(--blue,#0a84ff);min-height:16px}
+@media (max-width:420px){.yside{font-size:12px;padding:6px 4px}.ymid{min-width:100px}.ymid b{font-size:21px}}
+
+.editcell:hover{background:color-mix(in srgb,var(--blue,#0a84ff) 8%,#fff) !important}
+@media print{.editcell{cursor:auto !important}}
+.yside{white-space:nowrap;background:#fff !important;color:#7a7a8c !important;border:1px solid #dcdce6 !important;box-shadow:none !important;opacity:1;font-weight:600}.yarrow{background:#fff !important;color:var(--blue,#0a84ff) !important;box-shadow:none !important}
