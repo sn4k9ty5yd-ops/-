@@ -55,7 +55,7 @@ export function authed<P = Record<string, never>>(
       if (mc) return json({ error: "先に、パスコードを変えてください（「セキュリティ」の画面）" }, 403);
     }
     // 鬼塚さんのアカウント（レベル4）は、見るだけ。書き込みの操作は止める（パスコード・通知・ご要望は除く）
-    if (opts.write && !["/api/security", "/api/notifications", "/api/office-inbox", "/api/push/subscribe", "/api/push/test", "/api/feedback", "/api/mentor/fortune"].includes(path)) {
+    if (opts.write && !["/api/security", "/api/notifications", "/api/office-inbox", "/api/push/subscribe", "/api/push/test", "/api/feedback", "/api/mentor/fortune", "/api/mentor/fortune-push"].includes(path)) {
       const ro = getViewAs(userId)?.execView ?? (await (await getDb()).query<{ x: boolean }>("select exec_view as x from memberships where id = $1", [userId])).rows[0]?.x;
       if (ro) return json({ error: "この操作は、できません（権限がありません）" }, 403);
     }

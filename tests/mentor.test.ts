@@ -185,3 +185,30 @@ describe("マニュアルの空の「◯月面談」ページを消す移行", (
     expect(left).toEqual(["1月面談だよ", "6月面談", "メンター制度"]);
   });
 });
+
+import { beautyFortune, fortune, fortunePushText } from "../lib/fortune";
+describe("毎朝の占い通知の文章", () => {
+  it("同じ人・同じ日はいつも同じ。ラッキーカラーが、おしゃれのひとことに入る", () => {
+    const a = fortunePushText("2026-11-21", "pisces", "ENFP"), b = fortunePushText("2026-11-21", "pisces", "ENFP");
+    expect(a).toEqual(b);
+    const f = fortune("2026-11-21", "pisces", "ENFP");
+    expect(beautyFortune("2026-11-21", "pisces", "ENFP", f.luckyColor).style).toContain(f.luckyColor);
+    expect(a.body.split("\n")).toHaveLength(4);
+    expect(fortunePushText("2026-11-22", "pisces", "ENFP").body).not.toBe(a.body);
+  });
+  it("誕生日は本人だけが読み書きできる。月日がないと受け取る設定にできない", async () => {
+    const d = await newDb(); await migrate(d);
+    const co = (await d.query<{ id: string }>("insert into companies (code, name) values ('co-fort','F社') returning id")).rows[0].id;
+    const st = (await d.query<{ id: string }>("insert into stores (company_id, name) values ($1,'S') returning id", [co])).rows[0].id;
+    const u = (await d.query<{ id: string }>("insert into memberships (company_id, store_id, employee_code, name, level) values ($1,$2,'1','A',1) returning id", [co, st])).rows[0].id;
+    const v = (await d.query<{ id: string }>("insert into memberships (company_id, store_id, employee_code, name, level) values ($1,$2,'2','B',3) returning id", [co, st])).rows[0].id;
+    await expect(svc.setFortunePush(d, u, { month: 0, day: 0, enabled: true })).rejects.toThrow();
+    await svc.setFortunePush(d, u, { month: 2, day: 29, enabled: true });
+    expect(await svc.getFortunePush(d, u)).toEqual({ month: 2, day: 29, enabled: true });
+    expect(await svc.getFortunePush(d, v)).toEqual({ month: 0, day: 0, enabled: false });
+    const seen = await asUser(d, v, (q) => q.query("select * from mentor_profiles"));
+    expect(seen.rows).toHaveLength(0);
+    await svc.setFortunePush(d, u, { month: 2, day: 29, enabled: false });
+    expect((await svc.getFortunePush(d, u)).enabled).toBe(false);
+  });
+});

@@ -22,7 +22,7 @@ export function hash(s: string): number {
 }
 const pick = <T,>(arr: readonly T[], h: number) => arr[h % arr.length];
 const COLORS = ["あか", "あお", "きいろ", "みどり", "ピンク", "むらさき", "オレンジ", "しろ", "くろ", "ゴールド", "ミントグリーン", "ネイビー"] as const;
-const ITEMS = ["コーム", "ハサミ", "ミラー", "ハンドクリーム", "香りのいいシャンプー", "メモ帳", "ペン", "マグカップ", "ヘアゴム", "お気に入りのタオル", "ミント系のガム", "スマホのイヤホン"] as const;
+const ITEMS = ["コーム", "ハサミ", "ミラー", "ハンドクリーム", "香りのいいシャンプー", "メモ帳", "ペン", "ヘアオイル", "ヘアゴム", "お気に入りのタオル", "ミント系のガム", "リップ", "ピアス・イヤリング", "香水・ヘアミスト", "ヘアクリップ", "ネイル", "ブラシ", "ハンドミラー"] as const;
 const MESSAGES = [
   "いつもより、ひとこと多く声をかけると、いい流れがくる日。", "ゆっくり深呼吸。あわてず、ひとつずつ片づけると、うまくいく日。", "ちょっとした気づきが、お客様に喜ばれる日。",
   "ほめ言葉を、素直に受け取ると運気アップ。", "苦手だと思っていたことに、さらっと挑戦してみて。", "仲間の「ありがとう」が、いつもより多く聞ける日。",
@@ -44,6 +44,50 @@ export function fortune(day: string, zodiac: string, mbti: string | null): Fortu
     stars: { total, ...s },
     luckyColor: pick(COLORS, hash(`${base}|color`)), luckyItem: pick(ITEMS, hash(`${base}|item`)),
     message: pick(MESSAGES, hash(`${base}|msg`)), advice: pick(ADVICE, hash(`${base}|adv`)), luckyNumber: 1 + (hash(`${base}|num`) % 9),
+  };
+}
+
+/** 美容師としてのひとこと（お客様・技術・身だしなみ）。その日のうらないに添える */
+const PRO = [
+  "お客様の髪に触れる前の「失礼します」のひとこと。信頼は、そこから始まります。",
+  "仕上げのブロー、最後の10秒を丁寧に。お客様の帰り道の笑顔が変わる日。",
+  "お客様の服やバッグの色をさりげなく見て、似合う髪色をひとつ提案してみて。",
+  "カウンセリングで「普段どうセットしてますか？」をひとつ多く聞くと、仕上がりがピタッと決まる日。",
+  "後ろ姿まで鏡で見せてあげて。美容師の、いちばんの見せ場です。",
+  "ハサミとコームを、いつもより丁寧に手入れすると、運気が上がる日。",
+  "気になるスタイルの写真を1枚だけ保存してみて。ひらめきが、明日のご提案になります。",
+  "「最近この色が人気ですよ」とトレンドをひとつ話題に。お客様の心に刺さる日。",
+  "自分の髪も看板。ツヤと毛先を整えて立つと、お客様の目が変わります。",
+  "お客様の「ありがとう」の言い方に耳をすませて。次の提案のヒントが隠れています。",
+  "前髪の長さと顔まわりを、いつもより丁寧に見立てる日。ここで印象が決まります。",
+  "施術のあとに「おうちでのお手入れ」をひとこと添えると、次のご来店につながります。",
+  "待ち時間のお客様に、ひとこと声をかけてみて。安心が、いちばんのサービスです。",
+  "仲間のスタイルをほめてみて。自分の目も、センスも、育つ日。",
+  "お客様の髪質を、手で触れて確かめる時間を少し長めに。提案の説得力が増します。",
+  "鏡に映る自分の姿勢をチェック。立ち姿の美しさも、美容師の技術です。",
+] as const;
+/** おしゃれのひとこと（ラッキーカラーを、身につけるものに取り入れる） */
+const SPOTS = ["ネイル", "ヘアアクセ", "ピアス・イヤリング", "靴下やインナー", "エプロンまわり", "時計やブレスレット", "小物（ペンやポーチ）", "リップやチーク"] as const;
+const STYLE = [
+  "美容師は動く看板。今日の{c}を{s}にひとつ足すと、おしゃれ度アップ。",
+  "{s}に{c}をさし色で。小さな変化に気づくお客様が、きっといます。",
+  "いつもの服に、{c}を{s}でひとさじ。会話のきっかけにもなります。",
+  "今日は{c}がラッキー。{s}で取り入れて、鏡の前で気分を上げてから出勤を。",
+] as const;
+export function beautyFortune(day: string, zodiac: string, mbti: string | null, luckyColor: string): { pro: string; style: string } {
+  const base = `${day}|${zodiac}|${mbti ?? ""}`;
+  return {
+    pro: pick(PRO, hash(`${base}|pro`)),
+    style: pick(STYLE, hash(`${base}|style`)).replace("{c}", luckyColor).replace("{s}", pick(SPOTS, hash(`${base}|spot`))),
+  };
+}
+
+/** 毎朝の通知に出す文章（題名と本文） */
+export function fortunePushText(day: string, zodiac: string, mbti: string | null): { title: string; body: string } {
+  const f = fortune(day, zodiac, mbti), b = beautyFortune(day, zodiac, mbti, f.luckyColor);
+  return {
+    title: `🔮 今日の運勢 ${"★".repeat(f.stars.total)}${"☆".repeat(5 - f.stars.total)}`,
+    body: `${f.message}\n🎨 ラッキーカラー：${f.luckyColor}　🧰 ラッキーアイテム：${f.luckyItem}\n💇 美容師として：${b.pro}\n👗 おしゃれ：${b.style}`,
   };
 }
 

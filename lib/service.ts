@@ -16,6 +16,7 @@ import type { Database, Queryable } from "./db/types";
 import { daysOf, hoursOn, md, shortNames, sortRoster } from "./labels";
 import { pushToUsers, vapidKeys } from "./push";
 import { tierOf, type Level } from "./permissions";
+import { fortunePushText, zodiacOf } from "./fortune";
 
 // 画面(API)から呼ばれる業務処理。権限の判定はすべてDB側(RLS)で行い、ここでは再実装しない。
 
@@ -1884,6 +1885,14 @@ export async function runMorningNotices(db: Database, force = false, at?: string
     const body = `出勤（${work.length}人）：${work.join("・") || "なし"}\n休み（${off.length}人）：${off.join("・") || "なし"}`;
     const people = (await db.query<{ id: string }>("select id from memberships where store_id = $1 and status = 'active' and not display_only", [st.id])).rows.map((r) => r.id);
     sent += await pushToUsers(db, people, { title: `${st.name} 今日の出勤（${jpDay(today)}）`, body, url: "/shifts", tag: `morning-${st.id}` });
+    // 占いを受け取る設定にした、今日出勤の人へ。ひとりずつ、その人の誕生日・MBTIの占い（ラッキーカラー・アイテム・美容師としてのひとこと）
+    const fans = (await db.query<{ id: string; m: number; d: number; mbti: string | null }>(
+      `select membership_id as id, birth_month as m, birth_day as d, mbti from mentor_profiles where fortune_push and birth_month is not null and birth_day is not null and membership_id = any($1::uuid[])`,
+      [rows.filter((r) => r.kind === "work").map((r) => r.id)])).rows;
+    for (const f of fans) {
+      const t = fortunePushText(today, zodiacOf(f.m, f.d), f.mbti);
+      sent += await pushToUsers(db, [f.id], { title: t.title, body: t.body, url: "/mentor/fortune", tag: `fortune-${f.id}` });
+    }
     stCount++;
   }
   return { stores: stCount, sent };
@@ -3075,6 +3084,25 @@ export async function setMentorMbti(db: Database, userId: string, mbti: string |
   if (mbti !== null && !isMbti(mbti)) throw new Error("MBTIは、4文字（例：ENFP）で選んでください");
   await asUser(db, userId, (q) => q.query(
     "insert into mentor_profiles (membership_id, company_id, mbti) values ($1,$2,$3) on conflict (membership_id) do update set mbti = excluded.mbti, updated_at = now()", [userId, me.companyId, mbti]));
+}
+
+/** 毎朝の占い通知の設定（誕生日は月と日だけ・本人だけが読み書きできる） */
+export async function getFortunePush(db: Database, userId: string): Promise<{ month: number; day: number; enabled: boolean }> {
+  const me = await getMe(db, userId);
+  if (!me || me.displayOnly) throw new ForbiddenError();
+  const r = (await asUser(db, userId, (q) => q.query<{ m: number | null; d: number | null; e: boolean }>("select birth_month as m, birth_day as d, fortune_push as e from mentor_profiles where membership_id = $1", [userId]))).rows[0];
+  return { month: r?.m ?? 0, day: r?.d ?? 0, enabled: !!r?.e && !!r.m && !!r.d };
+}
+export async function setFortunePush(db: Database, userId: string, input: { month: number; day: number; enabled: boolean }): Promise<void> {
+  const me = await getMe(db, userId);
+  if (!me || me.displayOnly) throw new ForbiddenError();
+  const month = Math.floor(input.month), day = Math.floor(input.day);
+  if (input.enabled && (!(month >= 1 && month <= 12) || !(day >= 1 && day <= 31))) throw new Error("誕生日（月と日）をえらんでください");
+  const ok = month >= 1 && month <= 12 && day >= 1 && day <= 31;
+  await asUser(db, userId, (q) => q.query(
+    `insert into mentor_profiles (membership_id, company_id, birth_month, birth_day, fortune_push) values ($1,$2,$3,$4,$5)
+     on conflict (membership_id) do update set birth_month = excluded.birth_month, birth_day = excluded.birth_day, fortune_push = excluded.fortune_push, updated_at = now()`,
+    [userId, me.companyId, ok ? month : null, ok ? day : null, !!input.enabled && ok]));
 }
 
 /** メンター（Monday）に話しかける。返事は、AIがつくる。会話は、本人の分として保存される */

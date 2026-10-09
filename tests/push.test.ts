@@ -72,9 +72,17 @@ describe("スマホへの通知", () => {
     const before = await svc.runMorningNotices(db, true, "2026-11-21T08:10:00Z");
     expect(before).toEqual({ stores: 0, sent: 0 });                                       // 8:30より前
     expect(sent).toHaveLength(0);
+    await svc.setFortunePush(db, id.b, { month: 3, day: 5, enabled: true });              // bさんは占いも受け取る
+    expect(await svc.getFortunePush(db, id.b)).toEqual({ month: 3, day: 5, enabled: true });
     const r = await svc.runMorningNotices(db, true, "2026-11-21T08:40:00Z");
     expect(r.stores).toBe(1);
-    expect(r.sent).toBe(2);
+    expect(r.sent).toBe(3);                                                                // 出勤メンバー2人 + bさんの占い
+    const fort = sent.find((x) => x.body.url === "/mentor/fortune")!;
+    expect(fort.endpoint).toBe("https://push.example/b");
+    expect(fort.body.title).toContain("今日の運勢");
+    expect(fort.body.body).toContain("ラッキーカラー");
+    expect(fort.body.body).toContain("美容師として");
+    expect(fort.body.body).toContain("おしゃれ");
     const m = sent[0].body;
     expect(m.title).toContain("ATENA 今日の出勤");
     expect(m.body).toContain("出勤");

@@ -3,7 +3,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { SubTabs } from "@/app/SubTabs";
 import { api, MeProvider, useMe } from "@/lib/client";
-import { compatibility, fortune, zodiacName, zodiacOf } from "@/lib/fortune";
+import { beautyFortune, compatibility, fortune, zodiacName, zodiacOf } from "@/lib/fortune";
 import { FORTUNE_KINDS, fortunePrompt, type FortuneKind } from "@/lib/fortune-ai";
 import { MBTI_TYPES } from "@/lib/mentor";
 import { mentorTabs } from "@/lib/mentor-tabs";
@@ -73,11 +73,19 @@ function Page() {
   const [mbti, setMbti] = useState<string | null>(null);
   const [bd, setBd] = useState({ m: 0, d: 0 });
   const [other, setOther] = useState("");
+  const [push, setPush] = useState(false);
+  const [pushMsg, setPushMsg] = useState("");
   useEffect(() => {
+    api<{ month: number; day: number; enabled: boolean }>("/api/mentor/fortune-push").then((r) => { setPush(r.enabled); if (r.month && r.day) setBd((b) => (b.m && b.d ? b : { m: r.month, d: r.day })); }).catch(() => {});
     try { const v = JSON.parse(localStorage.getItem("fortuneBirthday") ?? "null"); if (v?.m && v?.d) setBd(v); } catch { /* 保存がなくても動く */ }
     api<{ mbti: string | null }>("/api/mentor").then((r) => setMbti(r.mbti)).catch(() => {});
   }, []);
-  const set = (b: { m: number; d: number }) => { setBd(b); try { localStorage.setItem("fortuneBirthday", JSON.stringify(b)); } catch { /* 無視 */ } };
+  const set = (b: { m: number; d: number }) => { setBd(b); if (push && b.m && b.d) savePush(true, b); try { localStorage.setItem("fortuneBirthday", JSON.stringify(b)); } catch { /* 無視 */ } };
+  const savePush = async (on: boolean, b = bd) => {
+    setPushMsg("");
+    try { await api("/api/mentor/fortune-push", { month: b.m, day: b.d, enabled: on }); setPush(on); setPushMsg(on ? "オンにしました。出勤の日の朝に届きます" : "オフにしました"); }
+    catch (e) { setPushMsg((e as Error).message); }
+  };
   const z = bd.m && bd.d ? zodiacOf(bd.m, bd.d) : null;
   const f = z ? fortune(todayJst(), z, mbti) : null;
   const comp = mbti && other ? compatibility(mbti, other) : null;
@@ -88,7 +96,7 @@ function Page() {
       <SubTabs items={mentorTabs(me.displayOnly, me.rank)} />
       <p className="sub">ちょっとした占いです。お楽しみで、気軽にどうぞ。毎日かわります。</p>
       <div className="card" style={{ marginBottom: 10 }}>
-        <b>誕生日（星座を決めるために使います。この端末にだけ保存されます）</b>
+        <b>誕生日（星座を決めるために使います）</b>
         <div className="toolbar">
           <select aria-label="月" value={bd.m} onChange={(e) => set({ ...bd, m: Number(e.target.value) })}><option value={0}>月</option>{Array.from({ length: 12 }, (_, i) => <option key={i} value={i + 1}>{i + 1}月</option>)}</select>
           <select aria-label="日" value={bd.d} onChange={(e) => set({ ...bd, d: Number(e.target.value) })}><option value={0}>日</option>{Array.from({ length: 31 }, (_, i) => <option key={i} value={i + 1}>{i + 1}日</option>)}</select>
@@ -96,6 +104,15 @@ function Page() {
           {mbti && <span className="chip">{mbti}</span>}
         </div>
         {!mbti && <p className="sub" style={{ margin: "6px 0 0" }}>MBTIを入れると、結果がもっとあなたらしくなります（「チャット」で入れられます）。</p>}
+      </div>
+      <div className="card" style={{ marginBottom: 10 }}>
+        <label style={{ display: "flex", gap: 10, alignItems: "center", margin: 0 }}>
+          <input type="checkbox" style={{ width: 22, height: 22 }} checked={push} disabled={!bd.m || !bd.d} onChange={(e) => savePush(e.target.checked)} />
+          <b>出勤の日の朝に、今日の占いを通知で受け取る</b>
+        </label>
+        <p className="sub" style={{ margin: "6px 0 0" }}>ラッキーカラー・ラッキーアイテム・美容師としてのひとことが届きます。{!bd.m || !bd.d ? "先に、上で誕生日をえらんでください。" : ""}</p>
+        <p className="hint" style={{ margin: "6px 0 0" }}>通知のために、誕生日（月と日だけ。年は聞きません）をサーバーに保存します。見られるのは自分だけです。通知は、ホームの「スマホに通知」をオンにしていて、お店の朝の通知が「使う」のときに届きます。</p>
+        {pushMsg && <p className="sub" style={{ margin: "6px 0 0" }}>{pushMsg}</p>}
       </div>
       {f ? (
         <div className="card">
@@ -109,6 +126,7 @@ function Page() {
           </tbody></table>
           <p>🎨 ラッキーカラー：<b>{f.luckyColor}</b>　🧰 ラッキーアイテム：<b>{f.luckyItem}</b>　🔢 ラッキーナンバー：<b>{f.luckyNumber}</b></p>
           <p className="sub">ひとこと：{f.advice}</p>
+          {(() => { const b = beautyFortune(todayJst(), z!, mbti, f.luckyColor); return <p>💇 <b>美容師として</b>：{b.pro}<br />👗 <b>おしゃれ</b>：{b.style}</p>; })()}
         </div>
       ) : <p className="hint">誕生日を入れると、今日の運勢が出ます。</p>}
       <div className="card" style={{ marginTop: 10 }}>

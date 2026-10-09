@@ -31,7 +31,7 @@ export const SEARCH_ITEMS: SearchItem[] = [
   { icon: "💴", title: "お店の売上", sub: "自店・全店の売上の確認・確定", href: "/sales", keys: "売上 確認 確定 差し戻し ランキング 歩合 お店 全店 目標", show: (me) => me.level >= 3 },
   { icon: "💬", title: "メンター（チャット）", sub: "悩みを相談できるチャット", href: "/mentor", keys: "メンター 相談 チャット 悩み mbti monday", show: (me) => !me.displayOnly },
   { icon: "📄", title: "面談シート", sub: "面談の記録を書いて店長に提出", href: "/interviews", keys: "面談 シート 4月 6月 10月 2月 提出 メンター 振り返り", show: (me) => !me.displayOnly },
-  { icon: "🔮", title: "占い", sub: "星座とMBTIの今日の運勢・四柱推命・六星占術・動物占い（AI）", href: "/mentor/fortune", keys: "占い 運勢 星座 相性 誕生日 mbti 四柱推命 六星占術 動物占い 個性心理學 命式 星人 キャラクター ししちゅうすいめい ろくせいせんじゅつ どうぶつうらない", show: (me) => !me.displayOnly },
+  { icon: "🔮", title: "占い", sub: "星座とMBTIの今日の運勢・四柱推命・六星占術・動物占い（AI）", href: "/mentor/fortune", keys: "占い 運勢 毎朝 通知 ラッキーカラー ラッキーアイテム おしゃれ 美容師 星座 相性 誕生日 mbti 四柱推命 六星占術 動物占い 個性心理學 命式 星人 キャラクター ししちゅうすいめい ろくせいせんじゅつ どうぶつうらない", show: (me) => !me.displayOnly },
   { icon: "🧠", title: "みんなのMBTI", sub: "自分のお店のみんなのMBTIの一覧（全店は鬼塚さん以上）", href: "/mentor/mbti", keys: "mbti みんな 一覧 性格 タイプ" },
   { icon: "🎙️", title: "ミーティング", sub: "ボイスメモ・文字起こし・議事録・要約・マインドマップ・AI会議", href: "/meetings", keys: "ミーティング 会議 議事録 ボイスメモ 文字起こし 要約 マインドマップ ai 録音", show: (me) => !me.displayOnly },
   { icon: "🔔", title: "お知らせ", sub: "休みのかぶり・話し合い・有給などのお知らせ", href: "/inbox", keys: "お知らせ 通知 かぶり 話し合い 受信箱", show: (me) => !me.displayOnly },
