@@ -21,6 +21,8 @@ function Page() {
   const { id } = useParams<{ id: string }>();
   const [d, setD] = useState<Detail | null>(null);
   const [tab, setTab] = useState<Tab>("transcript");
+  const [live, setLive] = useState(""); const [recording, setRecording] = useState(false);
+  const taRef = useRef<HTMLTextAreaElement>(null);
   const [text, setText] = useState<Record<TextKey, string>>({ transcript: "", minutes: "", summary: "" });
   const [saved, setSaved] = useState("");
   const [busy, setBusy] = useState("");
@@ -53,6 +55,7 @@ function Page() {
     setText((t) => { const v = t[k] ? `${t[k]}\n${add}` : add; if (timers.current[k]) clearTimeout(timers.current[k]); setSaved("入力中…"); timers.current[k] = setTimeout(() => save({ [k]: v }), 1500); return { ...t, [k]: v }; });
   };
 
+  useEffect(() => { if (recording && taRef.current) taRef.current.scrollTop = taRef.current.scrollHeight; }, [recording, live, text.transcript]);
   if (!d) return <main className="wide"><Link href="/meetings" className="back">← 会議の一覧</Link>{msg ? <p className="err">{msg}</p> : null}</main>;
   const m = d.meeting; const canEdit = d.canEdit; const aiOn = d.aiStatus.available;
   const source = text.minutes.trim() || text.transcript.trim();
@@ -92,8 +95,8 @@ function Page() {
 
       {tab === "transcript" && (
         <>
-          {canEdit && <VoiceRecorder onFinal={(t) => t && append("transcript", t)} />}
-          <textarea rows={14} value={text.transcript} readOnly={!canEdit} placeholder="ここに、文字起こしが入ります。手で入れたり、貼りつけたり、直したりもできます。" onChange={(e) => edit("transcript", e.target.value)} />
+          {canEdit && <VoiceRecorder onFinal={(t) => t && append("transcript", t)} onInterim={setLive} onState={(v) => { setRecording(v); if (!v) setLive(""); }} />}
+          <textarea ref={taRef} rows={14} value={recording && live ? `${text.transcript}${text.transcript ? "\n" : ""}${live}` : text.transcript} readOnly={!canEdit || recording} placeholder="ここに、文字起こしが入ります。手で入れたり、貼りつけたり、直したりもできます。" onChange={(e) => edit("transcript", e.target.value)} style={recording ? { background: "#fff8f0" } : undefined} />
           <p className="sub">{text.transcript.length.toLocaleString("ja-JP")}文字</p>
         </>
       )}
