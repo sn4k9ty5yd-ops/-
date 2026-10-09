@@ -3,14 +3,14 @@ import { useState } from "react";
 
 /** 「プリント」ボタン。押すと、その端末のプリント画面を開く。
  *  iPhoneのホーム画面アプリ（Safariの外）などでは、端末の仕組みで開けないことがあるため、そのときの案内も出す */
-export function PrintButton({ label = "🖨 プリント", fit }: { label?: string; fit?: string }) {
+export function PrintButton({ label = "🖨 プリント", fit, a4 }: { label?: string; fit?: string; a4?: "portrait" | "landscape" }) {
   const [help, setHelp] = useState(false);
   const [note, setNote] = useState("");
   const standalone = () => typeof navigator !== "undefined" && ((navigator as unknown as { standalone?: boolean }).standalone === true || window.matchMedia("(display-mode: standalone)").matches);
   const mobile = () => typeof navigator !== "undefined" && /iPhone|iPad|Android/i.test(navigator.userAgent);
   const go = () => {
     setNote("");
-    const undo = fit ? fitToA4(fit) : () => {};
+    const undo = fit ? fitToA4(fit) : a4 ? setPage(a4) : () => {};
     const done = () => { undo(); window.removeEventListener("afterprint", done); };
     window.addEventListener("afterprint", done);
     try { window.print(); } catch { /* 下の案内を出す */ }
@@ -38,6 +38,14 @@ export function PrintButton({ label = "🖨 プリント", fit }: { label?: stri
       )}
     </>
   );
+}
+
+/** 紙の大きさ・向き（A4）を決める。表は縮めず、何枚でも続けて印刷する。戻す関数を返す */
+function setPage(dir: "portrait" | "landscape"): () => void {
+  const st = document.createElement("style");
+  st.textContent = `@media print{@page{size:A4 ${dir};margin:12mm 10mm 14mm;@bottom-center{content:counter(page) " / " counter(pages);font-size:9pt}}}`;
+  document.head.appendChild(st);
+  return () => st.remove();
 }
 
 /** 表をA4の1枚に収める。紙の向き（横／縦）を、大きく印刷できるほうに自動で決める。戻す関数を返す */

@@ -147,6 +147,23 @@ main.xwide{max-width:1400px;margin:0 auto;padding:16px}
   .sttable .stepper input{border:0;width:auto;text-align:right;height:auto;font-size:10px;padding:0}
   .sttable tr.empty td{background:#fff !important}
   .sttable .sumrow td{position:static}
+  /* 税務署に出す形: A4たて・横幅いっぱい・何枚でも続けて印刷し、見出しは毎ページの上にくり返す・罫線つき */
+  .stwide{overflow:visible !important;max-height:none !important}
+  .sttable{width:100% !important;border-collapse:collapse;font-size:10pt}
+  .sttable thead{display:table-header-group}
+  .sttable tr{break-inside:avoid;page-break-inside:avoid}
+  .sttable th,.sttable td{border:1px solid #444 !important;font-size:9.5pt !important;padding:2px 5px !important;line-height:1.35}
+  .sttable th{background:#eee !important;position:static !important}
+  .sttable td.r,.sttable td.q{text-align:right}
+  .sttable{table-layout:fixed}
+  .sttable th:nth-child(1),.sttable td:nth-child(1){width:15%}.sttable th:nth-child(3),.sttable td:nth-child(3){width:11%}
+  .sttable th:nth-child(4),.sttable td:nth-child(4){width:11%}.sttable th:nth-child(5),.sttable td:nth-child(5){width:9%}.sttable th:nth-child(6),.sttable td:nth-child(6){width:13%}
+  .sttable td{word-break:break-all}
+  .sttable .stp-b,.sttable .stp-x,.sttable .stp-u{display:none !important}
+  .sttable .stp{display:block !important;width:100% !important}
+  .sttable .stp-in{border:0 !important;background:none !important;box-shadow:none !important;width:100% !important;box-sizing:border-box;min-width:0 !important;max-width:none !important;height:auto !important;font-size:9.5pt !important;font-weight:400 !important;text-align:right;padding:0 !important;color:#000 !important}
+  .sttable .noprint,.sttable td.noprint{display:none !important}
+  .sttable .sumrow td{font-weight:700;background:#eee !important;border-top:2px solid #000 !important}
 }
 .linkcell{width:auto;margin:0;padding:6px 8px;color:var(--blue) !important;font-size:14px;text-align:right}
 .linkcell small{display:block;color:var(--sub);font-size:11px;font-weight:400}

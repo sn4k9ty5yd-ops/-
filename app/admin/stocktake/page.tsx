@@ -250,7 +250,7 @@ function Detail({ id, storeName, onBack }: { id: string; storeName: string; onBa
           const onlyEmpty = filled ? !confirm(`すでに入っている数量も、${reiwaDot(d.prevOn!)} の数でおきかえますか？\n［OK］おきかえる　［キャンセル］空いている所だけコピー`) : false;
           try { await flush(); const r = await api<{ copied: number; added: number; from: string | null }>(`/api/stocktakes/${id}`, { action: "copy-prev", onlyEmpty }); setMsg(""); setNote(`${reiwaDot(r.from ?? d.prevOn!)} の数量を ${r.copied}件コピーしました${r.added ? `（表にない商品 ${r.added}件も足しました）` : ""}。1つずつ直せます`); await load(); } catch (e) { setMsg((e as Error).message); }
         }}>📋 {reiwaDot(d.prevOn)} の数量を、今年にまとめてコピー</button>}
-        <PrintButton label="🖨 A4に1枚で印刷" fit=".stwide .sttable" />
+        <PrintButton label="🖨 A4で印刷（税務署用）" a4="portrait" />
         <ShareMenu title={title} text={tsv()} link={`${typeof location !== "undefined" ? location.origin : ""}/admin/stocktake?id=${id}`} />
         {d.canManage && d.status === "open" && <button className="ghost" onClick={async () => { if (confirm("この棚卸しを削除しますか？（入力した数量も消えます）") && (await run({ action: "delete" }))) onBack(); }}>削除</button>}
         {note && <span className="sub">{note}</span>}
@@ -348,7 +348,7 @@ function Detail({ id, storeName, onBack }: { id: string; storeName: string; onBa
         const mine = total;                                   // いま入力中の金額を反映
         const otherTotal = other?.total ?? 0;
         return (
-          <div className="card" style={{ marginTop: 12 }}>
+          <div className="card noprint" style={{ marginTop: 12 }}>
             <b>このお店の合算（{reiwaDot(d.takenOn)}）</b>
             <div className="sub">{PRODUCT_KIND_LABEL[d.kind]} {yen(mine)} ＋ {PRODUCT_KIND_LABEL[d.kind === "retail" ? "supply" : "retail"]} {other ? yen(otherTotal) : "（未作成）"}</div>
             <div className="big" style={{ fontSize: 24 }}>{yen(mine + otherTotal)}</div>
