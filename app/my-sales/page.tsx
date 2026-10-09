@@ -76,7 +76,7 @@ function Page() {
         <div className="card">
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "baseline" }}><b style={{ fontSize: 18 }}>{Number(ym.slice(5))}月の売上を提出する</b>
             <span className="chip" style={{ color: d.status === "office_ok" ? "var(--ok)" : d.status === "returned" ? "var(--bad)" : undefined }}>{d.status ? SALES_STATUS_LABEL[d.status] : "まだ入れていません"}</span></div>
-          <p className="sub" style={{ margin: "6px 0 10px" }}>流れ：<b>自分で記入して提出 → 店長が確認 → 事務員さんが確定</b></p>
+          <p className="sub" style={{ margin: "6px 0 10px" }}>流れ：<b>自分で記入して提出 → 店長が確認 → 正美さんが確定</b></p>
           {d.status === "returned" && <p className="err">差し戻されました{d.returnComment ? `：「${d.returnComment}」` : ""}。直して、もう一度提出してください。</p>}
           <p className="sub" style={{ margin: "0 0 6px" }}>提出期限：<b>{md(d.dueOn)}</b>　{editable && (daysLeft < 0 ? <span className="chip" style={{ color: "var(--bad)" }}>期限を過ぎています</span> : daysLeft <= 3 ? <span className="chip warn">あと{daysLeft}日</span> : <span className="chip">あと{daysLeft}日</span>)}</p>
           {([

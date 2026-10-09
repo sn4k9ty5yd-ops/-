@@ -17,7 +17,7 @@ beforeAll(async () => {
   for (const n of ["A店", "B店"]) st[n] = (await db.query<{ id: string }>("insert into stores (company_id, name) values ($1,$2) returning id", [co, n])).rows[0].id;
   const mk = async (k: string, code: string, level: number, s: string, name: string) =>
     (id[k] = (await db.query<{ id: string }>("insert into memberships (company_id, store_id, employee_code, name, level) values ($1,$2,$3,$4,$5) returning id", [co, s, code, name, level])).rows[0].id);
-  await mk("office", "1", 4, st["A店"], "事務員"); await db.query("update memberships set app_owner = true where id = $1", [id.office]);   // レッスンの状況を見られるのは、制作者と社長だけ（事務員さんは見られない）
+  await mk("office", "1", 4, st["A店"], "事務員"); await db.query("update memberships set app_owner = true where id = $1", [id.office]);   // レッスンの状況を見られるのは、制作者と社長だけ（正美さんは見られない）
   await mk("mgr", "2", 3, st["A店"], "店長"); await mk("edu", "3", 1, st["A店"], "教育 担当");
   await mk("a1", "4", 1, st["A店"], "アシ 一子"); await mk("a2", "5", 1, st["A店"], "アシ 二子"); await mk("plain", "6", 1, st["A店"], "ふつう");
   await mk("b1", "7", 1, st["B店"], "他店 アシ"); await mk("mgrB", "8", 3, st["B店"], "B店長");

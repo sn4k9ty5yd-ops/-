@@ -32,7 +32,7 @@ export default function ActivityPage() {
   return (
     <>
       <h1>変更の記録</h1>
-      <p className="sub">だれが・どこを・いつ、変更したかの記録です（新しい順）。事務員さんへの提出・報告があったときは、通知も届きます。</p>
+      <p className="sub">だれが・どこを・いつ、変更したかの記録です（新しい順）。正美さんへの提出・報告があったときは、通知も届きます。</p>
       <div className="toolbar">
         <select aria-label="人" value={person} onChange={(e) => setPerson(e.target.value)}><option value="">すべての人</option>{(data?.people ?? []).map((p) => <option key={p} value={p}>{p}</option>)}</select>
         <select aria-label="どこ" value={area} onChange={(e) => setArea(e.target.value)}><option value="">すべての場所</option>{(data?.areas ?? []).map((a) => <option key={a} value={a}>{a}</option>)}</select>

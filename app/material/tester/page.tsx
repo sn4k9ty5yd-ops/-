@@ -109,7 +109,7 @@ function Page() {
               <input aria-label="商品をさがす" placeholder="メーカー・品名でさがす（例：髪にドラマを。）" value={pq} onChange={(e) => setPq(e.target.value)} />
               <div className="actions" style={{ flexWrap: "wrap" }}>
                 {found.map((p) => <button key={p.id} className="ghost" style={{ width: "auto", color: "var(--ink)", border: "1px solid var(--line, #ddd)", borderRadius: 20 }} onClick={() => setPick(p)}>{p.name}{p.spec ? `（${p.spec}）` : ""} {yen(p.costPrice)}</button>)}
-                {pq.trim() && found.length === 0 && <span className="sub">見つかりません。商品は「材料費」の発注の画面から登録できます（店長・事務員さん）。</span>}
+                {pq.trim() && found.length === 0 && <span className="sub">見つかりません。商品は「材料費」の発注の画面から登録できます（店長・正美さん）。</span>}
               </div>
             </>
           ) : (

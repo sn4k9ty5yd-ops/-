@@ -15,7 +15,7 @@ describe("定期券の提出", () => {
     const mk = async (k: string, code: string, level: number, s: string) => { u[k] = (await d.query<{ id: string }>("insert into memberships (company_id, store_id, employee_code, name, level) values ($1,$2,$3,$4,$5) returning id", [co, s, code, k, level])).rows[0].id; };
     await mk("office", "1", 4, sid.a); await mk("mgrA", "2", 3, sid.a); await mk("s1", "3", 1, sid.a); await mk("s2", "4", 1, sid.a); await mk("mgrB", "5", 3, sid.b); await mk("t1", "6", 1, sid.b);
   });
-  it("名簿に入れられるのは、店長(自店)と事務員さん。ふつうのスタッフ・他店の店長は不可", async () => {
+  it("名簿に入れられるのは、店長(自店)と正美さん。ふつうのスタッフ・他店の店長は不可", async () => {
     await expect(svc.setCommuteRoster(d, u.s2, u.s1, true)).rejects.toThrow(svc.ForbiddenError);
     await expect(svc.setCommuteRoster(d, u.mgrB, u.s1, true)).rejects.toThrow(svc.ForbiddenError);
     await svc.setCommuteRoster(d, u.mgrA, u.s1, true);
@@ -33,7 +33,7 @@ describe("定期券の提出", () => {
     expect((await svc.getCommute(d, u.s1)).mine).toMatchObject({ months: 3 });
     expect((await svc.getCommute(d, u.s1)).mine?.status).toBe("submitted");
   });
-  it("写真を見られるのは、本人と事務員さんだけ。確認すると本人に通知。確認ずみは出し直せない", async () => {
+  it("写真を見られるのは、本人と正美さんだけ。確認すると本人に通知。確認ずみは出し直せない", async () => {
     const row = (await svc.getCommute(d, u.mgrA)).rows[0];
     await expect(svc.getCommuteImage(d, u.mgrA, row.subId!)).rejects.toThrow(svc.ForbiddenError);   // 店長は写真は見えない
     await expect(svc.getCommuteImage(d, u.s2, row.subId!)).rejects.toThrow(svc.ForbiddenError);
@@ -73,7 +73,7 @@ describe("定期券の提出", () => {
     expect((await svc.getCommuteSummary(d, u.s2)).pending).toBe(false);
     await svc.setCommuteRoster(d, u.office, u.s2, false);
   });
-  it("外すと、名簿から消える。期限日は事務員さんだけが決められる。通知は期限の3日前から、出していない人へ毎日1回", async () => {
+  it("外すと、名簿から消える。期限日は正美さんだけが決められる。通知は期限の3日前から、出していない人へ毎日1回", async () => {
     await expect(svc.setCommuteDue(d, u.mgrA, 20)).rejects.toThrow(svc.ForbiddenError);
     await svc.setCommuteDue(d, u.office, 20);
     expect((await svc.getCommute(d, u.office)).dueDay).toBe(20);

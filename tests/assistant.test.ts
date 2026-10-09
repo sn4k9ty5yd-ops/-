@@ -36,7 +36,7 @@ describe("右下のアシスタント", () => {
       const r = await svc.askAssistant(db, staff, { question: "休みを出したい" }, async (s) => { sys = s; return "1. 「休み」を押します"; });
       expect(r).toEqual({ answer: "1. 「休み」を押します", ai: true });
       expect(sys).toMatch(/やさしい日本語/);
-      expect(sys).not.toMatch(/事務員さん用の設定/);
+      expect(sys).not.toMatch(/正美さん用の設定/);
       const r2 = await svc.askAssistant(db, boss, { question: "休みを出したい" }, async () => { throw new Error("busy"); });
       expect(r2.ai).toBe(false);
       expect(r2.answer).toMatch(/AIがつかれています/);

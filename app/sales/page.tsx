@@ -50,7 +50,7 @@ function Page() {
   const saveRates = async () => { if (!rEdit) return; try { await api("/api/sales", { action: "rates", storeId, month: ym, rates: rEdit }); setREdit(null); setOk("歩合の割合を保存しました"); await load(); } catch (e) { setMsg((e as Error).message); } };
   const review = async (members: string[], action: "manager_ok" | "office_ok" | "return", comment = "") => {
     if (members.length === 0) return;
-    try { await api("/api/sales", { action: "review", storeId, month: ym, members, review: action, comment }); setOk(action === "return" ? "差し戻しました" : action === "manager_ok" ? "確認しました（事務員さんへ）" : "確定しました"); await load(); } catch (e) { setMsg((e as Error).message); }
+    try { await api("/api/sales", { action: "review", storeId, month: ym, members, review: action, comment }); setOk(action === "return" ? "差し戻しました" : action === "manager_ok" ? "確認しました（正美さんへ）" : "確定しました"); await load(); } catch (e) { setMsg((e as Error).message); }
   };
   const countBy = (st: SalesStatus | null) => (data?.rows ?? []).filter((r) => (r.status ?? null) === st).length;
   const idsBy = (st: SalesStatus) => (data?.rows ?? []).filter((r) => r.status === st && r.membershipId !== me.id).map((r) => r.membershipId);
@@ -102,8 +102,8 @@ function Page() {
       </div>
 
       <div className="card">
-        <b>提出の状況（流れ：本人が記入して提出 → 店長が確認 → 事務員さんが確定）</b>
-        <p className="sub" style={{ margin: "6px 0" }}>未入力・下書き {countBy(null) + countBy("draft") + countBy("returned")}人　／　店長の確認待ち {countBy("submitted")}人　／　事務員さんの確認待ち {countBy("manager_ok")}人　／　確定 {countBy("office_ok")}人</p>
+        <b>提出の状況（流れ：本人が記入して提出 → 店長が確認 → 正美さんが確定）</b>
+        <p className="sub" style={{ margin: "6px 0" }}>未入力・下書き {countBy(null) + countBy("draft") + countBy("returned")}人　／　店長の確認待ち {countBy("submitted")}人　／　正美さんの確認待ち {countBy("manager_ok")}人　／　確定 {countBy("office_ok")}人</p>
         <div className="toolbar">
           {canEdit && idsBy("submitted").length > 0 && <button onClick={() => review(idsBy("submitted"), "manager_ok")}>提出済みの {idsBy("submitted").length}人を、まとめて確認する</button>}
           {me.level === 4 && idsBy("manager_ok").length > 0 && <button onClick={() => review(idsBy("manager_ok"), "office_ok")}>店長確認済みの {idsBy("manager_ok").length}人を、まとめて確定する</button>}
@@ -114,7 +114,7 @@ function Page() {
           <b>提出期限：{data ? md(data.dueOn) : ""}{data?.dueIsDefault ? "（月末）" : ""}</b>
           {canEdit && <><input type="date" value={data?.dueOn ?? ""} onChange={(e) => e.target.value && setDue(e.target.value)} style={{ width: 170 }} />{!data?.dueIsDefault && <button className="ghost" onClick={() => setDue(null)}>月末にもどす</button>}</>}
         </div>
-        <p className="sub" style={{ margin: "6px 0 0" }}>期限の前日と当日に、まだ出していない人へ通知が届きます。期限を過ぎると、店長と事務員さんにも通知します。</p>
+        <p className="sub" style={{ margin: "6px 0 0" }}>期限の前日と当日に、まだ出していない人へ通知が届きます。期限を過ぎると、店長と正美さんにも通知します。</p>
       </div>
       <div className="scroll card">
         <table className="sttable salestable">
@@ -125,7 +125,7 @@ function Page() {
               <tr key={r.membershipId} className={edit[r.membershipId] ? "empty" : ""}>
                 <td>{r.name}</td>
                 <td style={{ whiteSpace: "nowrap" }}>
-                  <span className="chip" style={{ color: r.status === "office_ok" ? "var(--ok)" : r.status === "returned" ? "var(--bad)" : undefined }}>{!r.status ? "未入力" : r.status === "draft" ? "下書き" : r.status === "submitted" ? "店長確認待ち" : r.status === "manager_ok" ? "事務員確認待ち" : r.status === "office_ok" ? "確定" : "差し戻し中"}</span>
+                  <span className="chip" style={{ color: r.status === "office_ok" ? "var(--ok)" : r.status === "returned" ? "var(--bad)" : undefined }}>{!r.status ? "未入力" : r.status === "draft" ? "下書き" : r.status === "submitted" ? "店長確認待ち" : r.status === "manager_ok" ? "正美さん確認待ち" : r.status === "office_ok" ? "確定" : "差し戻し中"}</span>
                   {canEdit && r.membershipId !== me.id && r.status === "submitted" && <button className="ghost" onClick={() => review([r.membershipId], "manager_ok")}>確認</button>}
                   {me.level === 4 && r.status === "manager_ok" && <button className="ghost" onClick={() => review([r.membershipId], "office_ok")}>確定</button>}
                   {canEdit && r.membershipId !== me.id && (r.status === "submitted" || r.status === "manager_ok" || (r.status === "office_ok" && me.level === 4)) && <button className="ghost" style={{ color: "var(--bad)" }} onClick={() => { const c = prompt("差し戻しのコメント（なくてもOK）", "") ; if (c !== null) review([r.membershipId], "return", c); }}>差し戻す</button>}

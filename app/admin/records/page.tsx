@@ -48,7 +48,7 @@ export default function RecordsPage() {
     try { setDoc(await api<RecordsDoc>("/api/records", { from, to, sections: sel, detail, staffIds: all ? [] : who, ranges: own ? Object.fromEntries(sel.map((k) => [k, rangeOf(k)])) : {} })); } catch (e) { setMsg((e as Error).message); }
     setBusy(false);
   };
-  if (me.level < 4) return <p className="hint">この画面は、管理者・事務員さんだけが使えます。</p>;
+  if (me.level < 4) return <p className="hint">この画面は、管理者・正美さんだけが使えます。</p>;
 
   return (
     <>

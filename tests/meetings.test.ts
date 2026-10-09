@@ -54,7 +54,7 @@ describe("会議の保存と、見られる人・書ける人", () => {
     await svc.updateMeeting(d, u.mgrA, mid, { transcript: "今日は新人の教育について話しました。" });
     await expect(svc.updateMeeting(d, u.sA, mid, { transcript: "書きかえ" })).rejects.toThrow(svc.ForbiddenError);
   });
-  it("自店のスタッフは見られる（直せない）。他店のスタッフ・店長は見えない。事務員さんは全店", async () => {
+  it("自店のスタッフは見られる（直せない）。他店のスタッフ・店長は見えない。正美さんは全店", async () => {
     expect((await svc.listMeetings(d, u.sA, sid.a)).map((m) => m.title)).toEqual(["朝礼"]);
     expect((await svc.getMeeting(d, u.sA, mid))?.canEdit).toBe(false);
     expect((await svc.getMeeting(d, u.mgrA, mid))?.canEdit).toBe(true);

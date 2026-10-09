@@ -64,7 +64,7 @@ function Page() {
       <Link href="/home" className="back">← ホーム</Link>
       <h1>材料費</h1>
       <SubTabs items={materialTabs(me.displayOnly)} />
-      <p className="sub">自分のお店の在庫が見られます（他のお店は見えません）。入庫・出庫・数え直しの記録は、シフト担当・店長・事務員さんができます。</p>
+      <p className="sub">自分のお店の在庫が見られます（他のお店は見えません）。入庫・出庫・数え直しの記録は、シフト担当・店長・正美さんができます。</p>
       <div className="toolbar">
         <select aria-label="お店" value={storeId} onChange={(e) => { setStoreId(e.target.value); setCounts({}); }}>{(me.level === 4 ? stores : stores.filter((x) => x.id === me.storeId)).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select>
         {canSettings && <button className="ghost" style={{ color: "var(--blue)" }} onClick={() => setShowSettings(true)}>このお店で使う機能</button>}

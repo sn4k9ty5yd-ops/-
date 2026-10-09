@@ -45,7 +45,7 @@ export function describeActivity(path: string, body: Record<string, unknown> | n
   return { area, what };
 }
 
-/** 「事務員さんへの提出・報告」にあたる操作か（アプリ制作者に、そのたびに知らせる） */
+/** 「正美さんへの提出・報告」にあたる操作か（アプリ制作者に、そのたびに知らせる） */
 export function isOfficeReport(path: string, body: Record<string, unknown> | null): boolean {
   const a = typeof body?.action === "string" ? body.action : "";
   const st = typeof body?.status === "string" ? body.status : "";

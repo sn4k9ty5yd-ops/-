@@ -40,7 +40,7 @@ function Cards() {
     { href: "/material/summary", title: "材料費統括", sub: "月ごと・お店ごと・商品ごとの割合（管理者・材料担当）", show: me.level === 4 || !!me.materialManager },
     { big: true, href: "/my-lessons", title: "自分のレッスン", sub: "何をしたか・何人目か・かかった時間をカレンダーで見る", show: me.rank === "assistant" },
     { href: "/lessons", title: "レッスン記録", sub: "アシスタントが今日何をしたかを、ボタンで記録・報告", show: (me.level >= 3 || !!me.eduLead) && !isOfficeOnly(me) },
-    { big: true, href: "/commute", title: commute.toCheck ? `定期券の提出（確認まち${commute.toCheck}件）` : commute.pending ? "定期券の提出（まだです）" : "定期券の提出", sub: "毎月1回、定期券の写真を出す（名簿の人だけ・事務員さんが確認）", show: commute.show },
+    { big: true, href: "/commute", title: commute.toCheck ? `定期券の提出（確認まち${commute.toCheck}件）` : commute.pending ? "定期券の提出（まだです）" : "定期券の提出", sub: "毎月1回、定期券の写真を出す（名簿の人だけ・正美さんが確認）", show: commute.show },
     { href: "/admin/stocktake", title: "棚卸し", sub: "店販・業務の棚卸し（みんなで数量を入れます）", show: !me.displayOnly },
     { href: "/admin/products", title: "商品一覧", sub: "店販・業務の商品と仕入値", show: me.level >= 3 },
     { href: "/admin/shifts", title: "出勤簿", sub: "日ごと・人ごと・一覧表で入力します", show: false },
@@ -52,7 +52,7 @@ function Cards() {
     { big: true, href: "/help", title: "ヘルプ", sub: "このアプリでできることと、やり方・ご要望を送る", show: true },
     { href: "/admin/activity", title: "変更の記録", sub: "だれが・どこを・いつ変更したか（制作者だけ）", show: !!me.appOwner },
     { href: "/admin/feedback", title: "届いたご要望", sub: "みんなからの「こうしてほしい」（制作者だけ）", show: !!me.appOwner },
-    { href: "/admin/guide", title: "アプリの説明書", sub: "社長用・事務員さん用・全社員Zoom台本（印刷・コピー）", show: !!me.appOwner },
+    { href: "/admin/guide", title: "アプリの説明書", sub: "社長用・正美さん用・全社員Zoom台本（印刷・コピー）", show: !!me.appOwner },
     { href: "/admin/settings", title: "設定", sub: "休憩・実働のルール", show: me.level >= 4 },
     { href: "/admin/stores", title: "店舗の編集", sub: "新店舗の追加・名前の変更・閉店（管理者のみ）", show: me.level >= 4 },
   ].filter((c) => c.show);

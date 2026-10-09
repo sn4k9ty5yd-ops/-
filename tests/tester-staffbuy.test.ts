@@ -17,7 +17,7 @@ describe("在庫の見える範囲・テスター・スタッフ購入", () => {
     await svc.createProducts(d, u.mgrA, "retail", [{ maker: "髪にドラマを。", name: "シャンプー", spec: "250ml", costPrice: 1500 }], [sid.a, sid.b]);
     pid = (await svc.listProducts(d, u.office, "retail"))[0].id;
   });
-  it("在庫は、スタッフも自店だけ見られる。他店は見えない（店長も）。事務員さんは全店", async () => {
+  it("在庫は、スタッフも自店だけ見られる。他店は見えない（店長も）。正美さんは全店", async () => {
     await expect(svc.listStock(d, u.sA, sid.a)).resolves.toBeTruthy();
     expect((await svc.listStock(d, u.sA, sid.b)).items).toHaveLength(0);
     expect((await svc.listStock(d, u.mgrA, sid.b)).items).toHaveLength(0);
@@ -36,7 +36,7 @@ describe("在庫の見える範囲・テスター・スタッフ購入", () => {
     await svc.cancelStockEntry(d, u.mgrA, "tester", r.rows[0].id);
     expect((await svc.listTester(d, u.sA, sid.a, "2026-10")).total).toBe(0);
   });
-  it("スタッフ購入: 仕入値で記録。見えるのは本人・店長(自店)・事務員さんだけ。月ごとの合計が出る", async () => {
+  it("スタッフ購入: 仕入値で記録。見えるのは本人・店長(自店)・正美さんだけ。月ごとの合計が出る", async () => {
     await svc.addPurchase(d, u.sA, { membershipId: u.sA, productId: pid, qty: 2, day: "2026-10-10" });
     await svc.addPurchase(d, u.mgrA, { membershipId: u.sA2, productId: pid, qty: 1, day: "2026-10-11" });
     await expect(svc.addPurchase(d, u.sA, { membershipId: u.sA2, productId: pid, qty: 1 })).rejects.toThrow(svc.ForbiddenError);   // 他人の分は入れられない
@@ -63,7 +63,7 @@ describe("在庫の見える範囲・テスター・スタッフ購入", () => {
 });
 
 describe("異動（お店を変える）", () => {
-  it("事務員さんだけができる。閉店中のお店・同じお店は不可。記録が残る", async () => {
+  it("正美さんだけができる。閉店中のお店・同じお店は不可。記録が残る", async () => {
     const d = await newDb(); await migrate(d);
     const co = (await d.query<{ id: string }>("insert into companies (code, name) values ('m-co','M') returning id")).rows[0].id;
     const sid: string[] = [];

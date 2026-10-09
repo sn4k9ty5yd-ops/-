@@ -43,7 +43,7 @@ function Page() {
   const setStatus = async (w: LeaveWindow, status: "open" | "closed") => { try { await api("/api/paid-leave", { action: "window-status", id: w.id, status }); await load(); } catch (e) { setMsg((e as Error).message); } };
   const tsv = () => ov.flatMap((s) => [s.storeName, "名前\t提出\t日数\t日にち", ...s.people.map((p) => [p.name, p.submitted ? "提出済み" : "未提出", p.days.length, p.days.map(md).join("、")].join("\t")), ""]).join("\n");
 
-  if (me.level < 3) return <main className="wide"><Link href="/leave" className="back">← 有給の申請</Link><h1>有給の確認</h1><p className="hint">この画面は、店長と事務員さんが使います。</p></main>;
+  if (me.level < 3) return <main className="wide"><Link href="/leave" className="back">← 有給の申請</Link><h1>有給の確認</h1><p className="hint">この画面は、店長と正美さんが使います。</p></main>;
   const todoN = review?.todo.length ?? 0;
 
   return (
@@ -68,7 +68,7 @@ function Page() {
               {c.managerName && <p className="sub">店長 {c.managerName} が確認済み{c.managerComment ? `：「${c.managerComment}」` : ""}</p>}
               <input placeholder="コメント（なくてもOK）" value={comment[c.id] ?? ""} onChange={(e) => setComment({ ...comment, [c.id]: e.target.value })} />
               <div className="toolbar" style={{ marginTop: 10 }}>
-                <button onClick={() => decide(c, true)}>{c.status === "pending_manager" ? "確認した（事務員さんへ）" : "許可する"}</button>
+                <button onClick={() => decide(c, true)}>{c.status === "pending_manager" ? "確認した（正美さんへ）" : "許可する"}</button>
                 <button className="ghost" style={{ color: "var(--bad)" }} onClick={() => decide(c, false)}>却下する</button>
               </div>
             </div>

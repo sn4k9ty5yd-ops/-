@@ -44,7 +44,7 @@ function Page() {
     <main>
       <Link href="/home" className="back">← ホーム</Link>
       <h1>定期券の提出</h1>
-      <p className="hint">定期券を買っている人が、毎月1回、定期券の写真を出します。事務員さんが確認します。毎月 <b>{d.dueDay}日</b> までに出してください。</p>
+      <p className="hint">定期券を買っている人が、毎月1回、定期券の写真を出します。正美さんが確認します。毎月 <b>{d.dueDay}日</b> までに出してください。</p>
       <div className="seg" style={{ marginBottom: 8 }}>
         <button onClick={() => setMonth(shiftMonth(cur, -1))}>‹ 前の月</button>
         <button className="on">{ml(cur)}</button>

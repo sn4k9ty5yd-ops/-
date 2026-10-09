@@ -43,7 +43,7 @@ export default function PeriodsPage() {
     <>
       
       <h1>つくる</h1>
-      <p className="hint">シフトを作って、事務員さんに出すまでの「やること」です。いまの段階と、次に押すボタンが出ます。</p>
+      <p className="hint">シフトを作って、正美さんに出すまでの「やること」です。いまの段階と、次に押すボタンが出ます。</p>
       {todo && todo.s && (() => {
         const { p, s } = todo; const next = NEXT_ACTION[s.status];
         const idx = STATUS_ORDER.indexOf(s.status);
@@ -66,7 +66,7 @@ export default function PeriodsPage() {
             </ol>
             {s.status === "preparing" && canManage(s.storeId) && <LimitRequired periodId={p.id} storeId={s.storeId} days={daysOf(p.start, p.end)} />}
             {can && <button onClick={() => { advance(p.id, s.storeId, next); }}>次は：{next.label}</button>}
-            {!can && next && <p className="hint" style={{ margin: "6px 0 0" }}>この次の操作は、{cur.who || "店長・事務員さん"}が行います。</p>}
+            {!can && next && <p className="hint" style={{ margin: "6px 0 0" }}>この次の操作は、{cur.who || "店長・正美さん"}が行います。</p>}
             {cur.open && <Link href="/admin/shifts" className="ghost" style={{ display: "block", textAlign: "center", padding: 10 }}>出勤簿予定を開く</Link>}
           </div>
         );

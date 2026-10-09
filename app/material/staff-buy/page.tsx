@@ -64,7 +64,7 @@ function Page() {
       <Link href="/home" className="back">← ホーム</Link>
       <h1>材料費</h1>
       <SubTabs items={materialTabs(me.displayOnly)} />
-      <p className="sub">スタッフが個人で買った店販商品の記録です。価格は仕入値（売値の半分）で、給料から引く金額になります。見られるのは、自分の分だけです（店長は自分のお店、事務員さんは全店）。</p>
+      <p className="sub">スタッフが個人で買った店販商品の記録です。価格は仕入値（売値の半分）で、給料から引く金額になります。見られるのは、自分の分だけです（店長は自分のお店、正美さんは全店）。</p>
       <div className="toolbar">
         {me.level === 4 && <select aria-label="お店" value={storeId} onChange={(e) => setStoreId(e.target.value)}>{stores.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select>}
         <button className="ghost" onClick={() => setYm(shiftMonth(ym, -1))} aria-label="前の月">‹</button>

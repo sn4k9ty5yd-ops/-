@@ -16,14 +16,14 @@ function Page() {
   const load = useCallback(async () => { try { setData(await api("/api/office-inbox")); setMsg(""); } catch (e) { setMsg((e as Error).message); } }, []);
   useEffect(() => { load(); }, [load]);
   useAutoRefresh(load, 20);
-  if (me.level < 4) return <main className="wide"><Link href="/home" className="back">← ホーム</Link><h1>スタッフからの通知</h1><p className="hint">この画面は、事務員さん以上が使います。</p></main>;
+  if (me.level < 4) return <main className="wide"><Link href="/home" className="back">← ホーム</Link><h1>スタッフからの通知</h1><p className="hint">この画面は、正美さん以上が使います。</p></main>;
   const items = (data?.items ?? []).filter((i) => showDone || !i.done);
   const go = async (n: OfficeInboxRow) => { if (!n.done) await api("/api/office-inbox", { ids: [n.id] }).catch(() => {}); router.push(n.link); };
   return (
     <main className="wide">
       <Link href="/home" className="back">← ホーム</Link>
       <h1>スタッフからの通知</h1>
-      <p className="hint">スタッフが事務員さん宛てに出した提出・報告（シフト・出勤簿・棚卸し・売上・有給・材料費）が、ここに集まります。文章を押すと、その画面が開きます。</p>
+      <p className="hint">スタッフが正美さん宛てに出した提出・報告（シフト・出勤簿・棚卸し・売上・有給・材料費）が、ここに集まります。文章を押すと、その画面が開きます。</p>
       {msg && <p className="err">{msg}</p>}
       <div className="toolbar">
         {(data?.open ?? 0) > 0 && <button className="ghost" onClick={async () => { await api("/api/office-inbox", {}); await load(); }}>すべて対応ずみにする</button>}

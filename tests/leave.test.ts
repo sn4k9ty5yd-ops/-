@@ -22,7 +22,7 @@ beforeAll(async () => {
 });
 
 describe("有給の提出と変更の申請", () => {
-  it("受付を開けるのは事務員さん（管理者）だけ。開くと全員にお知らせが入る", async () => {
+  it("受付を開けるのは正美さん（管理者）だけ。開くと全員にお知らせが入る", async () => {
     await expect(svc.openLeaveWindow(db, id.mgr, { label: "2026年 下期", start: "2026-10-16", end: "2027-03-15" })).rejects.toThrow(svc.ForbiddenError);
     win = await svc.openLeaveWindow(db, id.office, { label: "2026年 下期", start: "2026-10-16", end: "2027-03-15" });
     expect((await svc.listLeaveWindows(db, id.a)).find((w) => !w.standing)).toMatchObject({ label: "2026年 下期", status: "open" });
@@ -41,7 +41,7 @@ describe("有給の提出と変更の申請", () => {
     await svc.submitMyLeave(db, id.b, win, true);
   });
 
-  it("見られる範囲: 本人・自店の店長・事務員さん。他の人と他店の店長は見られない。提出状況は未提出もわかる", async () => {
+  it("見られる範囲: 本人・自店の店長・正美さん。他の人と他店の店長は見られない。提出状況は未提出もわかる", async () => {
     const ovA = await svc.leaveOverview(db, id.mgr, win);
     expect(ovA.map((s) => s.storeName)).toEqual(["A店"]);
     expect(ovA[0].people.map((p) => [p.name, p.submitted, p.days.length])).toEqual([["A店長", false, 0], ["山田", true, 3], ["佐藤", false, 1]]);
@@ -59,7 +59,7 @@ describe("有給の提出と変更の申請", () => {
     await expect(svc.setLeaveWindowStatus(db, id.mgr, win, "open")).rejects.toThrow(svc.ForbiddenError);
   });
 
-  it("申請 → 店長が確認 → 事務員さんが許可 → 有給の日が書き換わる。通知が順に届く", async () => {
+  it("申請 → 店長が確認 → 正美さんが許可 → 有給の日が書き換わる。通知が順に届く", async () => {
     const cid = await svc.requestLeaveChange(db, id.a, win, "2026-11-20", "2026-11-27", "家族の予定");
     expect((await svc.listNotifications(db, id.mgr)).items.some((n) => n.title.includes("変更の申請"))).toBe(true);
     // 順番を飛ばせない・関係ない人は決められない
@@ -72,7 +72,7 @@ describe("有給の提出と変更の申請", () => {
     expect((await svc.getMyLeavePlan(db, id.a, win)).days).toContain("2026-11-20");                         // まだ変わらない
     expect((await svc.listNotifications(db, id.office)).items.some((n) => n.title.includes("店長が確認"))).toBe(true);
     expect((await svc.listLeaveReview(db, id.mgr)).todo).toHaveLength(0);                                   // 店長の手を離れた
-    await expect(svc.decideLeaveChange(db, id.mgr, cid, true, "")).rejects.toThrow(svc.ForbiddenError);     // 事務員さんの番
+    await expect(svc.decideLeaveChange(db, id.mgr, cid, true, "")).rejects.toThrow(svc.ForbiddenError);     // 正美さんの番
     expect(await svc.decideLeaveChange(db, id.office, cid, true, "了解")).toBe("approved");
     const mine = await svc.getMyLeavePlan(db, id.a, win);
     expect(mine.days).toContain("2026-11-27"); expect(mine.days).not.toContain("2026-11-20");
@@ -81,7 +81,7 @@ describe("有給の提出と変更の申請", () => {
     await expect(svc.decideLeaveChange(db, id.office2, cid, true, "")).rejects.toThrow("すでに");
   });
 
-  it("却下・取り消し・重複・すでにある日。店長の申請は、事務員さんの許可から始まる", async () => {
+  it("却下・取り消し・重複・すでにある日。店長の申請は、正美さんの許可から始まる", async () => {
     const c1 = await svc.requestLeaveChange(db, id.a2, win, "2026-12-05", null, "");
     expect(await svc.decideLeaveChange(db, id.mgr, c1, false, "人が足りません")).toBe("rejected");
     expect((await svc.getMyLeavePlan(db, id.a2, win)).days).toEqual(["2026-12-05"]);
@@ -101,7 +101,7 @@ describe("有給の提出と変更の申請", () => {
     expect((await svc.getMyLeavePlan(db, id.mgr, win)).days).toEqual(["2026-12-24"]);
   });
 
-  it("有給申請は、受付がなくても、いつでも全員が出せる（店長が確認 → 事務員さんが許可）", async () => {
+  it("有給申請は、受付がなくても、いつでも全員が出せる（店長が確認 → 正美さんが許可）", async () => {
     const standing = (await svc.listLeaveWindows(db, id.b)).find((w) => w.standing)!;
     expect(standing.label).toBe("有給申請");
     expect((await svc.listLeaveWindows(db, id.a)).filter((w) => w.standing)).toHaveLength(1);           // 二重に作らない
@@ -113,7 +113,7 @@ describe("有給の提出と変更の申請", () => {
     expect((await svc.getMyLeavePlan(db, id.b, standing.id)).days).toEqual(["2031-05-10"]);
     // 許可すると、シフトカレンダー（出勤簿予定）に「有給」で入る
     expect((await db.query<{ kind: string }>("select kind from shifts where membership_id = $1 and day = '2031-05-10'", [id.b])).rows).toEqual([{ kind: "paid" }]);
-    // 事務員さん宛ての提出・報告は「スタッフからの通知」に集まる（事務員さん以上だけが見える）
+    // 正美さん宛ての提出・報告は「スタッフからの通知」に集まる（正美さん以上だけが見える）
     await svc.logActivity(db, id.a, "/api/paid-leave", { action: "request" });
     const box = await svc.listOfficeInbox(db, id.office);
     expect(box.items[0]).toMatchObject({ fromName: "山田", area: "有給", link: "/leave/review", done: false });

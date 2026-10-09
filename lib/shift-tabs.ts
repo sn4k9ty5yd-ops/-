@@ -1,4 +1,4 @@
-/** 「シフト」の項目の中の切りかえ（3つだけ）。「つくる」はシフト担当・店長・事務員さんだけ。データの権限はDB側でも守られている */
+/** 「シフト」の項目の中の切りかえ（3つだけ）。「つくる」はシフト担当・店長・正美さんだけ。データの権限はDB側でも守られている */
 export function shiftTabs(level: number): { href: string; label: string; show?: boolean; also?: string[] }[] {
   return [
     { href: "/shifts", label: "見る", also: ["/admin/shifts", "/admin/attendance"] },

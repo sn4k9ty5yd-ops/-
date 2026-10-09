@@ -5,7 +5,7 @@ import {
   requestLeaveChange, setLeaveWindowStatus, setMyLeaveDays, submitMyLeave,
 } from "@/lib/service";
 
-// GET ?windows=1 / ?window=ID（自分の分）/ ?review=1（店長・事務員さん）/ ?overview=ID（提出状況）
+// GET ?windows=1 / ?window=ID（自分の分）/ ?review=1（店長・正美さん）/ ?overview=ID（提出状況）
 export const GET = authed(async (userId, req) => {
   const u = new URL(req.url); const db = await getDb();
   if (u.searchParams.get("windows")) return json(await listLeaveWindows(db, userId));

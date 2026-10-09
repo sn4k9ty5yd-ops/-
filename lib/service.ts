@@ -224,7 +224,7 @@ export async function disableStaff(db: Database, userId: string, targetId: strin
   await db.query("delete from sessions where membership_id = $1", [targetId]);
 }
 
-/** レベルを変える。1〜3は事務員さん以上。4（社長・見るだけ）と5（事務員さん）に決められるのは、アプリ制作者だけ（中の数字はどちらも4。社長だけ exec_view の印をつける） */
+/** レベルを変える。1〜3は正美さん以上。4（社長・見るだけ）と5（正美さん）に決められるのは、アプリ制作者だけ（中の数字はどちらも4。社長だけ exec_view の印をつける） */
 export async function setStaffLevel(db: Database, userId: string, targetId: string, level: Level | 5): Promise<void> {
   const me = await getMe(db, userId);
   if (!me) throw new ForbiddenError();
@@ -835,7 +835,7 @@ export async function listProducts(db: Database, userId: string, kind: ProductKi
          from products p where p.kind = $1 order by p.status, p.maker, p.name, p.spec`, [kind]))).rows;
 }
 
-/** 商品をまとめて登録（Excelの貼り付け・画像の読み込みにも使う）。同じ商品がすでにあれば飛ばす。店長(Lv3)・事務員さん(Lv4)が登録できる */
+/** 商品をまとめて登録（Excelの貼り付け・画像の読み込みにも使う）。同じ商品がすでにあれば飛ばす。店長(Lv3)・正美さん(Lv4)が登録できる */
 export async function createProducts(db: Database, userId: string, kind: ProductKind, items: ProductInput[], storeIds: string[]): Promise<{ created: number; skipped: number }> {
   if (!["retail", "supply"].includes(kind)) throw new Error("種類が正しくありません");
   items.forEach(checkProduct);
@@ -848,7 +848,7 @@ export async function createProducts(db: Database, userId: string, kind: Product
   } catch (e) { if (e instanceof Error && /bad item/.test(e.message)) throw new Error("商品の内容が正しくありません"); throw new ForbiddenError(); }
 }
 
-/** このお店で使う／使わない（店長は自店、事務員さんは全店）。商品そのものは消えない */
+/** このお店で使う／使わない（店長は自店、正美さんは全店）。商品そのものは消えない */
 export async function setProductStoreUse(db: Database, userId: string, productId: string, storeId: string, on: boolean): Promise<void> {
   const me = await getMe(db, userId);
   if (!me || me.level < 3) throw new ForbiddenError();
@@ -867,7 +867,7 @@ export async function updateProduct(db: Database, userId: string, id: string, p:
   if (n === 0) throw new ForbiddenError();
 }
 
-/** 全体から消す（取扱い終了）／再開する。事務員さんだけ。商品も過去の棚卸しも消えない */
+/** 全体から消す（取扱い終了）／再開する。正美さんだけ。商品も過去の棚卸しも消えない */
 export async function setProductStatus(db: Database, userId: string, id: string, status: "active" | "discontinued"): Promise<void> {
   if (status !== "active" && status !== "discontinued") throw new Error("状態が正しくありません");
   let n = 0;
@@ -1809,7 +1809,7 @@ export async function runMorningNotices(db: Database, force = false, at?: string
 
 // ------------------------------------------------------------------ 毎日の退店時間の登録（店長・シフト担当に、お知らせ）
 let lastCloseRun = 0;
-/** 「この日の退店時間を登録した」の印を付ける（店長・シフト担当は自店、事務員さんは全店） */
+/** 「この日の退店時間を登録した」の印を付ける（店長・シフト担当は自店、正美さんは全店） */
 export async function confirmAttendanceDay(db: Database, userId: string, storeId: string, day: string): Promise<void> {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) throw new Error("日付が正しくありません");
   const me = await getMe(db, userId);
@@ -2025,7 +2025,7 @@ export async function lessonCounts(db: Database, userId: string, storeId: string
 export interface LeaveWindow { id: string; label: string; rangeStart: string; rangeEnd: string; status: "open" | "closed"; standing: boolean }
 export type LeaveStatus = "pending_manager" | "pending_office" | "approved" | "rejected" | "cancelled";
 export const LEAVE_STATUS_LABEL: Record<LeaveStatus, string> = {
-  pending_manager: "店長の確認待ち", pending_office: "事務員さんの許可待ち", approved: "許可されました", rejected: "却下されました", cancelled: "取り消しました",
+  pending_manager: "店長の確認待ち", pending_office: "正美さんの許可待ち", approved: "許可されました", rejected: "却下されました", cancelled: "取り消しました",
 };
 export interface LeaveChange {
   id: string; windowId: string; label: string; storeId: string; storeName: string; membershipId: string; name: string; fromDay: string | null; toDay: string | null;
@@ -2056,7 +2056,7 @@ export async function listLeaveWindows(db: Database, userId: string): Promise<Le
       `select id, label, range_start::text as "rangeStart", range_end::text as "rangeEnd", status, standing from leave_windows order by standing desc, created_at desc limit 12`);
   })).rows;
 }
-/** 提出の受付を開く（事務員さん＝管理者） */
+/** 提出の受付を開く（正美さん＝管理者） */
 export async function openLeaveWindow(db: Database, userId: string, w: { label: string; start: string; end: string }): Promise<string> {
   const me = await getMe(db, userId);
   if (!me || me.level < 4) throw new ForbiddenError();
@@ -2181,7 +2181,7 @@ export async function cancelLeaveChange(db: Database, userId: string, id: string
   if (!ok) throw new ForbiddenError();
 }
 
-/** 確認が必要な申請（店長=自店の「店長の確認待ち」／事務員さん=「許可待ち」と、確認待ちの店長分）と、最近の結果 */
+/** 確認が必要な申請（店長=自店の「店長の確認待ち」／正美さん=「許可待ち」と、確認待ちの店長分）と、最近の結果 */
 export async function listLeaveReview(db: Database, userId: string): Promise<{ todo: LeaveChange[]; recent: LeaveChange[] }> {
   const me = await getMe(db, userId);
   if (!me || me.level < 3) throw new ForbiddenError();
@@ -2213,7 +2213,7 @@ export interface SalesValues {
 }
 export type SalesStatus = "draft" | "submitted" | "manager_ok" | "office_ok" | "returned";
 export const SALES_STATUS_LABEL: Record<SalesStatus, string> = {
-  draft: "下書き（まだ提出していません）", submitted: "提出済み（店長の確認待ち）", manager_ok: "店長確認済み（事務員さんの確認待ち）", office_ok: "確定", returned: "差し戻し（直して、もう一度提出）",
+  draft: "下書き（まだ提出していません）", submitted: "提出済み（店長の確認待ち）", manager_ok: "店長確認済み（正美さんの確認待ち）", office_ok: "確定", returned: "差し戻し（直して、もう一度提出）",
 };
 export interface SalesRow extends SalesValues { membershipId: string; name: string; source: string | null; status: SalesStatus | null; returnComment: string | null; commission: number | null }
 export const EMPTY_SALES: SalesValues = { total: 0, free: 0, nominated: 0, retail: 0, retailCount: 0, customers: 0, newCustomers: 0, repeatCustomers: 0, kitsukeCount: 0, kitsukeSales: 0, makeupCount: 0, makeupSales: 0, spaCount: 0, spaSales: 0 };
@@ -2318,7 +2318,7 @@ export async function saveMySales(db: Database, userId: string, month: string, v
 }
 
 const jpMonth = (m: string) => `${Number(m.slice(0, 4))}年${Number(m.slice(5, 7))}月`;
-/** 提出 → 店長（いなければ事務員さん）に通知 */
+/** 提出 → 店長（いなければ正美さん）に通知 */
 export async function submitMySales(db: Database, userId: string, month: string): Promise<SalesStatus> {
   const m = monthStart(month);
   const me = await getMe(db, userId);
@@ -2331,7 +2331,7 @@ export async function submitMySales(db: Database, userId: string, month: string)
     throw new ForbiddenError();
   }
   const to = st === "manager_ok" ? await officeIds(db, me.companyId) : await managersOf(db, me.storeId, me.companyId);
-  await leaveNotify(db, me.companyId, to.filter((x) => x !== userId), `${jpMonth(m)}の売上が提出されました（${me.name} さん）`, st === "manager_ok" ? "事務員さんの確認をお願いします。" : "店長の確認をお願いします。", "/sales");
+  await leaveNotify(db, me.companyId, to.filter((x) => x !== userId), `${jpMonth(m)}の売上が提出されました（${me.name} さん）`, st === "manager_ok" ? "正美さんの確認をお願いします。" : "店長の確認をお願いします。", "/sales");
   return st;
 }
 
@@ -2350,7 +2350,7 @@ export async function reviewSales(db: Database, userId: string, memberId: string
   }
   const who = (await db.query<{ name: string; company_id: string }>("select name, company_id from memberships where id = $1", [memberId])).rows[0];
   if (who) {
-    if (st === "manager_ok") await leaveNotify(db, who.company_id, await officeIds(db, who.company_id), `${jpMonth(m)}の売上：店長が確認しました（${who.name} さん）`, "事務員さんの確定をお願いします。", "/sales");
+    if (st === "manager_ok") await leaveNotify(db, who.company_id, await officeIds(db, who.company_id), `${jpMonth(m)}の売上：店長が確認しました（${who.name} さん）`, "正美さんの確定をお願いします。", "/sales");
     else if (st === "office_ok") await leaveNotify(db, who.company_id, [memberId], `${jpMonth(m)}の売上が確定しました`, "ありがとうございました。", "/my-sales");
     else if (st === "returned") await leaveNotify(db, who.company_id, [memberId], `${jpMonth(m)}の売上が差し戻されました`, comment ? `コメント：${comment.slice(0, 80)}` : "直して、もう一度提出してください。", "/my-sales");
   }
@@ -2462,7 +2462,7 @@ let lastSalesRemind = 0;
  *  start : 月はじめ（1日）に、全員へ「期限は◯日です」
  *  before: 期限の前日、まだ出していない人へ
  *  due   : 期限の日、まだ出していない人へ
- *  late  : 期限の翌日、期限を過ぎた人へ＋店長・事務員さんへ「未提出が◯人」
+ *  late  : 期限の翌日、期限を過ぎた人へ＋店長・正美さんへ「未提出が◯人」
  */
 export async function runSalesReminders(db: Database, force = false, at?: string): Promise<number> {
   if (!force && Date.now() - lastSalesRemind < 120_000) return 0;
@@ -2602,7 +2602,7 @@ export async function exportRecords(db: Database, userId: string, o: RecordsOpti
       out.leavePlans = (await q.query(`select w.label as "回", s.name as "店舗", m.name as "氏名", p.day::text as "有給の日" from leave_plans p join leave_windows w on w.id = p.window_id join memberships m on m.id = p.membership_id join stores s on s.id = p.store_id
         where p.day between $1 and $2 and ($3::uuid[] is null or m.id = any($3)) order by p.day, s.sort_order, m.employee_code`, [ranges.leave.from, ranges.leave.to, sel])).rows;
       out.leaveChanges = (await q.query(`select to_char(c.created_at at time zone 'Asia/Tokyo', 'YYYY-MM-DD') as "申請日", w.label as "回", s.name as "店舗", m.name as "氏名", c.from_day::text as "変更前", c.to_day::text as "変更後", c.reason as "理由",
-        case c.status when 'approved' then '許可' when 'rejected' then '却下' when 'cancelled' then '取り消し' when 'pending_manager' then '店長確認待ち' else '事務員確認待ち' end as "結果", mm.name as "店長", om.name as "事務員"
+        case c.status when 'approved' then '許可' when 'rejected' then '却下' when 'cancelled' then '取り消し' when 'pending_manager' then '店長確認待ち' else '正美さん確認待ち' end as "結果", mm.name as "店長", om.name as "正美さん"
         from leave_changes c join leave_windows w on w.id = c.window_id join memberships m on m.id = c.membership_id join stores s on s.id = c.store_id left join memberships mm on mm.id = c.manager_id left join memberships om on om.id = c.office_id
         where c.created_at::date between $1 and $2 and ($3::uuid[] is null or m.id = any($3)) order by c.created_at`, [ranges.leave.from, ranges.leave.to, sel])).rows;
     }
@@ -2671,7 +2671,7 @@ export async function getCheckData(db: Database, userId: string, traineeId?: str
       `select id, grade, name, memo, max_points as "maxPoints", pass_points as "passPoints", max_attempts as "maxAttempts", sort_order as "sortOrder", active from check_sheets order by sort_order, name`)).rows;
     const itemRows = (await q.query<CheckItem & { sheetId: string }>(`select id, sheet_id as "sheetId", name, sort_order as "sortOrder", active from check_items order by sort_order`)).rows;
     const sheets: CheckSheet[] = sheetRows.map((s) => ({ ...s, items: itemRows.filter((i) => i.sheetId === s.id).map(({ sheetId: _s, ...i }) => i) }));
-    // 採点できる人は、お店のスタッフの一覧（見えるのは、自店・事務員さんは全店）
+    // 採点できる人は、お店のスタッフの一覧（見えるのは、自店・正美さんは全店）
     const canEditSheets = (await q.query<{ ok: boolean }>("select app.can_edit_checks() as ok")).rows[0].ok;
     const staff = (await q.query<CheckTrainee & { canAssess: boolean }>(
       `select m.id, m.name, m.rank, m.store_id as "storeId", s.name as "storeName", app.can_assess(m.store_id) as "canAssess"
@@ -2724,7 +2724,7 @@ export async function deleteCheckAttempt(db: Database, userId: string, attemptId
   try { await asUser(db, userId, (q) => q.query("select public.check_attempt_delete($1)", [attemptId])); } catch { throw new ForbiddenError(); }
 }
 
-/** 表を直す・足す（事務員さん・教育担当）。items の並びが、そのまま順番 */
+/** 表を直す・足す（正美さん・教育担当）。items の並びが、そのまま順番 */
 export async function saveCheckSheet(db: Database, userId: string, input: { id?: string; grade: string; name: string; memo: string; maxPoints?: number; passPoints: number; maxAttempts: number; active: boolean; items: { id?: string; name: string }[] }): Promise<string> {
   input = { ...input, maxPoints: input.items.filter((i) => i.name.trim()).length * 5 };   // 満点は、項目の数×5（採点の点数の合計）
   try {
@@ -2782,7 +2782,7 @@ export async function cancelStockEntry(db: Database, userId: string, kind: "test
   try { await asUser(db, userId, (q) => q.query("select public.stock_entry_cancel($1,$2)", [kind, id])); } catch { throw new ForbiddenError(); }
 }
 
-/** 異動（お店を変える）。事務員さんだけ。過去の記録（シフト・出勤簿など）は、もとのお店のまま残る */
+/** 異動（お店を変える）。正美さんだけ。過去の記録（シフト・出勤簿など）は、もとのお店のまま残る */
 export async function moveStaff(db: Database, userId: string, targetId: string, storeId: string): Promise<void> {
   const me = await getMe(db, userId);
   if (!me || me.level < 4) throw new ForbiddenError();
@@ -2869,7 +2869,7 @@ export async function runMeetingAi(db: Database, userId: string, input: { id: st
   await loadAiKey(db);
   const g = await getMeeting(db, userId, input.id);
   if (!g) throw new ForbiddenError();
-  if (!g.canEdit) throw new ForbiddenError("会議を直せるのは、店長と事務員さんです");
+  if (!g.canEdit) throw new ForbiddenError("会議を直せるのは、店長と正美さんです");
   const m = g.meeting;
   const source = (m.minutes.trim() || m.transcript.trim());
   aiThrottle(userId);
@@ -2922,7 +2922,7 @@ export async function saveMeetingAiResult(db: Database, userId: string, input: {
 // ---------------------------------------------------------------- 変更の記録（アプリ制作者だけが見られる）
 export interface ActivityRow { id: number; userId: string | null; userName: string; userLevel: string; storeName: string | null; area: string; what: string; at: string }
 let lastActivityPurge = 0;
-/** 書き込みの操作を1行残す。事務員さんへの提出・報告にあたるときは、アプリ制作者にも通知する（制作者本人の操作は残さない） */
+/** 書き込みの操作を1行残す。正美さんへの提出・報告にあたるときは、アプリ制作者にも通知する（制作者本人の操作は残さない） */
 export async function logActivity(db: Database, userId: string, path: string, body: Record<string, unknown> | null): Promise<void> {
   if (NOT_LOGGED.test(path)) return;
   const u = (await db.query<{ company_id: string; name: string; level: number; app_owner: boolean; exec_view: boolean; store_name: string; store_id: string }>(
@@ -2945,8 +2945,8 @@ export async function logActivity(db: Database, userId: string, path: string, bo
   if (isOfficeReport(path, body)) {
     const owners = (await db.query<{ id: string }>("select id from memberships where company_id = $1 and app_owner and status = 'active'", [u.company_id])).rows.map((r) => r.id);
     const title = `${u.name}さん（${storeName ?? ""}）が「${area}」を${what}しました`;
-    for (const o of owners) await db.query("insert into notifications (company_id, user_id, kind, title, body, link) values ($1,$2,'audit',$3,$4,'/admin/activity')", [u.company_id, o, title, "事務員さんへの提出・報告です。「変更の記録」で確認できます。"]);
-    await pushToUsers(db, owners, { title, body: "事務員さんへの提出・報告です", url: "/admin/activity", tag: "audit" }).catch(() => 0);
+    for (const o of owners) await db.query("insert into notifications (company_id, user_id, kind, title, body, link) values ($1,$2,'audit',$3,$4,'/admin/activity')", [u.company_id, o, title, "正美さんへの提出・報告です。「変更の記録」で確認できます。"]);
+    await pushToUsers(db, owners, { title, body: "正美さんへの提出・報告です", url: "/admin/activity", tag: "audit" }).catch(() => 0);
   }
 }
 
@@ -3077,7 +3077,7 @@ export async function saveInterview(db: Database, userId: string, id: string, pa
   if (n === 0) throw new ForbiddenError("提出ずみの面談シートは、直せません");
 }
 
-/** 店長に提出する（提出すると、書いた人は直せない）。店長にお知らせ。店長がいないときは、だれにも送らない（事務員さん・社長には届けない） */
+/** 店長に提出する（提出すると、書いた人は直せない）。店長にお知らせ。店長がいないときは、だれにも送らない（正美さん・社長には届けない） */
 export async function submitInterview(db: Database, userId: string, id: string): Promise<{ notified: number }> {
   const me = await getMe(db, userId);
   if (!me) throw new ForbiddenError();
@@ -3210,7 +3210,7 @@ export async function askAssistant(db: Database, userId: string, input: { questi
   }
 }
 
-// ------------------------------------------------------------------ スタッフからの通知（事務員さん以上）
+// ------------------------------------------------------------------ スタッフからの通知（正美さん以上）
 export interface OfficeInboxRow { id: number; fromName: string; storeName: string | null; area: string; title: string; link: string; at: string; done: boolean; doneBy: string | null }
 export async function listOfficeInbox(db: Database, userId: string): Promise<{ items: OfficeInboxRow[]; open: number }> {
   const me = await getMe(db, userId);
@@ -3294,7 +3294,7 @@ export function parsePastStocktakeAll(text: string): { rows: (PastStocktakeRow &
 /** メーカー名の表記ゆれをそろえる（ユーザー指示: ウェラ→ウエラ） */
 const normMaker = (m: string) => m.replace(/ウェラ/g, "ウエラ");
 const normStore = (v: string) => v.normalize("NFKC").toLowerCase().replace(/\s+/g, "");
-/** 全店の昨年データを、お店×店販/業務ごとに取り込む（事務員さんだけ）。お店の名前は、少し違っていても（ATENA→ATENA天神、organ→Organ）合わせる */
+/** 全店の昨年データを、お店×店販/業務ごとに取り込む（正美さんだけ）。お店の名前は、少し違っていても（ATENA→ATENA天神、organ→Organ）合わせる */
 export async function importPastStocktakeAll(db: Database, userId: string, takenOn: string, text: string): Promise<{ groups: { store: string; kind: ProductKind; lines: number; total: number; error?: string }[]; bad: number; badLines: string[] }> {
   const me = await getMe(db, userId);
   if (!me || me.level < 4) throw new ForbiddenError();
@@ -3316,7 +3316,7 @@ export async function importPastStocktakeAll(db: Database, userId: string, taken
   }
   return { groups: out, bad: bad.length, badLines: bad.slice(0, 20).map((b) => `${b.line}行目：${b.reason}　${b.text.slice(0, 60)}`) };
 }
-/** 昨年の棚卸し（店×種類×日）を取り込む。商品がなければ登録し、確認ずみの棚卸しとして残す（事務員さんだけ）。今年の棚卸しは、この数量から始まる */
+/** 昨年の棚卸し（店×種類×日）を取り込む。商品がなければ登録し、確認ずみの棚卸しとして残す（正美さんだけ）。今年の棚卸しは、この数量から始まる */
 export async function importPastStocktake(db: Database, userId: string, storeId: string, kind: ProductKind, takenOn: string, text: string): Promise<{ lines: number; created: number; bad: number; total: number }> {
   const me = await getMe(db, userId);
   if (!me || me.level < 4) throw new ForbiddenError();
@@ -3462,7 +3462,7 @@ export async function submitCommute(db: Database, userId: string, month: string,
     if (m.includes("bad month")) throw new Error("出せるのは、今月と先月ぶんだけです");
     throw new ForbiddenError();
   }
-  // 事務員さん以上にお知らせ
+  // 正美さん以上にお知らせ
   const title = `定期券の提出：${me.name}さん`;
   const people = (await db.query<{ id: string }>("select id from memberships where company_id = $1 and level = 4 and status = 'active' and not display_only", [me.companyId])).rows.map((r) => r.id);
   for (const uid of people) await db.query("insert into notifications (company_id, user_id, kind, title, body, link) values ($1,$2,'commute',$3,$4,'/commute')", [me.companyId, uid, title, `${Number(month.slice(5))}月ぶん（${months}ヶ月定期）が届きました。確認してください。`]);

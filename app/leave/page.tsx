@@ -62,7 +62,7 @@ function Page() {
   };
   const sendReq = async () => {
     if (!req || !win) return;
-    try { await api("/api/paid-leave", { action: "request", windowId: wid, from: req.from, to: req.to || null, reason: req.reason }); setReq(null); setOk("申請しました。店長の確認 → 事務員さんの許可の順に進みます"); await load(); }
+    try { await api("/api/paid-leave", { action: "request", windowId: wid, from: req.from, to: req.to || null, reason: req.reason }); setReq(null); setOk("申請しました。店長の確認 → 正美さんの許可の順に進みます"); await load(); }
     catch (e) { setMsg((e as Error).message); }
   };
   const cancel = async (c: LeaveChange) => { try { await api("/api/paid-leave", { action: "cancel", id: c.id }); await load(); } catch (e) { setMsg((e as Error).message); } };
@@ -78,7 +78,7 @@ function Page() {
       <h1>シフト</h1>
       <SubTabs items={shiftTabs(me.level)} />
       <SubTabs items={[{ href: "/requests", label: "希望休" }, { href: "/leave", label: "有給申請" }]} />
-      <p className="hint">ここは「出す」画面です。有給を取りたいときは、いつでも申請できます（店長が確認 → 事務員さんが許可）。</p>
+      <p className="hint">ここは「出す」画面です。有給を取りたいときは、いつでも申請できます（店長が確認 → 正美さんが許可）。</p>
       {(me.level >= 3) && <Link href="/leave/review" className="storelink" style={{ display: "inline-block", marginBottom: 12 }}>{me.level === 4 ? "確認・許可・提出状況・受付の管理へ" : "確認・提出状況へ"}</Link>}
       {msg && <p className="err">{msg}</p>}{ok && <p className="sub" style={{ color: "var(--ok)" }}>✅ {ok}</p>}
       {wins.length > 1 && (
@@ -105,7 +105,7 @@ function Page() {
         <>
           <div className="card">
             <b>{win.standing ? "あなたの有給の日（許可されたもの）" : `${win.label}：あなたの有給の日`}（{dayList.length}日）</b>
-            <p className="sub">{win.standing ? "取りたい日は、いつでも「＋ 有給を申請する」から申請できます。" : "提出は締め切られました。日を変えたいときは、「変更を申請」を押します。"}<b>店長が確認 → 事務員さんが許可</b>すると、決まります。</p>
+            <p className="sub">{win.standing ? "取りたい日は、いつでも「＋ 有給を申請する」から申請できます。" : "提出は締め切られました。日を変えたいときは、「変更を申請」を押します。"}<b>店長が確認 → 正美さんが許可</b>すると、決まります。</p>
             {dayList.length === 0 && <p className="hint">{win.standing ? "まだ、許可された有給の日はありません。" : "この回では、有給の日を出していません。「追加を申請」から申請できます。"}</p>}
             {dayList.map((d) => (
               <div key={d} className="toolbar" style={{ justifyContent: "space-between", margin: "6px 0" }}>
@@ -122,7 +122,7 @@ function Page() {
               <div>
                 <b>{c.fromDay && c.toDay ? `${md(c.fromDay)} → ${md(c.toDay)} に変更` : c.fromDay ? `${md(c.fromDay)} をやめる` : `${md(c.toDay as string)} を追加`}</b>
                 <span className="chip" style={{ color: statusColor[c.status] }}>{LEAVE_STATUS_LABEL[c.status]}</span>
-                <div className="sub">{[c.reason && `理由：${c.reason}`, c.managerName && `店長 ${c.managerName}${c.managerComment ? `「${c.managerComment}」` : ""}`, c.officeName && `事務員 ${c.officeName}${c.officeComment ? `「${c.officeComment}」` : ""}`].filter(Boolean).join("　")}</div>
+                <div className="sub">{[c.reason && `理由：${c.reason}`, c.managerName && `店長 ${c.managerName}${c.managerComment ? `「${c.managerComment}」` : ""}`, c.officeName && `正美さん ${c.officeName}${c.officeComment ? `「${c.officeComment}」` : ""}`].filter(Boolean).join("　")}</div>
               </div>
               {c.status.startsWith("pending") && <button className="ghost" onClick={() => cancel(c)}>取り消す</button>}
             </li>))}</ul>
@@ -136,7 +136,7 @@ function Page() {
             <label>{req.from ? "変えたい先の日（やめるだけなら、空のまま）" : "追加したい日"}
               <input type="date" min={win.standing ? undefined : win.rangeStart} max={win.standing ? undefined : win.rangeEnd} value={req.to} onChange={(e) => setReq({ ...req, to: e.target.value })} /></label>
             <label>理由（なくてもOK）<input value={req.reason} onChange={(e) => setReq({ ...req, reason: e.target.value })} placeholder="例: 家族の予定のため" /></label>
-            <p className="sub">申請は、まず店長が確認し、そのあと事務員さんが許可します。結果は、通知とお知らせで届きます。</p>
+            <p className="sub">申請は、まず店長が確認し、そのあと正美さんが許可します。結果は、通知とお知らせで届きます。</p>
             {msg && <p className="err">{msg}</p>}
             <div className="toolbar"><button onClick={sendReq} disabled={!req.from && !req.to}>申請する</button><button className="ghost" onClick={() => setReq(null)}>やめる</button></div>
           </div>

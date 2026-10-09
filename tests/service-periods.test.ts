@@ -173,7 +173,7 @@ describe("商品の追加・このお店で使わない・全体から消す", (
       (u[k] = (await d.query<{ id: string }>("insert into memberships (company_id, store_id, employee_code, name, level) values ($1,$2,$3,$4,$5) returning id", [co, s, code, k, level])).rows[0].id);
     await mk("office", "1", 4, sid.a); await mk("mgrA", "2", 3, sid.a); await mk("mgrB", "3", 3, sid.b); await mk("maker", "4", 2, sid.a);
   });
-  it("追加はだれでもできる（自分のお店だけ。事務員さんと店長は選んだお店）。追加した商品は、えらんだお店の一覧に入る。同じ商品は飛ばす", async () => {
+  it("追加はだれでもできる（自分のお店だけ。正美さんと店長は選んだお店）。追加した商品は、えらんだお店の一覧に入る。同じ商品は飛ばす", async () => {
     await expect(svc.createProducts(d, u.maker, "retail", [{ name: "シャンプー", costPrice: 1000 }], [sid.b])).rejects.toThrow(svc.ForbiddenError);   // 他店には入れられない
     expect(await svc.createProducts(d, u.maker, "supply", [{ name: "自分のお店の材料", costPrice: 100 }], [sid.a])).toEqual({ created: 1, skipped: 0 });
     const r = await svc.createProducts(d, u.mgrA, "retail", [{ maker: "ミルボン", name: "シャンプー", spec: "500ml", costPrice: 1200 }, { name: "トリートメント", costPrice: 900 }], [sid.a, sid.b]);
@@ -184,7 +184,7 @@ describe("商品の追加・このお店で使わない・全体から消す", (
     expect(list.every((p) => p.storeIds.length === 2)).toBe(true);
     await expect(svc.createProducts(d, u.mgrA, "retail", [{ name: "x", costPrice: 1 }], [])).rejects.toThrow();
   });
-  it("このお店で使わない: 店長は自店だけ。事務員さんは全店。商品は消えない。また使うで戻せる", async () => {
+  it("このお店で使わない: 店長は自店だけ。正美さんは全店。商品は消えない。また使うで戻せる", async () => {
     const p = (await svc.listProducts(d, u.office, "retail")).find((x) => x.name === "シャンプー")!;
     await expect(svc.setProductStoreUse(d, u.mgrA, p.id, sid.b, false)).rejects.toThrow(svc.ForbiddenError);   // 他店は不可
     await expect(svc.setProductStoreUse(d, u.maker, p.id, sid.a, false)).rejects.toThrow(svc.ForbiddenError);  // シフト担当は不可
@@ -195,9 +195,9 @@ describe("商品の追加・このお店で使わない・全体から消す", (
     await svc.setProductStoreUse(d, u.mgrA, p.id, sid.a, true);
     now = (await svc.listProducts(d, u.office, "retail")).find((x) => x.id === p.id)!;
     expect(now.storeIds.sort()).toEqual([sid.a, sid.b].sort());
-    await svc.setProductStoreUse(d, u.office, p.id, sid.b, false);   // 事務員さんは他店もできる
+    await svc.setProductStoreUse(d, u.office, p.id, sid.b, false);   // 正美さんは他店もできる
   });
-  it("全体から消す（取扱い終了）・再開は、事務員さんだけ", async () => {
+  it("全体から消す（取扱い終了）・再開は、正美さんだけ", async () => {
     const p = (await svc.listProducts(d, u.office, "retail")).find((x) => x.name === "トリートメント")!;
     await expect(svc.setProductStatus(d, u.mgrA, p.id, "discontinued")).rejects.toThrow(svc.ForbiddenError);
     await svc.setProductStatus(d, u.office, p.id, "discontinued");
@@ -218,7 +218,7 @@ describe("レッスンチェック表（採点）", () => {
     await mk("office", "1", 4, sid.a, "app_owner = true"); await mk("mgrA", "2", 3, sid.a); await mk("edu", "3", 1, sid.a, "edu_lead = true"); await mk("evalr", "4", 1, sid.a, "can_evaluate = true");
     await mk("traineeA", "5", 1, sid.a, "rank = 'assistant'"); await mk("plainA", "6", 1, sid.a); await mk("styA", "9", 1, sid.a, "rank = 'stylist'"); await mk("traineeB", "7", 1, sid.b, "rank = 'assistant'"); await mk("mgrB", "8", 3, sid.b);
   });
-  it("表を直せるのは、事務員さんと教育担当だけ。店長でも不可", async () => {
+  it("表を直せるのは、正美さんと教育担当だけ。店長でも不可", async () => {
     const input = { grade: "1年目", name: "シャンプー", memo: "", maxPoints: 15, passPoints: 12, maxAttempts: 10, active: true, items: [{ name: "声掛け" }, { name: "力加減" }, { name: "すすぎ" }] };
     await expect(svc.saveCheckSheet(d, u.mgrA, input)).rejects.toThrow(svc.ForbiddenError);
     await expect(svc.saveCheckSheet(d, u.plainA, input)).rejects.toThrow(svc.ForbiddenError);
@@ -232,7 +232,7 @@ describe("レッスンチェック表（採点）", () => {
     expect(data.sheets[0]).toMatchObject({ memo: "メモ", passPoints: 12 });
     await expect(svc.saveCheckSheet(d, u.office, { ...input, passPoints: 99 })).rejects.toThrow();   // 合格点が満点より大きい
   });
-  it("採点できるのは、自店の店長・教育担当・技術評価をつけられる人・スタイリストと事務員さん。本人・ふつうのスタッフ・他店は不可", async () => {
+  it("採点できるのは、自店の店長・教育担当・技術評価をつけられる人・スタイリストと正美さん。本人・ふつうのスタッフ・他店は不可", async () => {
     const sc = (a: number, b: number, c: number) => [{ itemId: items[0], score: a }, { itemId: items[1], score: b }, { itemId: items[2], score: c }];
     const base = { sheetId, traineeId: u.traineeA, attemptNo: 1, time: "4:30", comment: "よい", scores: sc(5, 4, 4) };
     await expect(svc.saveCheckAttempt(d, u.plainA, base)).rejects.toThrow(svc.ForbiddenError);
@@ -265,7 +265,7 @@ describe("レッスンチェック表（採点）", () => {
     expect(mine.canAssess).toBe(false);
     expect((await svc.getCheckData(d, u.mgrA, u.traineeA)).canAssess).toBe(true);
     expect((await svc.getCheckData(d, u.mgrA, u.traineeA)).trainees.map((t) => t.name)).not.toContain("traineeB");   // 自店だけ
-    expect((await svc.getCheckData(d, u.office, u.traineeB)).trainee).toBeNull();                                       // 事務員さんも、えらべるのは自分の店舗のアシスタントだけ
+    expect((await svc.getCheckData(d, u.office, u.traineeB)).trainee).toBeNull();                                       // 正美さんも、えらべるのは自分の店舗のアシスタントだけ
     expect((await svc.getCheckData(d, u.office, u.traineeA)).trainee?.id).toBe(u.traineeA);
     expect((await svc.getCheckData(d, u.mgrB, u.traineeA)).trainee).toBeNull();                                         // 他店は見えない
     expect((await svc.getCheckData(d, u.plainA, u.traineeA)).trainee).toBeNull();                                       // ふつうのスタッフは、人のを見られない

@@ -13,7 +13,7 @@ describe("変更の記録の言葉づかい・提出の判定・レベルの表�
     expect(describeActivity("/api/staff/abc/passcode", null)).toEqual({ area: "スタッフ管理", what: "パスコードを再発行" });
     expect(describeActivity("/api/staff", null)).toEqual({ area: "スタッフ管理", what: "登録" });
   });
-  it("事務員さんへの提出・報告だけを見つける", () => {
+  it("正美さんへの提出・報告だけを見つける", () => {
     expect(isOfficeReport("/api/periods", { status: "submitted" })).toBe(true);
     expect(isOfficeReport("/api/periods", { status: "confirmed" })).toBe(false);
     expect(isOfficeReport("/api/attendance", { action: "status", status: "submitted" })).toBe(true);
@@ -51,7 +51,7 @@ describe("記録と通知", () => {
     expect(r.rows[0]).toMatchObject({ userName: "mgr", userLevel: "レベル3", area: "出勤簿", what: "保存", storeName: "A店" });
     await expect(svc.listActivity(d, u.office)).rejects.toThrow(svc.ForbiddenError);
   });
-  it("事務員さんへの提出があったら、制作者にも通知が届く", async () => {
+  it("正美さんへの提出があったら、制作者にも通知が届く", async () => {
     await svc.logActivity(d, u.mgr, "/api/attendance", { action: "status", status: "submitted" });
     const n = await svc.listNotifications(d, u.owner);
     expect(n.items.some((x) => x.title.includes("出勤簿") && x.title.includes("提出"))).toBe(true);

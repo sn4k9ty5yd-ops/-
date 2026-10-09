@@ -62,7 +62,7 @@ describe("メンターの会話は本人だけ。面談シートは、書いた�
     expect(g.messages.map((m) => m.role)).toEqual(["user", "assistant", "user", "assistant"]);
     expect(g.mbti).toBe("ENFP");
   });
-  it("ほかの人は、だれも読めない（アプリ制作者・事務員さん・社長・店長も）", async () => {
+  it("ほかの人は、だれも読めない（アプリ制作者・正美さん・社長・店長も）", async () => {
     for (const k of ["owner", "office", "boss", "mgrA", "mgrB", "mentor", "other"]) {
       const n = (await asUser(d, u[k], (q) => q.query("select 1 from mentor_messages"))).rows.length;
       expect(n, k).toBe(0);
@@ -93,7 +93,7 @@ describe("メンターの会話は本人だけ。面談シートは、書いた�
     await expect(svc.saveInterview(d, u.mentor, iv, { memo: "あとから直す" })).rejects.toThrow(svc.ForbiddenError);
     await expect(svc.submitInterview(d, u.mentor, iv)).rejects.toThrow(svc.ForbiddenError);
   });
-  it("読めるのは、書いた人と、そのお店の店長だけ（他店の店長・事務員さん・社長・制作者も読めない）", async () => {
+  it("読めるのは、書いた人と、そのお店の店長だけ（他店の店長・正美さん・社長・制作者も読めない）", async () => {
     expect((await svc.listInterviews(d, u.mentor)).rows).toHaveLength(1);
     expect((await svc.listInterviews(d, u.mgrA)).rows).toHaveLength(1);
     for (const k of ["mgrB", "office", "boss", "owner", "kid", "other"]) expect((await svc.listInterviews(d, u[k])).rows, k).toHaveLength(0);

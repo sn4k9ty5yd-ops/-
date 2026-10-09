@@ -30,7 +30,7 @@ describe("AIのカギ（アプリ制作者だけ）", () => {
     expect(JSON.stringify(s)).not.toContain("DUMMYDUMMY");
     expect(aiStatus().provider).toBe("gemini");
   });
-  it("制作者以外（事務員さんも）は、見る・入れる・ためす・消すが、できない。DBも見せない", async () => {
+  it("制作者以外（正美さんも）は、見る・入れる・ためす・消すが、できない。DBも見せない", async () => {
     await expect(svc.getAiSettings(d, u.office)).rejects.toThrow(svc.ForbiddenError);
     await expect(svc.setAiKey(d, u.office, KEY)).rejects.toThrow(svc.ForbiddenError);
     await expect(svc.testAiKey(d, u.office)).rejects.toThrow(svc.ForbiddenError);
