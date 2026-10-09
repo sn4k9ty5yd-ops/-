@@ -44,7 +44,7 @@ function Page() {
   const [req, setReq] = useState<{ from: string | null; to: string; reason: string } | null>(null);
 
   const win = wins.find((w) => w.id === wid);
-  const loadWins = useCallback(async () => { const w = await api<LeaveWindow[]>("/api/paid-leave?windows=1"); setWins(w); setWid((cur) => cur || w.find((x) => x.status === "open")?.id || w[0]?.id || ""); }, []);
+  const loadWins = useCallback(async () => { const w = await api<LeaveWindow[]>("/api/paid-leave?windows=1"); setWins(w); setWid((cur) => cur || w.find((x) => x.status === "open" && !x.standing)?.id || w.find((x) => x.standing)?.id || w[0]?.id || ""); }, []);
   useEffect(() => { loadWins().catch((e) => setMsg((e as Error).message)); }, [loadWins]);
   const load = useCallback(async () => { if (!wid) return; try { const d = await api<{ days: string[]; submitted: boolean; changes: LeaveChange[] }>(`/api/paid-leave?window=${wid}`); setData(d); setMsg(""); } catch (e) { setMsg((e as Error).message); } }, [wid]);
   useEffect(() => { load(); }, [load]);
@@ -69,7 +69,7 @@ function Page() {
   const months = useMemo(() => (win ? monthsOf(win.rangeStart, win.rangeEnd) : []), [win]);
 
   if (me.displayOnly) return <main className="wide"><Link href="/home" className="back">← ホーム</Link><h1>有給の申請</h1><p className="hint">このアカウントは、見るだけです。</p></main>;
-  const dayList = (data?.days ?? []).sort();
+  const dayList = (data?.days ?? []).filter((d) => !win?.standing || d >= new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10)).sort();
   const pendingKeys = new Set((data?.changes ?? []).filter((c) => c.status.startsWith("pending")).map((c) => c.fromDay));
 
   return (
@@ -77,13 +77,12 @@ function Page() {
       <Link href="/home" className="back">← ホーム</Link>
       <h1>シフト</h1>
       <SubTabs items={shiftTabs(me.level)} />
-      <SubTabs items={[{ href: "/requests", label: "希望休" }, { href: "/leave", label: "有給（年2回の提出・変更）" }]} />
-      <p className="hint">ここは「出す」画面です。年に2回、有給を取りたい日を出します。</p>
+      <SubTabs items={[{ href: "/requests", label: "希望休" }, { href: "/leave", label: "有給申請" }]} />
+      <p className="hint">ここは「出す」画面です。有給を取りたいときは、いつでも申請できます（店長が確認 → 事務員さんが許可）。</p>
       {(me.level >= 3) && <Link href="/leave/review" className="storelink" style={{ display: "inline-block", marginBottom: 12 }}>{me.level === 4 ? "確認・許可・提出状況・受付の管理へ" : "確認・提出状況へ"}</Link>}
       {msg && <p className="err">{msg}</p>}{ok && <p className="sub" style={{ color: "var(--ok)" }}>✅ {ok}</p>}
-      {wins.length === 0 && <p className="hint">いまは、有給の提出を受け付けていません。事務員さんが受付を始めると、お知らせが届きます。</p>}
-      {wins.length > 0 && (
-        <div className="toolbar"><select aria-label="提出の回" value={wid} onChange={(e) => { setWid(e.target.value); setDraft(null); }}>{wins.map((w) => <option key={w.id} value={w.id}>{w.label}（{w.status === "open" ? "受付中" : "締切"}）</option>)}</select></div>
+      {wins.length > 1 && (
+        <div className="toolbar"><select aria-label="提出の回" value={wid} onChange={(e) => { setWid(e.target.value); setDraft(null); }}>{wins.map((w) => <option key={w.id} value={w.id}>{w.standing ? w.label : `${w.label}（${w.status === "open" ? "受付中" : "締切"}）`}</option>)}</select></div>
       )}
 
       {win && open && (
@@ -105,16 +104,16 @@ function Page() {
       {win && !open && (
         <>
           <div className="card">
-            <b>{win.label}：あなたの有給の日（{dayList.length}日）</b>
-            <p className="sub">提出は締め切られました。日を変えたいときは、「変更を申請」を押します。<b>店長が確認 → 事務員さんが許可</b>すると、変わります。</p>
-            {dayList.length === 0 && <p className="hint">この回では、有給の日を出していません。「追加を申請」から申請できます。</p>}
+            <b>{win.standing ? "あなたの有給の日（許可されたもの）" : `${win.label}：あなたの有給の日`}（{dayList.length}日）</b>
+            <p className="sub">{win.standing ? "取りたい日は、いつでも「＋ 有給を申請する」から申請できます。" : "提出は締め切られました。日を変えたいときは、「変更を申請」を押します。"}<b>店長が確認 → 事務員さんが許可</b>すると、決まります。</p>
+            {dayList.length === 0 && <p className="hint">{win.standing ? "まだ、許可された有給の日はありません。" : "この回では、有給の日を出していません。「追加を申請」から申請できます。"}</p>}
             {dayList.map((d) => (
               <div key={d} className="toolbar" style={{ justifyContent: "space-between", margin: "6px 0" }}>
                 <span><b>{md(d)}（{WEEKDAYS[dow(d)]}）</b>{pendingKeys.has(d) && <span className="chip warn">申請中</span>}</span>
                 <button className="ghost" disabled={pendingKeys.has(d)} onClick={() => { setMsg(""); setReq({ from: d, to: "", reason: "" }); }}>変更を申請</button>
               </div>
             ))}
-            <button className="ghost" onClick={() => { setMsg(""); setReq({ from: null, to: "", reason: "" }); }}>＋ 追加を申請</button>
+            <button className="ghost" onClick={() => { setMsg(""); setReq({ from: null, to: "", reason: "" }); }}>{win.standing ? "＋ 有給を申請する" : "＋ 追加を申請"}</button>
           </div>
           <h2>これまでの申請</h2>
           {(data?.changes ?? []).length === 0 && <p className="hint">まだ申請はありません。</p>}
@@ -135,7 +134,7 @@ function Page() {
           <div className="sheet" onClick={(e) => e.stopPropagation()} role="dialog" aria-label="有給の変更を申請">
             <h3>{req.from ? `${md(req.from)} の有給を変更` : "有給の日を追加"}</h3>
             <label>{req.from ? "変えたい先の日（やめるだけなら、空のまま）" : "追加したい日"}
-              <input type="date" min={win.rangeStart} max={win.rangeEnd} value={req.to} onChange={(e) => setReq({ ...req, to: e.target.value })} /></label>
+              <input type="date" min={win.standing ? undefined : win.rangeStart} max={win.standing ? undefined : win.rangeEnd} value={req.to} onChange={(e) => setReq({ ...req, to: e.target.value })} /></label>
             <label>理由（なくてもOK）<input value={req.reason} onChange={(e) => setReq({ ...req, reason: e.target.value })} placeholder="例: 家族の予定のため" /></label>
             <p className="sub">申請は、まず店長が確認し、そのあと事務員さんが許可します。結果は、通知とお知らせで届きます。</p>
             {msg && <p className="err">{msg}</p>}

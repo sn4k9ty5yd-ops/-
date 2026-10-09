@@ -1952,7 +1952,7 @@ export async function lessonCounts(db: Database, userId: string, storeId: string
 
 
 // ------------------------------------------------------------------ 有給の年2回の提出と、変更の申請
-export interface LeaveWindow { id: string; label: string; rangeStart: string; rangeEnd: string; status: "open" | "closed" }
+export interface LeaveWindow { id: string; label: string; rangeStart: string; rangeEnd: string; status: "open" | "closed"; standing: boolean }
 export type LeaveStatus = "pending_manager" | "pending_office" | "approved" | "rejected" | "cancelled";
 export const LEAVE_STATUS_LABEL: Record<LeaveStatus, string> = {
   pending_manager: "店長の確認待ち", pending_office: "事務員さんの許可待ち", approved: "許可されました", rejected: "却下されました", cancelled: "取り消しました",
@@ -1970,7 +1970,7 @@ const CHANGE_SQL = `select c.id, c.window_id as "windowId", w.label, c.store_id 
 function mapLeaveError(e: unknown): never {
   const m = (e as Error).message ?? "";
   const map: [RegExp, string][] = [
-    [/window open/, "受付中のあいだは、画面の「有給の日」を直接直せます（申請は、締切のあとに使います）"],
+    [/window open/, "この回は受付中なので、画面の「有給の日」を直接直せます。いつでもの申請は「有給申請」の回で出します"],
     [/no such plan/, "その日は、あなたの有給の日にありません"], [/out of range/, "その日は、有給を取れる範囲の外です"],
     [/already planned/, "その日は、すでに有給の日です"], [/duplicate/, "同じ内容の申請が、すでに出ています"], [/already decided/, "この申請は、すでに結果が出ています"],
     [/own request/, "自分の申請は、自分では許可できません"], [/empty/, "変更の内容を入れてください"],
@@ -1980,8 +1980,11 @@ function mapLeaveError(e: unknown): never {
 }
 
 export async function listLeaveWindows(db: Database, userId: string): Promise<LeaveWindow[]> {
-  return (await asUser(db, userId, (q) => q.query<LeaveWindow>(
-    `select id, label, range_start::text as "rangeStart", range_end::text as "rangeEnd", status from leave_windows order by created_at desc limit 12`))).rows;
+  return (await asUser(db, userId, async (q) => {
+    await q.query("select public.leave_standing()").catch(() => null);      // いつでも申請できる「常時の受付」を用意
+    return q.query<LeaveWindow>(
+      `select id, label, range_start::text as "rangeStart", range_end::text as "rangeEnd", status, standing from leave_windows order by standing desc, created_at desc limit 12`);
+  })).rows;
 }
 /** 提出の受付を開く（事務員さん＝管理者） */
 export async function openLeaveWindow(db: Database, userId: string, w: { label: string; start: string; end: string }): Promise<string> {

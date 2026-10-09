@@ -25,7 +25,7 @@ describe("有給の提出と変更の申請", () => {
   it("受付を開けるのは事務員さん（管理者）だけ。開くと全員にお知らせが入る", async () => {
     await expect(svc.openLeaveWindow(db, id.mgr, { label: "2026年 下期", start: "2026-10-16", end: "2027-03-15" })).rejects.toThrow(svc.ForbiddenError);
     win = await svc.openLeaveWindow(db, id.office, { label: "2026年 下期", start: "2026-10-16", end: "2027-03-15" });
-    expect((await svc.listLeaveWindows(db, id.a))[0]).toMatchObject({ label: "2026年 下期", status: "open" });
+    expect((await svc.listLeaveWindows(db, id.a)).find((w) => !w.standing)).toMatchObject({ label: "2026年 下期", status: "open" });
     expect((await svc.listNotifications(db, id.a)).items.some((n) => n.kind === "leave")).toBe(true);
   });
 
@@ -99,5 +99,15 @@ describe("有給の提出と変更の申請", () => {
     expect((await svc.listLeaveReview(db, id.office)).todo.map((c) => c.id)).toContain(own);
     expect(await svc.decideLeaveChange(db, id.office, own, true, "")).toBe("approved");
     expect((await svc.getMyLeavePlan(db, id.mgr, win)).days).toEqual(["2026-12-24"]);
+  });
+
+  it("有給申請は、受付がなくても、いつでも全員が出せる（店長が確認 → 事務員さんが許可）", async () => {
+    const standing = (await svc.listLeaveWindows(db, id.b)).find((w) => w.standing)!;
+    expect(standing.label).toBe("有給申請");
+    expect((await svc.listLeaveWindows(db, id.a)).filter((w) => w.standing)).toHaveLength(1);           // 二重に作らない
+    const c = await svc.requestLeaveChange(db, id.b, standing.id, null, "2031-05-10", "家族の予定");
+    expect(await svc.decideLeaveChange(db, id.mgrB, c, true, "")).toBe("pending_office");
+    expect(await svc.decideLeaveChange(db, id.office, c, true, "")).toBe("approved");
+    expect((await svc.getMyLeavePlan(db, id.b, standing.id)).days).toEqual(["2031-05-10"]);
   });
 });

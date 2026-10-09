@@ -26,7 +26,7 @@ function Page() {
   const load = useCallback(async () => {
     try {
       setReview(await api("/api/paid-leave?review=1"));
-      const w = await api<LeaveWindow[]>("/api/paid-leave?windows=1"); setWins(w); setWid((c) => c || w[0]?.id || "");
+      const w = await api<LeaveWindow[]>("/api/paid-leave?windows=1"); const ww = w.filter((x) => !x.standing); setWins(ww); setWid((c) => c || ww[0]?.id || "");
       setMsg("");
     } catch (e) { setMsg((e as Error).message); }
   }, []);
@@ -101,7 +101,7 @@ function Page() {
       {tab === "window" && me.level === 4 && (
         <>
           <div className="card">
-            <b>提出の受付を始める（年2回）</b>
+            <b>まとめて提出の受付を始める（期間を決めるとき）</b>
             <p className="sub">始めると、全員にお知らせと通知が届きます。締め切ると、スタッフは日を直接直せなくなり、変更は申請になります。</p>
             <label>名前<input value={nw.label} onChange={(e) => setNw({ ...nw, label: e.target.value })} placeholder="例: 2026年 下期" /></label>
             <div className="times"><label>有給を取れる範囲（はじめ）<input type="date" value={nw.start} onChange={(e) => setNw({ ...nw, start: e.target.value })} /></label>
