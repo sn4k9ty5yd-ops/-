@@ -6,6 +6,7 @@ import { NEXT_ACTION } from "@/lib/labels";
 import { reiwaRange } from "@/lib/era";
 import { periodFor, todayJst, tintStyle } from "@/lib/period-nav";
 import { relationLabel } from "@/lib/periods";
+import { STEP_GUIDE } from "@/lib/step-guide";
 import { STATUS_LABEL, STATUS_ORDER, type PeriodRow, type PeriodStatus } from "@/lib/service";
 
 export default function PeriodsPage() {
@@ -40,22 +41,34 @@ export default function PeriodsPage() {
     <>
       
       <h1>つくる</h1>
-      <p className="hint">シフトの流れ：①希望休の受付 → ②締め切り → ③出勤簿づくり → ④確定 → ⑤スタッフに公開 → ⑥オフィスに提出 → ⑦確認済み。各お店の「次は〜」のボタンを順番に押していきます。まちがえたら「ひとつ戻す」を押してください。</p>
+      <p className="hint">シフトを作って、事務員さんに出すまでの「やること」です。いまの段階と、次に押すボタンが出ます。</p>
       {todo && todo.s && (() => {
         const { p, s } = todo; const next = NEXT_ACTION[s.status];
-        const inKit = s.status === "collecting" || s.status === "closed" || s.status === "drafting";
+        const idx = STATUS_ORDER.indexOf(s.status);
+        const cur = STEP_GUIDE[idx];
+        const can = next && canManage(s.storeId) && (next.to !== "acknowledged" || me.level >= 3);
         return (
-          <div className="card" style={{ margin: "10px 0" }}>
-            <span className="sub">いまの「やること」（{name(s.storeId)}）</span>
-            <div><b style={{ fontSize: 18 }}>{p.label}</b>　<span className="sub">いま：{STATUS_LABEL[s.status]}</span></div>
-            <div className="steps2">{STATUS_ORDER.map((x) => <i key={x} className={x === s.status ? "now" : STATUS_ORDER.indexOf(x) < STATUS_ORDER.indexOf(s.status) ? "done" : ""} />)}</div>
-            {next && canManage(s.storeId) && (next.to !== "acknowledged" || me.level >= 3) && (
-              <button onClick={() => { advance(p.id, s.storeId, next); }}>次は：{next.label}</button>
-            )}
-            {inKit && <Link href="/admin/shifts" className="ghost" style={{ display: "block", textAlign: "center", padding: 10 }}>出勤簿予定を開く</Link>}
+          <div className="card guide" style={{ margin: "10px 0" }}>
+            <span className="sub">いま進めるシフト（{name(s.storeId)}）</span>
+            <div style={{ marginBottom: 8 }}><b style={{ fontSize: 20 }}>{p.label}</b>　<span className="sub">{reiwaRange(p.start, p.end)}</span></div>
+            <ol className="stepguide">
+              {STEP_GUIDE.map((g, i) => (
+                <li key={g.key} className={i < idx ? "done" : i === idx ? "now" : ""}>
+                  <span className="sgdot">{i < idx ? "✓" : i === idx ? "●" : ""}</span>
+                  <div>
+                    <b>{g.short}</b>
+                    {i === idx && <p className="whatnow">{cur.now}</p>}
+                  </div>
+                </li>
+              ))}
+            </ol>
+            {can && <button onClick={() => { advance(p.id, s.storeId, next); }}>次は：{next.label}</button>}
+            {!can && next && <p className="hint" style={{ margin: "6px 0 0" }}>この次の操作は、{cur.who || "店長・事務員さん"}が行います。</p>}
+            {cur.open && <Link href="/admin/shifts" className="ghost" style={{ display: "block", textAlign: "center", padding: 10 }}>出勤簿予定を開く</Link>}
           </div>
         );
       })()}
+      {!todo && periods.length > 0 && <p className="hint">いま進めるシフトは、ありません。下の「次の期間を作る」を押すと、次のシフトを始められます。</p>}
       {me.level >= 2 && <button onClick={() => run(async () => { const r = await api<{ created: boolean; label: string }>("/api/periods", { action: "next" }); setNote(r.created ? `「${r.label}」を作りました` : `「${r.label}」は、もう作ってあります`); })}>次の期間を作る</button>}
       {periods.length === 0 && <p className="hint">まだ期間がありません。「次の期間を作る」を押してください。</p>}
       {periods.slice(0, 3).map((p) => {
