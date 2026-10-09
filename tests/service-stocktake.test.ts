@@ -214,3 +214,16 @@ describe("メーカー名のそろえ", () => {
     expect(r.rows[0].maker).toBe("ウエラ");
   });
 });
+
+describe("Pythonスクリプトをそのまま貼ったとき", () => {
+  it("リストの行を読む。区分の直し・ウェラ→ウエラ・メーカー抜けの行も扱う。金額が合わない行は取り込まない", () => {
+    const t = `data_all = []\nfuk = [\n    ["ATENA福津", "業務", 5, "ミルボン", "オージュア インメトリィ コントロールクリーム", "135g", 2600, 1, 2600, ""],\n    ["ATENA", "業務", 1, "ウェラ", "コレストンパーフェクト 9/71", "80g", 750, 2, 1500, "メモ"],\n    ["ATENA AVEDA", "店販", 5, "スムーズインフュージョン シャンプー", "250ml", 2280, 3, 6840, ""],\n    ["ATENA", "業務", 1, "ウェラ", "壊れた行", "80g", 750, 2, 999, ""]\n]\nwb.save("x.xlsx")`;
+    const r = svc.parsePastStocktakeAll(t);
+    expect(r.rows.map((x) => [x.store, x.kind, x.maker, x.name])).toEqual([
+      ["ATENA福津", "retail", "ミルボン", "オージュア インメトリィ コントロールクリーム"],
+      ["ATENA", "supply", "ウエラ", "コレストンパーフェクト 9/71"],
+      ["ATENA AVEDA", "retail", "", "スムーズインフュージョン シャンプー"],
+    ]);
+    expect(r.bad).toHaveLength(1);
+  });
+});

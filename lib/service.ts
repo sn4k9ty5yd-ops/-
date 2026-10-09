@@ -3179,8 +3179,31 @@ export function parsePastStocktake(text: string): { rows: PastStocktakeRow[]; ba
   return { rows, bad };
 }
 /** 全店まとめての表を読む。見出し（店舗名・区分・メーカー・品名・規格・単価（または仕入値）・数量［・金額］）の言葉で列を探す。「原本頁」「備考」などの余分な列があってもよい。区分は「業務」「店販」 */
+/** Pythonのスクリプト（["店舗名","区分",頁,"メーカー","品名","規格",単価,数量,金額,"備考"] の行）をそのまま貼ったときも読む。ユーザーが表ではなくスクリプトを貼ったため */
+const SCRIPT_FIXES: { store: string; name: string; kind: ProductKind }[] = [
+  { store: "ATENA福津", name: "オージュア インメトリィ コントロールクリーム", kind: "retail" },     // 元データでは区分が「業務」になっていた（ユーザー指示で店販に直す）
+];
+function parsePastStocktakeScript(text: string): { rows: (PastStocktakeRow & { store: string; kind: ProductKind })[]; bad: { line: number; text: string; reason: string }[] } {
+  const rows: (PastStocktakeRow & { store: string; kind: ProductKind })[] = []; const bad: { line: number; text: string; reason: string }[] = [];
+  text.split(/\r?\n/).forEach((raw, i) => {
+    const m = /^\s*\[\s*"([^"]*)"\s*,\s*"(業務|店販)"\s*,(.*)\]\s*,?\s*$/.exec(raw);
+    if (!m) return;
+    let a: unknown[];
+    try { a = JSON.parse(`["${m[1]}","${m[2]}",${m[3]}]`); } catch { bad.push({ line: i + 1, text: raw, reason: "読めない行です" }); return; }
+    // 10個: 店舗,区分,頁,メーカー,品名,規格,単価,数量,金額,備考。メーカーが抜けた8〜9個の行も、金額が合えば取り込む（メーカーは空）
+    let maker = "", name = "", spec = "", cost = NaN, qty = NaN, amount = NaN;
+    if (a.length >= 10) [, , , maker, name, spec, cost, qty, amount] = a as [unknown, unknown, unknown, string, string, string, number, number, number];
+    else if (a.length >= 8) [, , , name, spec, cost, qty, amount] = a as [unknown, unknown, unknown, string, string, number, number, number];
+    if (![cost, qty, amount].every((n) => Number.isInteger(n) && (n as number) >= 0) || !name || (cost as number) * (qty as number) !== amount) { bad.push({ line: i + 1, text: raw, reason: "列がずれているか、金額が 単価×数量 と合いません" }); return; }
+    let kind: ProductKind = m[2] === "店販" ? "retail" : "supply";
+    const fix = SCRIPT_FIXES.find((f) => f.store === m[1] && f.name === name); if (fix) kind = fix.kind;
+    rows.push({ store: m[1], kind, maker: normMaker(maker), name, spec, costPrice: cost, quantity: qty });
+  });
+  return { rows, bad };
+}
 export function parsePastStocktakeAll(text: string): { rows: (PastStocktakeRow & { store: string; kind: ProductKind })[]; bad: { line: number; text: string; reason: string }[] } {
   const half = (v: string) => v.replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0)).replace(/[¥￥円,，\s]/g, "");
+  if (/^\s*\[\s*"[^"]*"\s*,\s*"(業務|店販)"/m.test(text)) return parsePastStocktakeScript(text);
   const rows: (PastStocktakeRow & { store: string; kind: ProductKind })[] = []; const bad: { line: number; text: string; reason: string }[] = [];
   let ix = { store: 0, kind: 1, maker: 2, name: 3, spec: 4, cost: 5, qty: 6, amount: -1 };
   text.split(/\r?\n/).forEach((raw, i) => {

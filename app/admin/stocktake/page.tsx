@@ -85,7 +85,7 @@ export default function StocktakePage() {
                 <button disabled={imp.busy || !imp.text.trim() || !imp.date} onClick={async () => {
                   setImp({ ...imp, busy: true, res: "" });
                   try {
-                    if (/^店舗名/.test(imp.text.trim())) {
+                    if (/^店舗名/.test(imp.text.trim()) || /^\s*\[\s*"[^"]*"\s*,\s*"(業務|店販)"/m.test(imp.text)) {
                       const r = await api<{ groups: { store: string; kind: ProductKind; lines: number; total: number; error?: string }[]; bad: number; badLines: string[] }>("/api/stocktakes", { action: "import-all", storeId, kind, takenOn: imp.date, text: imp.text }); setMsg("");
                       setImp({ ...imp, busy: false, text: "", res: r.groups.map((g) => `${g.store}（${PRODUCT_KIND_LABEL[g.kind]}）：${g.error ? `⚠ ${g.error}` : `${g.lines}行・${g.total.toLocaleString("ja-JP")}円`}`).join(" ／ ") + (r.bad ? `　⚠ 取り込まなかった行 ${r.bad}件：${r.badLines.join(" ／ ")}` : "") });
                     } else {
