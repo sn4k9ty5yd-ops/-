@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { Stepper } from "@/app/Stepper";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { SubTabs } from "@/app/SubTabs";
 import { api, MeProvider, useAutoRefresh, useMe } from "@/lib/client";
@@ -145,7 +146,7 @@ function Page() {
         {budget !== null && <div className="sub">予算 {yen(budget)}　{total <= budget ? `あと ${yen(budget - total)}` : <b style={{ color: "var(--red, #c00)" }}>{yen(total - budget)} オーバー</b>}</div>}
         {canBudget && (budgetEdit === null
           ? <button className="ghost" style={{ color: "var(--blue)" }} onClick={() => setBudgetEdit(budget === null ? "" : String(budget))}>{budget === null ? "この月の予算を決める" : "予算を変える"}</button>
-          : <div className="toolbar"><input inputMode="numeric" placeholder="予算（円・税抜）" value={budgetEdit} onChange={(e) => setBudgetEdit(toInt(e.target.value))} /><button onClick={saveBudget}>保存</button><button className="ghost" onClick={() => setBudgetEdit(null)}>やめる</button></div>)}
+          : <div className="toolbar"><Stepper label="予算" placeholder="予算（円・税抜）" unit="円" step={1000} bigStep={10000} max={999999999} value={budgetEdit} onChange={setBudgetEdit} /><button onClick={saveBudget}>保存</button><button className="ghost" onClick={() => setBudgetEdit(null)}>やめる</button></div>)}
         {byKind.length > 0 && <div className="sub">{byKind.map(([k, v]) => `${MATERIAL_KIND_LABEL[k]} ${yen(v)}`).join("　／　")}</div>}
         {bySupplier.length > 0 && <div className="sub">発注先ごと: {bySupplier.map(([s, v]) => `${s} ${yen(v)}`).join("　／　")}</div>}
       </div>
@@ -225,7 +226,7 @@ function Page() {
                 <button type="button" className={form.tax === "ex" ? "on" : ""} onClick={() => setForm({ ...form, tax: "ex" })}>税抜</button>
                 <button type="button" className={form.tax === "in" ? "on" : ""} onClick={() => setForm({ ...form, tax: "in" })}>税込</button>
               </div></label>
-            <label>金額（円・{form.tax === "in" ? "税込で入れる" : "税抜"}）<input inputMode="numeric" value={form.amount} onChange={(e) => setForm({ ...form, amount: toInt(e.target.value) })} placeholder="例: 12800" />{form.tax === "in" && form.amount !== "" && <span className="sub">→ 税抜に直して保存します：{yen(toExTax(Number(form.amount), "in"))}（税10%）</span>}</label>
+            <label>金額（円・{form.tax === "in" ? "税込で入れる" : "税抜"}）<Stepper label="金額" unit="円" placeholder="金額" step={100} bigStep={1000} max={999999999} value={form.amount} onChange={(x) => setForm({ ...form, amount: x })} />{form.tax === "in" && form.amount !== "" && <span className="sub">→ 税抜に直して保存します：{yen(toExTax(Number(form.amount), "in"))}（税10%）</span>}</label>
             <label>内容<input value={form.item} onChange={(e) => setForm({ ...form, item: e.target.value })} placeholder="例: カラー剤・シャンプー" /></label>
             <label>メモ<input value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} /></label>
             <div onPaste={(e) => { const fs = Array.from(e.clipboardData.files); if (fs.length) { e.preventDefault(); addPics(fs); } }}>
@@ -290,8 +291,8 @@ function Page() {
                 {form.lines.map((l, i) => (
                   <div key={i} className="toolbar" style={{ margin: "4px 0" }}>
                     <input aria-label="商品名" list="itemnames" style={{ flex: 3, minWidth: 120 }} value={l.name} onChange={(e) => setForm({ ...form, lines: form.lines!.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)) })} />
-                    <input aria-label="数量" inputMode="numeric" style={{ width: 56 }} value={String(l.qty)} onChange={(e) => setForm({ ...form, lines: form.lines!.map((x, j) => (j === i ? { ...x, qty: Number(toInt(e.target.value)) || 1 } : x)) })} />
-                    <input aria-label="金額" inputMode="numeric" style={{ width: 90 }} value={String(l.amount)} onChange={(e) => setForm({ ...form, lines: form.lines!.map((x, j) => (j === i ? { ...x, amount: Number(toInt(e.target.value)) || 0 } : x)) })} />
+                    <Stepper className="cellstp" label="数量" min={1} value={String(l.qty)} onChange={(v) => setForm({ ...form, lines: form.lines!.map((x, j) => (j === i ? { ...x, qty: Number(v) || 1 } : x)) })} />
+                    <Stepper className="cellstp" label="金額" step={100} bigStep={1000} max={999999999} value={String(l.amount)} onChange={(v) => setForm({ ...form, lines: form.lines!.map((x, j) => (j === i ? { ...x, amount: Number(v) || 0 } : x)) })} />
                     <button className="ghost" onClick={() => setForm({ ...form, lines: form.lines!.filter((_, j) => j !== i) })}>×</button>
                   </div>))}
                 <div className="toolbar">
@@ -330,7 +331,7 @@ function Page() {
           <input placeholder="メーカー（例：髪にドラマを。）" value={newP.maker} onChange={(e) => setNewP({ ...newP, maker: e.target.value })} />
           <input placeholder="商品名" value={newP.name} onChange={(e) => setNewP({ ...newP, name: e.target.value })} />
           <input placeholder="規格（例：250ml・任意）" value={newP.spec} onChange={(e) => setNewP({ ...newP, spec: e.target.value })} />
-          <input inputMode="numeric" placeholder="仕入値（税抜・円）" value={newP.cost} onChange={(e) => setNewP({ ...newP, cost: toInt(e.target.value) })} />
+          <Stepper label="仕入値" placeholder="仕入値（税抜・円）" unit="円" step={10} bigStep={100} max={9999999} value={newP.cost} onChange={(x) => setNewP({ ...newP, cost: x })} />
           {msg && <p className="err">{msg}</p>}
           <div className="toolbar">
             <button disabled={!newP.name.trim() || newP.cost === ""} onClick={async () => {

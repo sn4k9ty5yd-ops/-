@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { Stepper } from "@/app/Stepper";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { SubTabs } from "@/app/SubTabs";
 import { api, MeProvider, useAutoRefresh, useMe } from "@/lib/client";
@@ -124,7 +125,7 @@ function Page() {
               return (
                 <li key={i.productId} className="stockrow">
                   <div style={{ flex: 1, minWidth: 0 }}><b>{i.name}</b><div className="sub">{PRODUCT_KIND_LABEL[i.kind]}　{[i.maker, i.spec].filter(Boolean).join("　")}　いま {i.quantity}個</div></div>
-                  <input inputMode="numeric" aria-label={`${i.name}の数え直し`} placeholder="—" disabled={!canEdit} value={v ?? ""} style={{ width: 80, textAlign: "center", fontSize: 18 }} onChange={(e) => setCounts({ ...counts, [i.productId]: toInt(e.target.value) })} />
+                  <Stepper label={`${i.name}の数え直し`} placeholder="—" disabled={!canEdit} value={v ?? ""} max={99999} onChange={(x) => setCounts({ ...counts, [i.productId]: x })} />
                   <span className="sub" style={{ width: 52, textAlign: "right", color: diff ? (diff > 0 ? "#1e7e34" : "#d70015") : undefined }}>{diff === null || diff === 0 ? "" : diff > 0 ? `+${diff}` : diff}</span>
                 </li>
               );
@@ -151,7 +152,7 @@ function Page() {
             <div className="sub">いまの在庫 {move.item.quantity}個</div>
             <div className="stepper" style={{ margin: "14px 0" }}>
               <button type="button" aria-label="減らす" onClick={() => setMove({ ...move, qty: String(Math.max(1, Number(move.qty || 1) - 1)) })}>−</button>
-              <input inputMode="numeric" aria-label="個数" style={{ width: 90, fontSize: 24 }} value={move.qty} onChange={(e) => setMove({ ...move, qty: toInt(e.target.value) })} />
+              <Stepper label="個数" min={1} max={99999} value={move.qty} onChange={(x) => setMove({ ...move, qty: x })} />
               <button type="button" aria-label="増やす" onClick={() => setMove({ ...move, qty: String(Number(move.qty || 0) + 1) })}>＋</button>
               <span className="sub">個</span>
             </div>
@@ -170,8 +171,8 @@ function Page() {
             <div className="sub">{[detail.item.maker, detail.item.spec].filter(Boolean).join("　")}　いま {detail.item.quantity}個</div>
             {canSettings && s?.useReorder && (
               <>
-                <div className="times"><label>発注点<input inputMode="numeric" value={detail.min} placeholder="例 5" onChange={(e) => setDetail({ ...detail, min: toInt(e.target.value) })} /></label>
-                  <label>補充の目標<input inputMode="numeric" value={detail.target} placeholder="例 20" onChange={(e) => setDetail({ ...detail, target: toInt(e.target.value) })} /></label></div>
+                <div className="times"><label>発注点<Stepper label="発注点" placeholder="未設定" max={99999} value={detail.min} onChange={(x) => setDetail({ ...detail, min: x })} clearable /></label>
+                  <label>補充の目標<Stepper label="補充の目標" placeholder="未設定" max={99999} value={detail.target} onChange={(x) => setDetail({ ...detail, target: x })} clearable /></label></div>
                 <p className="sub" style={{ margin: "4px 0 8px" }}>在庫が「発注点」以下になると「少ない」と出ます。「補充の目標」まで足すのに必要な数が、発注の目安になります。</p>
                 <button onClick={async () => { if (await run({ action: "limits", productId: detail.item.productId, min: detail.min === "" ? null : Number(detail.min), target: detail.target === "" ? null : Number(detail.target) }, "発注点を保存しました")) setDetail(null); }}>発注点を保存</button>
               </>

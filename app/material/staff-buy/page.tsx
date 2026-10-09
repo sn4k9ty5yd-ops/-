@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { Stepper } from "@/app/Stepper";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { SubTabs } from "@/app/SubTabs";
 import { api, MeProvider, useAutoRefresh, useMe } from "@/lib/client";
@@ -90,7 +91,7 @@ function Page() {
             <>
               <p><b>{pick.maker} {pick.name}</b>{pick.spec ? `（${pick.spec}）` : ""}　スタッフ価格 {yen(pick.costPrice)}　<button className="ghost" onClick={() => setPick(null)}>えらびなおす</button></p>
               <div className="toolbar">
-                <label>本数<input inputMode="numeric" style={{ width: 80 }} value={qty} onChange={(e) => setQty(toInt(e.target.value))} /></label>
+                <label>本数<Stepper label="本数" unit="本" min={1} max={999} value={qty} onChange={setQty} /></label>
                 <label>日付<input type="date" value={day} onChange={(e) => setDay(e.target.value)} /></label>
               </div>
               <input placeholder="メモ（任意）" value={note} onChange={(e) => setNote(e.target.value)} />

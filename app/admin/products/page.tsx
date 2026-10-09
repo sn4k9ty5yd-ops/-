@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Stepper } from "@/app/Stepper";
 import { api, useAutoRefresh, useMe } from "@/lib/client";
 import { parseProductPaste } from "@/lib/paste";
 import { findSimilarProduct, parseProductOcr, type ProductCandidate } from "@/lib/product-ocr";
@@ -92,7 +93,7 @@ export default function ProductsPage() {
             <label>メーカー<input value={draft.maker} onChange={(e) => setDraft({ ...draft, maker: e.target.value })} /></label>
             <label>品名<input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} /></label>
             <label>規格（容量など）<input value={draft.spec} onChange={(e) => setDraft({ ...draft, spec: e.target.value })} /></label>
-            <label>仕入値（税抜・円）<input inputMode="numeric" value={draft.costPrice} onChange={(e) => setDraft({ ...draft, costPrice: e.target.value })} /></label>
+            <label>仕入値（税抜・円）<Stepper label="仕入値" unit="円" step={10} bigStep={100} max={9999999} value={draft.costPrice} onChange={(x) => setDraft({ ...draft, costPrice: x })} /></label>
             <label>使うお店</label>
             <div className="storeboxes">
               <label><input type="checkbox" checked={draft.storeIds.length === allIds.length} onChange={(e) => setDraft({ ...draft, storeIds: e.target.checked ? allIds : [] })} />全店で使う</label>
@@ -208,7 +209,7 @@ export default function ProductsPage() {
                           <td><input aria-label="メーカー" value={c.maker} onChange={(e) => upd(i, { maker: e.target.value })} style={{ width: 100, padding: 6, margin: 0, fontSize: 14 }} /></td>
                           <td><input aria-label="品名" value={c.name} onChange={(e) => upd(i, { name: e.target.value })} style={{ width: 170, padding: 6, margin: 0, fontSize: 14 }} />{c.dup && <small style={{ color: "#b45309", display: "block" }}>すでにあります：{c.dup}</small>}</td>
                           <td><input aria-label="規格" value={c.spec} onChange={(e) => upd(i, { spec: e.target.value })} style={{ width: 70, padding: 6, margin: 0, fontSize: 14 }} /></td>
-                          <td><input aria-label="仕入値" inputMode="numeric" value={String(c.costPrice)} onChange={(e) => upd(i, { costPrice: Number(e.target.value.replace(/[^\d]/g, "")) || 0 })} style={{ width: 90, padding: 6, margin: 0, fontSize: 14, textAlign: "right" }} /></td>
+                          <td><Stepper className="cellstp" label="仕入値" step={10} bigStep={100} max={9999999} value={String(c.costPrice)} onChange={(x) => upd(i, { costPrice: Number(x) || 0 })} /></td>
                           <td><button className="ghost" aria-label="この行を消す" onClick={() => setOcr((cur) => cur && { ...cur, cands: cur.cands.filter((_, j) => j !== i) })}>×</button></td>
                         </tr>
                       ))}

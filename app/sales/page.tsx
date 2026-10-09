@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { Stepper } from "@/app/Stepper";
 import { SubTabs } from "@/app/SubTabs";
 import { salesTabs } from "@/lib/sales-tabs";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -93,7 +94,7 @@ function Page() {
         <div className="card"><div className="sub">お店の総合売上</div><div className="big">{yen(sum.total)}</div>
           {prevSum.total > 0 && <div className="sub">前年同月 {yen(prevSum.total)}　<b style={{ color: (yoy(sum.total, prevSum.total) ?? 0) >= 0 ? "var(--ok)" : "var(--bad)" }}>{signed(yoy(sum.total, prevSum.total) ?? 0)}</b></div>}</div>
         <div className="card"><div className="sub">お店の目標</div>
-          {canEdit ? <div className="toolbar" style={{ margin: 0 }}><input inputMode="numeric" style={{ width: 150 }} placeholder="目標（円）" value={tEdit.store ?? (tgt === null ? "" : String(tgt))} onChange={(e) => setTEdit({ ...tEdit, store: e.target.value })} />
+          {canEdit ? <div className="toolbar" style={{ margin: 0 }}><Stepper label="目標（円）" placeholder="目標（円）" step={10000} bigStep={100000} max={999999999} value={tEdit.store ?? (tgt === null ? "" : String(tgt))} onChange={(v) => setTEdit({ ...tEdit, store: v })} />
             <button className="ghost" onClick={() => saveTarget(null, tEdit.store ?? (tgt === null ? "" : String(tgt)))}>決める</button></div> : <div className="big">{tgt === null ? "未設定" : yen(tgt)}</div>}
           {ach !== null && <><div className="bar"><i style={{ width: `${Math.min(100, ach)}%` }} /></div><b>達成率 {ach}%</b>{tgt !== null && <span className="sub">　あと {yen(Math.max(0, tgt - sum.total))}</span>}</>}</div>
         <div className="card"><div className="sub">客数 ／ 客単価</div><div className="big">{sum.customers}人</div><div className="sub">客単価 {unitPrice(sum.total, sum.customers) === null ? "－" : yen(unitPrice(sum.total, sum.customers) as number)}</div></div>
@@ -129,19 +130,19 @@ function Page() {
                   {me.level === 4 && r.status === "manager_ok" && <button className="ghost" onClick={() => review([r.membershipId], "office_ok")}>確定</button>}
                   {canEdit && r.membershipId !== me.id && (r.status === "submitted" || r.status === "manager_ok" || (r.status === "office_ok" && me.level === 4)) && <button className="ghost" style={{ color: "var(--bad)" }} onClick={() => { const c = prompt("差し戻しのコメント（なくてもOK）", "") ; if (c !== null) review([r.membershipId], "return", c); }}>差し戻す</button>}
                 </td>
-                {FIELDS.map(([k]) => <td key={k} className="r"><input className="cellin" inputMode="numeric" disabled={!canEdit || r.status === "office_ok"} value={v[k] === 0 ? "" : String(v[k])} placeholder="0" onChange={(e) => setField(r, k, e.target.value)} /></td>)}
+                {FIELDS.map(([k]) => <td key={k} className="r"><Stepper className="cellstp" label={String(k)} step={/Count$|ustomers$/.test(String(k)) ? 1 : 1000} max={999999999} disabled={!canEdit || r.status === "office_ok"} value={v[k] === 0 ? "" : String(v[k])} placeholder="0" onChange={(x) => setField(r, k, x)} /></td>)}
                 <td className="r">{unitPrice(v.total, v.customers) ?? "－"}</td>
                 <td className="r">{newRate(v.newCustomers, v.repeatCustomers) ?? "－"}</td>
                 <td className="r" style={{ color: y === null ? undefined : y >= 0 ? "var(--ok)" : "var(--bad)" }}>{y === null ? "－" : signed(y)}</td>
                 <td className="r">{pct1(v.total, sum.total) ?? "－"}</td>
-                <td className="r">{canEdit ? <input className="cellin" inputMode="numeric" placeholder="－" value={tEdit[r.membershipId] ?? (ptg === null ? "" : String(ptg))} onChange={(e) => setTEdit({ ...tEdit, [r.membershipId]: e.target.value })} onBlur={() => { if (tEdit[r.membershipId] !== undefined) saveTarget(r.membershipId, tEdit[r.membershipId]); }} /> : ptg ?? "－"}</td>
+                <td className="r">{canEdit ? <Stepper className="cellstp" label="個人目標" placeholder="－" step={10000} max={999999999} value={tEdit[r.membershipId] ?? (ptg === null ? "" : String(ptg))} onChange={(x) => setTEdit({ ...tEdit, [r.membershipId]: x })} onCommit={(x) => saveTarget(r.membershipId, x)} /> : ptg ?? "－"}</td>
                 <td className="r">{achievement(v.total, ptg) ?? "－"}</td>
                 <td className="r" style={{ whiteSpace: "nowrap" }}>{(() => {
                   const sug = calcCommission({ retail: v.retail, kitsukeSales: v.kitsukeSales, makeupSales: v.makeupSales, spaSales: v.spaSales }, data!.rates).total;
                   const lock = !r.status || r.status === "draft" || r.status === "returned" || r.status === "office_ok" || r.membershipId === me.id || !canCommission;
                   return (<>
                     <span className="sub">目安 {yen(sug)}</span>{" "}
-                    <input className="cellin" inputMode="numeric" disabled={lock} placeholder={String(sug)} value={cEdit[r.membershipId] ?? (r.commission === null ? "" : String(r.commission))} onChange={(e) => setCEdit({ ...cEdit, [r.membershipId]: e.target.value.replace(/[^\d]/g, "") })} />
+                    <Stepper className="cellstp" label="歩合" disabled={lock} placeholder={String(sug)} step={100} max={999999999} value={cEdit[r.membershipId] ?? (r.commission === null ? "" : String(r.commission))} onChange={(x) => setCEdit({ ...cEdit, [r.membershipId]: x })} />
                     {!lock && <button className="ghost" onClick={() => setCommission(r.membershipId, cEdit[r.membershipId] ? Number(cEdit[r.membershipId]) : sug)}>つける</button>}
                     {r.commission !== null && <b>　{yen(r.commission)}</b>}
                   </>);
@@ -158,7 +159,7 @@ function Page() {
             <span className="sub">店販 {data.rates.retail}% ／ 着付け {data.rates.kitsuke}% ／ メイク {data.rates.makeup}% ／ ヘッドスパ {data.rates.spa}%</span>
             {me.level === 4 && <button className="ghost" onClick={() => setREdit(data.rates)}>割合を変える</button>}
           </> : <div className="toolbar">
-            {(["retail", "kitsuke", "makeup", "spa"] as const).map((k) => <label key={k} style={{ margin: 0 }}>{{ retail: "店販", kitsuke: "着付け", makeup: "メイク", spa: "ヘッドスパ" }[k]}（%）<input inputMode="numeric" style={{ width: 90 }} value={String(rEdit[k])} onChange={(e) => setREdit({ ...rEdit, [k]: Number(e.target.value.replace(/[^\d.]/g, "")) || 0 })} /></label>)}
+            {(["retail", "kitsuke", "makeup", "spa"] as const).map((k) => <label key={k} style={{ margin: 0 }}>{{ retail: "店販", kitsuke: "着付け", makeup: "メイク", spa: "ヘッドスパ" }[k]}（%）<Stepper label="歩合の割合" unit="%" step={1} max={100} value={String(rEdit[k])} onChange={(x) => setREdit({ ...rEdit, [k]: Number(x) || 0 })} /></label>)}
             <button onClick={saveRates}>保存</button><button className="ghost" onClick={() => setREdit(null)}>やめる</button></div>}
           <p className="sub" style={{ margin: "6px 0 0" }}>歩合は、「売上 × 割合」で目安が出ます。店長・シフト担当が、確認して「つける」を押します（金額は直せます）。</p>
         </div>

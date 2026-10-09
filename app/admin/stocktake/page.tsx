@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Stepper } from "@/app/Stepper";
 import { ShareMenu } from "@/app/ShareMenu";
 import { api, useAutoRefresh, useMe } from "@/lib/client";
 import { reiwaDot } from "@/lib/era";
@@ -226,7 +227,7 @@ function Detail({ id, storeName, onBack }: { id: string; storeName: string; onBa
                 <input aria-label="メーカー" placeholder="メーカー（なくてもOK）" value={nf.maker} onChange={(e) => setNf({ ...nf, maker: e.target.value })} style={{ flex: 1, minWidth: 130 }} />
                 <input aria-label="品名" placeholder="品名" value={nf.name} onChange={(e) => setNf({ ...nf, name: e.target.value })} style={{ flex: 2, minWidth: 160 }} />
                 <input aria-label="規格" placeholder="規格（なくてもOK）" value={nf.spec} onChange={(e) => setNf({ ...nf, spec: e.target.value })} style={{ flex: 1, minWidth: 110 }} />
-                <input aria-label="仕入値" inputMode="numeric" placeholder="仕入値（税抜・円）" value={nf.cost} onChange={(e) => setNf({ ...nf, cost: e.target.value.replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0)).replace(/[^\d]/g, "") })} style={{ flex: 1, minWidth: 130 }} />
+                <Stepper label="仕入値" placeholder="仕入値（税抜・円）" unit="円" step={10} bigStep={100} max={9999999} value={nf.cost} onChange={(x) => setNf({ ...nf, cost: x })} />
               </div>
               <div className="actions" style={{ marginTop: 8 }}>
                 <button style={{ width: "auto", margin: 0, padding: "10px 14px", fontSize: 14 }} disabled={!nf.name.trim() || nf.cost === ""} onClick={async () => {
@@ -257,7 +258,7 @@ function Detail({ id, storeName, onBack }: { id: string; storeName: string; onBa
               {d.editable ? (
                 <span className="stepper big">
                   <button type="button" aria-label="減らす" onClick={() => step(i.id, -1)}>−</button>
-                  <input inputMode="numeric" aria-label={`${i.name}の数量`} value={qty[i.id] ?? ""} placeholder="数" onChange={(e) => change(i.id, e.target.value)} onBlur={() => { flush(); }} />
+                  <Stepper label={`${i.name}の数量`} placeholder="数" step={1} value={qty[i.id] ?? ""} onChange={(x) => change(i.id, x)} />
                   <button type="button" aria-label="増やす" onClick={() => step(i.id, 1)}>＋</button>
                 </span>
               ) : <b style={{ fontSize: 20 }}>{i.quantity ?? "—"}</b>}
@@ -280,7 +281,7 @@ function Detail({ id, storeName, onBack }: { id: string; storeName: string; onBa
                 {d.editable ? (
                   <span className="stepper">
                     <button type="button" aria-label="減らす" onClick={() => step(i.id, -1)}>−</button>
-                    <input inputMode="numeric" aria-label={`${i.name}の数量`} value={qty[i.id] ?? ""} placeholder="—" onChange={(e) => change(i.id, e.target.value)} onBlur={() => { flush(); }} />
+                    <Stepper className="cellstp" label={`${i.name}の数量`} placeholder="—" step={1} value={qty[i.id] ?? ""} onChange={(x) => change(i.id, x)} />
                     <button type="button" aria-label="増やす" onClick={() => step(i.id, 1)}>＋</button>
                   </span>
                 ) : <b>{i.quantity ?? "—"}</b>}

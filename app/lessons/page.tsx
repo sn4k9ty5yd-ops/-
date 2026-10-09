@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { Stepper } from "@/app/Stepper";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, MeProvider, useAutoRefresh, useMe } from "@/lib/client";
 import { holidayName } from "@/lib/holidays";
@@ -189,7 +190,7 @@ function Page() {
             <div className="lessonchips">
               <button className={`lbtn ${minutes === null && !custom ? "sel" : ""}`} onClick={() => { setMinutes(null); setCustom(""); }}>入れない</button>
               {MIN_CHOICES.map((m) => <button key={m} className={`lbtn ${minutes === m && !custom ? "sel" : ""}`} onClick={() => { setMinutes(m); setCustom(""); }}>{m}分</button>)}
-              <input inputMode="numeric" placeholder="その他（分）" style={{ width: 130 }} value={custom} onChange={(e) => setCustom(e.target.value.replace(/[^\d]/g, ""))} />
+              <Stepper label="その他（分）" placeholder="その他（分）" unit="分" step={5} min={5} max={600} value={custom} onChange={setCustom} clearable />
             </div>
             <label>メモ（なくてもOK）<input value={note} onChange={(e) => setNote(e.target.value)} placeholder="例: 前髪が課題" /></label>
             {msg && <p className="err">{msg}</p>}

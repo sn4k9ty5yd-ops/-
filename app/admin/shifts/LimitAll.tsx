@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { Stepper } from "@/app/Stepper";
 import { api } from "@/lib/client";
 
 /** 期間のすべての日に、休みの上限をまとめて決める（日ごとの変更は、シフト画面で日にちを押します） */
@@ -14,7 +15,7 @@ export function LimitAll({ periodId, storeId, days, onDone }: { periodId: string
       <p className="sub">希望休は、上限に関係なく、みんな自由に出せます。ここで決めた人数を超えた日は、シフトの日付に「⚠」が出て、確定の前に、かぶっている人へ知らせて話し合えます。日ごとに変えたいときは、シフト画面で日にちを押してください。</p>
       <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
         <span>この期間の全部の日を</span>
-        <input type="number" min={0} max={99} inputMode="numeric" value={v} onChange={(e) => setV(e.target.value)} style={{ width: 80, margin: 0 }} />
+        <Stepper label="休める人数の上限" unit="人" max={99} value={v} onChange={setV} />
         <span>人までにする</span>
         <button style={{ width: "auto", margin: 0 }} disabled={v === ""} onClick={async () => { try { const r = await api<{ count: number }>("/api/day-limits", { periodId, storeId, days, maxOff: Number(v) }); setMsg(`${r.count}日に決めました`); onDone(); } catch (e) { setMsg((e as Error).message); } }}>決める</button>
         <button className="ghost" style={{ width: "auto", margin: 0 }} onClick={async () => { try { await api("/api/day-limits", { periodId, storeId, days, maxOff: null }); setMsg("すべての上限をなくしました"); onDone(); } catch (e) { setMsg((e as Error).message); } }}>全部なしにする</button>

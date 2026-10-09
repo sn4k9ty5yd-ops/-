@@ -1,5 +1,6 @@
 "use client";
 import { SubTabs } from "@/app/SubTabs";
+import { Stepper } from "@/app/Stepper";
 import { salesTabs } from "@/lib/sales-tabs";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
@@ -88,7 +89,7 @@ function Page() {
             <div key={title}>
               <b className="formsec">{title}</b>
               <div className="salesform">{fields.map(([k, l]) => (
-                <label key={k}>{l}<input inputMode="numeric" disabled={!editable} value={cur[k] === 0 ? "" : String(cur[k])} placeholder="0" onChange={(e) => setForm({ ...cur, [k]: num(e.target.value) })} /></label>
+                <label key={k}>{l}<Stepper label={l} disabled={!editable} step={/人|客|数|新規|再来/.test(l) ? 1 : 1000} max={999999999} value={cur[k] === 0 ? "" : String(cur[k])} placeholder="0" onChange={(x) => setForm({ ...cur, [k]: num(x) })} /></label>
               ))}</div>
             </div>
           ))}

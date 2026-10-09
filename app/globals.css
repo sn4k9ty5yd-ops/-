@@ -595,3 +595,15 @@ main.home .tile:nth-child(n+7),main.home .row:nth-child(n+7){animation-delay:.28
 /* アプリ制作者の「見え方」ボタン（左下） */
 .vas-chip{position:fixed;left:12px;bottom:calc(14px + env(safe-area-inset-bottom));z-index:60;width:auto;margin:0;padding:8px 12px;border-radius:999px;font-size:13px;font-weight:700;color:#3b2fa0;background:#fff;border:2px solid #d9d2f5;box-shadow:0 4px 12px rgba(60,40,160,.18)}
 .vas-chip.on{background:#ff8a3d;border-color:#ff8a3d;color:#fff}
+
+/* 数字は打たずに、矢印（− ＋）で増減する（Stepper） */
+.stp { display: inline-flex; align-items: center; gap: 4px; vertical-align: middle; max-width: 100%; flex-wrap: nowrap; }
+.stp-b { width: 40px; min-width: 40px; height: 40px; padding: 0; border-radius: 12px; font-size: 22px; font-weight: 800; line-height: 1; touch-action: manipulation; user-select: none; -webkit-user-select: none; background: #fff; color: var(--blue, #0a84ff); border: 1.5px solid color-mix(in srgb, var(--blue, #0a84ff) 40%, #ddd); box-shadow: none; }
+.stp-b.big { width: auto; padding: 0 8px; font-size: 13px; }
+.stp-b:disabled { opacity: .4; }
+.stp-v { min-width: 56px; padding: 0 6px; text-align: center; font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.stp-v small { font-size: 12px; font-weight: 600; margin-left: 2px; color: var(--sub, #777); }
+.stp-v.ph { color: var(--sub, #999); font-weight: 600; font-size: 15px; }
+.stp-x { width: 28px; height: 28px; min-width: 28px; padding: 0; border-radius: 50%; font-size: 12px; background: #eee; color: #666; border: 0; box-shadow: none; }
+.stp.cellstp .stp-b { width: 30px; min-width: 30px; height: 30px; font-size: 18px; border-radius: 9px; }
+.stp.cellstp .stp-v { min-width: 30px; font-size: 15px; }

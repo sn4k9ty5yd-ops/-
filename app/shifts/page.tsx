@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { Stepper } from "@/app/Stepper";
 import { SubTabs } from "@/app/SubTabs";
 import { shiftTabs, viewTabs } from "@/lib/shift-tabs";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -154,7 +155,7 @@ function Page() {
                   <div className="sub">この日に休める人数の上限（出勤簿をつける人が決めます）</div>
                   {conflicts.has(detail) && <p style={{ color: "#d70015", margin: "4px 0", fontWeight: 700 }}>⚠ いま{conflicts.get(detail)!.count}人が休み（上限{conflicts.get(detail)!.maxOff}人）。かぶっています。</p>}
                   <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                    <input type="number" min={0} max={99} inputMode="numeric" style={{ width: 80, margin: 0 }} value={limitInput !== "" ? limitInput : limits.has(detail) ? String(limits.get(detail)) : ""} placeholder="なし" onChange={(e) => setLimitInput(e.target.value)} />
+                    <Stepper label="休める人数の上限" unit="人" max={99} value={limitInput !== "" ? limitInput : limits.has(detail) ? String(limits.get(detail)) : ""} placeholder="なし" onChange={setLimitInput} />
                     <span>人まで</span>
                     <button style={{ width: "auto", margin: 0, padding: "8px 12px" }} onClick={async () => { try { await api("/api/day-limits", { periodId: db.id, storeId, days: [detail], maxOff: limitInput === "" ? null : Number(limitInput) }); setLimitInput(""); setLimitMsg("決めました"); await load(); } catch (e) { setLimitMsg((e as Error).message); } }}>決める</button>
                     <button className="ghost" style={{ width: "auto", margin: 0 }} onClick={async () => { try { await api("/api/day-limits", { periodId: db.id, storeId, days: [detail], maxOff: null }); setLimitInput(""); setLimitMsg("上限をなくしました"); await load(); } catch (e) { setLimitMsg((e as Error).message); } }}>上限なし</button>

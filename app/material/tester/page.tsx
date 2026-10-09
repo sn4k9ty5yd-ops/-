@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { Stepper } from "@/app/Stepper";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { SubTabs } from "@/app/SubTabs";
 import { api, MeProvider, useAutoRefresh, useMe } from "@/lib/client";
@@ -115,7 +116,7 @@ function Page() {
             <>
               <p><b>{pick.maker} {pick.name}</b>{pick.spec ? `（${pick.spec}）` : ""}　仕入値 {yen(pick.costPrice)}　<button className="ghost" onClick={() => setPick(null)}>えらびなおす</button></p>
               <div className="toolbar">
-                <label>本数<input inputMode="numeric" style={{ width: 80 }} value={qty} onChange={(e) => setQty(toInt(e.target.value))} /></label>
+                <label>本数<Stepper label="本数" unit="本" min={1} max={999} value={qty} onChange={setQty} /></label>
                 <label>日付<input type="date" value={day} onChange={(e) => setDay(e.target.value)} /></label>
               </div>
               <input placeholder="メモ（任意）" value={note} onChange={(e) => setNote(e.target.value)} />
@@ -147,7 +148,7 @@ function Page() {
                       <option value="">（商品をえらぶ）</option>
                       {storeProducts.map((p) => <option key={p.id} value={p.id}>{p.maker} {p.name}{p.spec ? `（${p.spec}）` : ""}</option>)}
                     </select>
-                    <input inputMode="numeric" aria-label="本数" style={{ width: 60 }} value={String(x.qty)} onChange={(e) => setCands(cands.map((y, j) => (j === i ? { ...y, qty: Number(toInt(e.target.value) || 0) } : y)))} />本
+                    <Stepper className="cellstp" label="本数" min={0} max={999} value={String(x.qty)} onChange={(v) => setCands(cands.map((y, j) => (j === i ? { ...y, qty: Number(v) || 0 } : y)))} />本
                     <span className="sub" style={{ minWidth: 70 }}>{pr ? yen(pr.costPrice * x.qty) : ""}</span>
                     <span className="sub" style={{ flexBasis: "100%", opacity: 0.7 }}>読み取り：{x.raw}</span>
                   </div>

@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { Stepper } from "@/app/Stepper";
 import { api, useMe } from "@/lib/client";
 import { calcHours, DEFAULT_BREAK_RULE, fmt, validateBreakRule, type BreakRule } from "@/lib/hours";
 
@@ -36,7 +37,7 @@ export default function SettingsPage() {
           上限を決める（超えた分は休憩として数える）
         </label>
         {useCap && (
-          <label style={{ margin: 0 }}>実働は最大 <input type="number" step="0.25" min="1" max="24" style={{ width: 90, display: "inline-block" }} value={capHours} disabled={!canEdit} onChange={(e) => setCapHours(e.target.value)} /> 時間</label>
+          <label style={{ margin: 0 }}>実働は最大 <Stepper label="実働の上限" unit="時間" decimals={2} step={0.25} min={1} max={24} value={capHours} disabled={!canEdit} onChange={setCapHours} /> 時間</label>
         )}
       </div>
 
@@ -46,9 +47,9 @@ export default function SettingsPage() {
         {tiers.map((t, i) => (
           <div key={i} className="tierrow">
             <span>在店が</span>
-            <input type="number" step="0.25" min="0" max="24" value={t.overHours} disabled={!canEdit} onChange={(e) => setTiers(tiers.map((x, j) => (j === i ? { ...x, overHours: e.target.value } : x)))} />
+            <Stepper label="超えた時間" unit="時間" decimals={2} step={0.25} max={24} value={t.overHours} disabled={!canEdit} onChange={(v) => setTiers(tiers.map((x, j) => (j === i ? { ...x, overHours: v } : x)))} />
             <span>時間を超えたら 休憩</span>
-            <input type="number" step="5" min="0" max="480" value={t.breakMin} disabled={!canEdit} onChange={(e) => setTiers(tiers.map((x, j) => (j === i ? { ...x, breakMin: e.target.value } : x)))} />
+            <Stepper label="休憩（分）" unit="分" step={5} max={480} value={t.breakMin} disabled={!canEdit} onChange={(v) => setTiers(tiers.map((x, j) => (j === i ? { ...x, breakMin: v } : x)))} />
             <span>分</span>
             {canEdit && <button className="ghost" onClick={() => setTiers(tiers.filter((_, j) => j !== i))}>削除</button>}
           </div>

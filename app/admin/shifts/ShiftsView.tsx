@@ -1,5 +1,6 @@
 "use client";
 import { SubTabs } from "@/app/SubTabs";
+import { Stepper } from "@/app/Stepper";
 import { viewTabs } from "@/lib/shift-tabs";
 import { PasteOff } from "./PasteOff";
 import { LimitAll } from "./LimitAll";
@@ -184,7 +185,7 @@ export function ShiftsView({ final = false }: { final?: boolean }) {
                     <div className="times">
                       <label>入店<input type="time" step={300} value={t.start} onChange={(e) => setFillTime({ ...t, start: e.target.value })} /></label>
                       <label>退店<input type="time" step={300} value={t.end} onChange={(e) => setFillTime({ ...t, end: e.target.value })} /></label>
-                      <label>休憩（分）<input type="number" inputMode="numeric" min={0} max={600} step={5} value={bv} placeholder="自動" onChange={(e) => setFillBreak({ day: dd, v: e.target.value })} /></label>
+                      <label>休憩（分）<Stepper label="休憩（分）" unit="分" step={5} max={600} value={bv} placeholder="自動" onChange={(x) => setFillBreak({ day: dd, v: x })} clearable /></label>
                     </div>
                     <div className="sub" style={{ margin: "6px 0" }}>{hoursText(t.start, t.end, me.breakRule)}（この日だけの時間です。休憩は、空なら自動。休み・有給の人は変わりません。ちがう人は、下の一覧で、ひとりずつ直せます）</div>
                     <button style={{ padding: 12, fontSize: 15 }} disabled={!t.start || !t.end || t.end <= t.start} onClick={async () => {
@@ -325,7 +326,7 @@ function DayRow({ person, cur, req, def, editable, rule, onSave, onClear }: {
         <div className="times" style={{ marginTop: 6 }}>
           <label>入店<input type="time" step={300} value={start} onChange={(e) => setStart(e.target.value)} /></label>
           <label>退店<input type="time" step={300} value={end} onChange={(e) => setEnd(e.target.value)} /></label>
-          <label>休憩（分）<input type="number" inputMode="numeric" min={0} max={600} step={5} value={brk} placeholder={h ? `自動：${shiftHours({ start, end }, rule).breakMin}` : "自動"} onChange={(e) => setBrk(e.target.value)} /></label>
+          <label>休憩（分）<Stepper label="休憩（分）" unit="分" step={5} max={600} value={brk} placeholder={h ? `自動：${shiftHours({ start, end }, rule).breakMin}` : "自動"} onChange={setBrk} clearable /></label>
         </div>
       )}
       {editable && (

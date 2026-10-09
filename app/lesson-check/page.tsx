@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { Stepper } from "@/app/Stepper";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, MeProvider, useAutoRefresh, useMe } from "@/lib/client";
 import { isPassed, itemsMax, nextAttemptNo, sheetStatus, totalOfScores } from "@/lib/lesson-check";
@@ -156,7 +157,7 @@ function SheetEditor({ sheet, grade, onClose, onDone }: { sheet: CheckSheet | nu
   const [f, setF] = useState({ grade: sheet?.grade ?? grade, name: sheet?.name ?? "", memo: sheet?.memo ?? "", maxPoints: sheet?.maxPoints ?? 25, passPoints: sheet?.passPoints ?? 20, maxAttempts: sheet?.maxAttempts ?? 10, active: sheet?.active ?? true });
   const [items, setItems] = useState<{ id?: string; name: string }[]>((sheet?.items.filter((i) => i.active) ?? []).map((i) => ({ id: i.id, name: i.name })));
   const [msg, setMsg] = useState("");
-  const num = (k: "maxPoints" | "passPoints" | "maxAttempts") => <input type="number" value={f[k]} onChange={(e) => setF({ ...f, [k]: Number(e.target.value) })} />;
+  const num = (k: "maxPoints" | "passPoints" | "maxAttempts") => <Stepper label={k} min={k === "maxAttempts" ? 1 : 0} max={9999} value={String(f[k])} onChange={(v) => setF({ ...f, [k]: Number(v) || 0 })} />;
   const save = async () => { try { await api("/api/lesson-check", { method: "POST", body: JSON.stringify({ action: "sheet", id: sheet?.id, ...f, items: items.filter((i) => i.name.trim()) }) }); onDone(); } catch (e) { setMsg((e as Error).message); } };
   return (
     <div style={{ ...bg, zIndex: 60 }} onClick={onClose}><div style={box} onClick={(e) => e.stopPropagation()}>

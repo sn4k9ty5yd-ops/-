@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { Stepper } from "@/app/Stepper";
 import { useMe } from "@/lib/client";
 import { calcHours, fmt } from "@/lib/hours";
 import { KIND_BUTTONS } from "@/lib/shift-ui";
@@ -41,7 +42,7 @@ export function ShiftSheet({
               return (
                 <>
                   <label style={{ display: "block", margin: "8px 0 0" }}>休憩（分）
-                    <input type="number" inputMode="numeric" min={0} max={600} step={5} value={brk} placeholder={a ? `自動：${a.breakMin}分` : "自動"} onChange={(e) => { setBrkTouched(true); setBrk(e.target.value); }} />
+                    <Stepper label="休憩（分）" unit="分" step={5} max={600} value={brk} placeholder={a ? `自動：${a.breakMin}分` : "自動"} onChange={(x) => { setBrkTouched(true); setBrk(x); }} clearable />
                   </label>
                   <div className="sub" style={{ margin: "6px 0" }}>{a ? `在店 ${fmt(a.stay)}　休憩 ${fmt(Math.min(a.stay, bm))}${brk === "" ? "（自動）" : ""}　実働 ${fmt(Math.max(0, a.stay - bm))}` : ""}　空のままなら、設定の休憩ルールで自動になります</div>
                 </>
