@@ -14,7 +14,7 @@ export const GET = authed(async (userId, req) => {
 export const POST = authed(async (userId, req) => {
   const b = (await req.json()) as Record<string, unknown>; const db = await getDb();
   switch (b.action) {
-    case "submit": await submitCommute(db, userId, String(b.month ?? ""), String(b.image ?? "")); break;
+    case "submit": await submitCommute(db, userId, String(b.month ?? ""), String(b.image ?? ""), Number(b.months)); break;
     case "roster": await setCommuteRoster(db, userId, String(b.memberId ?? ""), !!b.on); break;
     case "check": await checkCommute(db, userId, String(b.id ?? ""), b.status === "redo" ? "redo" : "checked", String(b.note ?? "")); break;
     case "match": return json({ matches: await matchCommuteNames(db, userId, String(b.text ?? "")) });

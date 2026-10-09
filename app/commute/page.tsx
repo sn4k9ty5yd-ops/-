@@ -26,6 +26,7 @@ function Page() {
   const [msg, setMsg] = useState(""); const [busy, setBusy] = useState(false);
   const [view, setView] = useState<string | null>(null); const [viewImg, setViewImg] = useState("");
   const [note, setNote] = useState("");
+  const [months, setMonths] = useState(0);
   const [due, setDue] = useState("");
   const [paste, setPaste] = useState(""); const [ms, setMs] = useState<CommuteMatch[] | null>(null); const [pick, setPick] = useState<Record<number, string>>({});
   const load = useCallback(async () => {
@@ -55,15 +56,21 @@ function Page() {
           <p style={{ margin: "6px 0" }}>{d.mine ? ST[d.mine.status] : d.overdue ? "🔴 期限（" + d.dueDate.slice(5).replace("-", "/") + "）をすぎています。早めに出してください" : "⚪ まだ出していません（" + d.dueDate.slice(5).replace("-", "/") + " まで）"}</p>
           {d.mine?.status === "redo" && <p className="err">{d.mine.note || "写真が見づらいなど、出し直しをお願いします。"}</p>}
           {d.mine?.status === "checked" ? <p className="sub">確認ずみです。ありがとうございました。</p> : (
-            <label className="btn" style={{ display: "block", textAlign: "center", padding: 14, borderRadius: 14, background: "var(--blue)", color: "#fff", fontWeight: 700, cursor: "pointer" }}>
+            <>
+            <div className="sub" style={{ margin: "4px 0" }}>何ヶ月分の定期券ですか？（先にえらびます）</div>
+            <div className="seg" style={{ marginBottom: 8 }}>
+              {[1, 3, 6].map((n) => <button key={n} className={months === n || (!months && d.mine?.months === n) ? "on" : ""} onClick={() => setMonths(n)}>{n}ヶ月</button>)}
+            </div>
+            <label className="btn" style={{ display: "block", textAlign: "center", padding: 14, borderRadius: 14, background: "var(--blue)", color: "#fff", fontWeight: 700, cursor: "pointer", opacity: (months || d.mine?.months) ? 1 : 0.5 }}>
               {busy ? "送っています…" : d.mine ? "📷 写真を出し直す" : "📷 定期券を撮って出す"}
-              <input type="file" accept="image/*" capture="environment" hidden disabled={busy} onChange={async (e) => {
+              <input type="file" accept="image/*" capture="environment" hidden disabled={busy || !(months || d.mine?.months)} onChange={async (e) => {
                 const f = e.target.files?.[0]; e.target.value = ""; if (!f) return;
                 setBusy(true);
-                try { const image = await shrink(f); await api("/api/commute", { action: "submit", month: cur, image }); setMsg("出しました。ありがとうございます"); await load(); } catch (er) { setMsg((er as Error).message); }
+                try { const image = await shrink(f); await api("/api/commute", { action: "submit", month: cur, image, months: months || d.mine?.months }); setMsg("出しました。ありがとうございます"); await load(); } catch (er) { setMsg((er as Error).message); }
                 setBusy(false);
               }} />
             </label>
+            </>
           )}
           {d.mine && <button className="ghost" style={{ marginTop: 8 }} onClick={() => open(d.mine!.id)}>出した写真を見る</button>}
           <p className="sub" style={{ margin: "6px 0 0" }}>出せるのは、今月と先月ぶんだけです。写真は3か月で自動で消えます。</p>
@@ -85,7 +92,7 @@ function Page() {
             {d.rows.map((r) => (
               <li key={r.membershipId} style={{ display: "block" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                  <span><b>{r.name}</b> <span className="sub">{ST[r.status]}</span></span>
+                  <span><b>{r.name}</b> <span className="sub">{ST[r.status]}{r.months ? `・${r.months}ヶ月分` : ""}</span></span>
                   <span style={{ display: "flex", gap: 6 }}>
                     {d.canCheck && r.subId && <button className="ghost" style={{ width: "auto", margin: 0, color: "var(--blue)" }} onClick={() => open(r.subId!)}>写真を見る</button>}
                     <button className="ghost" style={{ width: "auto", margin: 0, color: "var(--sub)" }} disabled={busy} onClick={() => confirm(`${r.name}さんを名簿から外しますか？（退職・やめたとき）`) && act({ action: "roster", memberId: r.membershipId, on: false }, "名簿から外しました")}>外す</button>

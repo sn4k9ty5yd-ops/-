@@ -3395,10 +3395,10 @@ export async function deleteStocktakeLine(db: Database, userId: string, lineId: 
 }
 
 // ---------------------------------------------------------------- 定期券の提出（毎月1回・写メ）
-export interface CommuteRow { membershipId: string; name: string; storeName: string; subId: string | null; status: "none" | "submitted" | "checked" | "redo"; note: string; submittedAt: string | null }
+export interface CommuteRow { membershipId: string; name: string; storeName: string; subId: string | null; status: "none" | "submitted" | "checked" | "redo"; note: string; submittedAt: string | null; months: number | null }
 export interface CommuteData {
   month: string; dueDay: number; dueDate: string; overdue: boolean;
-  onRoster: boolean; mine: { id: string; status: "submitted" | "checked" | "redo"; note: string; submittedAt: string } | null;
+  onRoster: boolean; mine: { id: string; status: "submitted" | "checked" | "redo"; note: string; submittedAt: string; months: number | null } | null;
   canManage: boolean; canCheck: boolean; storeId: string; stores: { id: string; name: string }[];
   rows: CommuteRow[]; candidates: { id: string; name: string }[];
 }
@@ -3410,17 +3410,17 @@ export async function getCommute(db: Database, userId: string, month?: string, s
   const ym = month && /^\d{4}-\d{2}$/.test(month) ? month : jstToday().slice(0, 7);
   const first = `${ym}-01`;
   return asUser(db, userId, async (q) => {
-    const dueDay = (await q.query<{ d: number }>("select due_day as d from commute_settings")).rows[0]?.d ?? 25;
+    const dueDay = (await q.query<{ d: number }>("select due_day as d from commute_settings")).rows[0]?.d ?? 15;
     const onRoster = (await q.query("select 1 from commute_roster where membership_id = $1", [userId])).rows.length > 0;
     const mine = (await q.query<NonNullable<CommuteData["mine"]>>(
-      `select id, status, note, to_char(submitted_at at time zone 'Asia/Tokyo','YYYY-MM-DD"T"HH24:MI:SS"Z"') as "submittedAt" from commute_submissions where membership_id = $1 and month = $2::date`, [userId, first])).rows[0] ?? null;
+      `select id, status, note, months, to_char(submitted_at at time zone 'Asia/Tokyo','YYYY-MM-DD"T"HH24:MI:SS"Z"') as "submittedAt" from commute_submissions where membership_id = $1 and month = $2::date`, [userId, first])).rows[0] ?? null;
     const canManage = me.level >= 3, canCheck = me.level >= 4;
     const stores = canManage ? (await q.query<{ id: string; name: string }>("select id, name from stores where status = 'active' order by sort_order")).rows.filter((s) => canCheck || s.id === me.storeId) : [];
     const sid = canCheck && storeId && stores.some((s) => s.id === storeId) ? storeId : me.storeId;
     let rows: CommuteRow[] = [], candidates: { id: string; name: string }[] = [];
     if (canManage) {
       rows = (await q.query<CommuteRow>(
-        `select m.id as "membershipId", m.name, s.name as "storeName", c.id as "subId", coalesce(c.status, 'none') as status, coalesce(c.note, '') as note,
+        `select m.id as "membershipId", m.name, s.name as "storeName", c.id as "subId", coalesce(c.status, 'none') as status, coalesce(c.note, '') as note, c.months,
                 to_char(c.submitted_at at time zone 'Asia/Tokyo','YYYY-MM-DD"T"HH24:MI:SS"Z"') as "submittedAt"
            from commute_roster r join memberships m on m.id = r.membership_id join stores s on s.id = m.store_id
            left join commute_submissions c on c.membership_id = m.id and c.month = $2::date
@@ -3446,13 +3446,14 @@ export async function getCommuteSummary(db: Database, userId: string): Promise<{
   });
 }
 
-export async function submitCommute(db: Database, userId: string, month: string, image: string): Promise<void> {
+export async function submitCommute(db: Database, userId: string, month: string, image: string, months: number): Promise<void> {
   const me = await getMe(db, userId);
   if (!me) throw new ForbiddenError();
-  try { await asUser(db, userId, (q) => q.query("select public.commute_submit($1::date, $2)", [`${month}-01`, image])); }
+  try { await asUser(db, userId, (q) => q.query("select public.commute_submit($1::date, $2, $3)", [`${month}-01`, image, months])); }
   catch (e) {
     const m = (e as Error).message ?? "";
     if (m.includes("locked")) throw new Error("この月は、もう確認ずみです（出し直せません）");
+    if (m.includes("bad months")) throw new Error("何ヶ月分の定期券か（1・3・6ヶ月）を選んでください");
     if (m.includes("bad image")) throw new Error("写真が大きすぎるか、形式が正しくありません（JPEG・PNG）");
     if (m.includes("bad month")) throw new Error("出せるのは、今月と先月ぶんだけです");
     throw new ForbiddenError();
@@ -3460,7 +3461,7 @@ export async function submitCommute(db: Database, userId: string, month: string,
   // 事務員さん以上にお知らせ
   const title = `定期券の提出：${me.name}さん`;
   const people = (await db.query<{ id: string }>("select id from memberships where company_id = $1 and level = 4 and status = 'active' and not display_only", [me.companyId])).rows.map((r) => r.id);
-  for (const uid of people) await db.query("insert into notifications (company_id, user_id, kind, title, body, link) values ($1,$2,'commute',$3,$4,'/commute')", [me.companyId, uid, title, `${Number(month.slice(5))}月ぶんが届きました。確認してください。`]);
+  for (const uid of people) await db.query("insert into notifications (company_id, user_id, kind, title, body, link) values ($1,$2,'commute',$3,$4,'/commute')", [me.companyId, uid, title, `${Number(month.slice(5))}月ぶん（${months}ヶ月定期）が届きました。確認してください。`]);
   await pushToUsers(db, people, { title, body: `${Number(month.slice(5))}月ぶんが届きました`, url: "/commute", tag: "commute-submit" }).catch(() => 0);
 }
 
@@ -3494,7 +3495,7 @@ export async function runCommuteReminders(db: Database, force = false, at?: stri
   const now = at ?? jstNow(), today = now.slice(0, 10), hhmm = now.slice(11, 16);
   if (hhmm < "09:00") return { sent: 0 };
   const day = Number(today.slice(8, 10)), first = `${today.slice(0, 7)}-01`;
-  const cos = (await db.query<{ company_id: string; d: number }>("select distinct r.company_id, coalesce(s.due_day, 25) as d from commute_roster r left join commute_settings s on s.company_id = r.company_id")).rows;
+  const cos = (await db.query<{ company_id: string; d: number }>("select distinct r.company_id, coalesce(s.due_day, 15) as d from commute_roster r left join commute_settings s on s.company_id = r.company_id")).rows;
   let sent = 0;
   for (const co of cos) {
     if (day < Math.max(1, co.d - 3)) continue;

@@ -26,9 +26,11 @@ describe("定期券の提出", () => {
   it("名簿に入っている人だけが出せる。名簿に入っていない人には、画面も出ない", async () => {
     expect(await svc.getCommuteSummary(d, u.s2)).toMatchObject({ show: false });
     expect(await svc.getCommuteSummary(d, u.s1)).toMatchObject({ show: true, pending: true });
-    await expect(svc.submitCommute(d, u.s2, ym, IMG)).rejects.toThrow(svc.ForbiddenError);
-    await expect(svc.submitCommute(d, u.s1, ym, "x")).rejects.toThrow("写真");
-    await svc.submitCommute(d, u.s1, ym, IMG);
+    await expect(svc.submitCommute(d, u.s2, ym, IMG, 3)).rejects.toThrow(svc.ForbiddenError);
+    await expect(svc.submitCommute(d, u.s1, ym, "x", 3)).rejects.toThrow("写真");
+    await expect(svc.submitCommute(d, u.s1, ym, IMG, 2)).rejects.toThrow("何ヶ月");
+    await svc.submitCommute(d, u.s1, ym, IMG, 3);
+    expect((await svc.getCommute(d, u.s1)).mine).toMatchObject({ months: 3 });
     expect((await svc.getCommute(d, u.s1)).mine?.status).toBe("submitted");
   });
   it("写真を見られるのは、本人と事務員さんだけ。確認すると本人に通知。確認ずみは出し直せない", async () => {
@@ -40,9 +42,9 @@ describe("定期券の提出", () => {
     await expect(svc.checkCommute(d, u.mgrA, row.subId!, "checked")).rejects.toThrow(svc.ForbiddenError);
     await svc.checkCommute(d, u.office, row.subId!, "redo", "見づらい");
     expect((await svc.getCommute(d, u.s1)).mine).toMatchObject({ status: "redo", note: "見づらい" });
-    await svc.submitCommute(d, u.s1, ym, IMG);
+    await svc.submitCommute(d, u.s1, ym, IMG, 3);
     await svc.checkCommute(d, u.office, row.subId!, "checked");
-    await expect(svc.submitCommute(d, u.s1, ym, IMG)).rejects.toThrow("確認ずみ");
+    await expect(svc.submitCommute(d, u.s1, ym, IMG, 3)).rejects.toThrow("確認ずみ");
   });
   it("名前を貼って照合できる（お店の見出し・漢字のゆれ）。店長は自店の人だけ入れられる", async () => {
     await d.query("update memberships set name = '金子 崇史' where id = $1", [u.s2]);
