@@ -185,4 +185,28 @@ describe("取り込み", () => {
     await svc.editManualBlock(db, id.assistA, pid, { op: "cell", id: t.id!, r: 3, c: 2, text: "✓" });
     expect(((await svc.getManualPage(db, id.mgrA, pid)).body.find((b) => b.t === "table") as Extract<Block, { t: "table" }>).rows[3][2]).toBe("✓");
   });
+
+  it("空のページの整理: 空のものだけ消せる。中身・下のページ・取り込み漏れの印があるものは消さない", async () => {
+    const parent = (await db.query<{ id: string }>("insert into manual_pages (company_id, title, body) values ($1,'親', $2::jsonb) returning id", [co, JSON.stringify([{ t: "child", ref: "e".repeat(32), title: "外部リンク" }])])).rows[0].id;
+    const mk = async (title: string, body: Block[], src: string | null, par: string | null = null) =>
+      (await db.query<{ id: string }>("insert into manual_pages (company_id, title, body, source_id, parent_id) values ($1,$2,$3::jsonb,$4,$5) returning id", [co, title, JSON.stringify(body), src, par])).rows[0].id;
+    const empty = await mk("外部リンク", [{ t: "p", x: "" }], "e".repeat(32), parent);
+    const full = await mk("題名なし", [{ t: "p", x: "大事な文章" }], null);
+    const pend = await mk("（題名なし）", [{ t: "file", src: "./x.pdf", name: "x.pdf" }], null);
+    const hasKid = await mk("題名無し", [], null);
+    await mk("子", [{ t: "p", x: "子の中身" }], null, hasKid);
+    await expect(svc.listManualCleanup(db, id.mgrA)).rejects.toThrow();
+    const list = await svc.listManualCleanup(db, id.admin);
+    const by = (i: string) => list.find((r) => r.id === i)!;
+    expect(by(empty).empty).toBe(true);
+    expect(by(full).empty).toBe(false);
+    expect(by(pend).reasons.join()).toContain("取り込めていない");
+    expect(by(hasKid).reasons.join()).toContain("この下に1ページ");
+    const r = await svc.deleteEmptyManualPages(db, id.admin, [empty, full, pend, hasKid]);
+    expect(r).toEqual({ deleted: 1, skipped: 3 });
+    const left = (await db.query<{ n: number }>("select count(*)::int as n from manual_pages where id in ($1,$2,$3)", [full, pend, hasKid])).rows[0].n;
+    expect(left).toBe(3);
+    expect((await db.query<{ body: Block[] }>("select body from manual_pages where id = $1", [parent])).rows[0].body).toEqual([]);   // 親の中の印も消える
+    await expect(svc.deleteEmptyManualPages(db, id.mgrA, [full])).rejects.toThrow();
+  });
 });

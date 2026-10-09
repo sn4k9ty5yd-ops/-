@@ -9,13 +9,13 @@ import type { MeetingAiRow, MeetingRow } from "@/lib/service";
 import { MindMap } from "../MindMap";
 import { VoiceRecorder } from "../VoiceRecorder";
 
-type Tab = "transcript" | "minutes" | "summary" | "mindmap" | "ai";
+type Tab = "transcript" | "minutes" | "summary" | "mindmap";
 type TextKey = "transcript" | "minutes" | "summary";
 interface Detail { meeting: MeetingRow; discussions: MeetingAiRow[]; canEdit: boolean; aiStatus: { available: boolean; provider: string | null } }
 async function copyText(text: string) {
   try { await navigator.clipboard.writeText(text); return true; } catch { const t = document.createElement("textarea"); t.value = text; document.body.appendChild(t); t.select(); const ok = document.execCommand("copy"); t.remove(); return ok; }
 }
-const TABS: [Tab, string][] = [["transcript", "文字起こし"], ["minutes", "議事録"], ["summary", "要約"], ["mindmap", "マインドマップ"], ["ai", "AI会議"]];
+const TABS: [Tab, string][] = [["transcript", "文字起こし"], ["minutes", "議事録"], ["summary", "要約"], ["mindmap", "マインドマップ"]];
 
 function Page() {
   const { id } = useParams<{ id: string }>();
@@ -89,7 +89,7 @@ function Page() {
       <h1 style={{ marginBottom: 2 }}>{m.title}</h1>
       <p className="sub" style={{ margin: 0 }}>{reiwa(m.heldOn)}{m.attendees ? `　参加：${m.attendees}` : ""}{canEdit ? "" : "　（見るだけ）"}　<span>{saved}</span></p>
       {msg && <p className="err">{msg}</p>}{ok && <p className="sub">{ok}</p>}
-      {!aiOn && <p className="hint noprint">いまは、AIの自動作成はまだ使えません（管理者がカギを設定すると使えます）。ボイスメモの文字起こしは使えます。議事録・要約・マインドマップ・AI会議は、「指示文をコピー」して、ほかのAIに貼って作れます。</p>}
+      {!aiOn && <p className="hint noprint">いまは、AIの自動作成はまだ使えません（管理者がカギを設定すると使えます）。ボイスメモの文字起こしは使えます。議事録・要約・マインドマップは、「指示文をコピー」して、ほかのAIに貼って作れます。</p>}
 
       <div className="seg noprint" style={{ flexWrap: "wrap" }}>{TABS.map(([t, l]) => <button key={t} className={tab === t ? "on" : ""} onClick={() => { setTab(t); setOk(""); }}>{l}</button>)}</div>
 
@@ -129,34 +129,6 @@ function Page() {
         </>
       )}
 
-      {tab === "ai" && (
-        <>
-          <p className="sub">テーマを入れると、3人の人格が5回会話して、論点・結論・行動計画をまとめます。</p>
-          <input value={theme} readOnly={!canEdit} onChange={(e) => setTheme(e.target.value)} placeholder="議論のテーマ（例：新人の定着率を上げるには）" />
-          <div className="toolbar noprint">
-            {aiOn && <button className="ghost" disabled={!!busy || !canEdit || !source} onClick={() => runAi("theme")}>{busy === "theme" ? "考えています…" : "この会議の課題からテーマを提案"}</button>}
-            {aiOn && <button disabled={!!busy || !canEdit || !theme.trim()} onClick={() => runAi("discussion", theme)}>{busy === "discussion" ? "AIが会議しています…（少し時間がかかります）" : "✨ AI会議をはじめる"}</button>}
-            <button className="ghost" disabled={!theme.trim()} onClick={() => copyPrompt(discussionPrompt(theme))}>{aiOn ? "指示文だけコピー" : "📋 指示文をコピー（ほかのAI用）"}</button>
-          </div>
-          {canEdit && !aiOn && (
-            <details className="noprint"><summary>ほかのAIで会議した結果を貼りつけて残す</summary>
-              <textarea rows={8} value={paste} onChange={(e) => setPaste(e.target.value)} placeholder="AIの答えを、ここに貼りつけます" />
-              <button disabled={!paste.trim() || !theme.trim()} onClick={async () => { try { await api("/api/meetings", { action: "ai_paste", id, theme, result: paste }); setPaste(""); setOk("残しました"); await load(); } catch (e) { setMsg((e as Error).message); } }}>この結果を残す</button>
-            </details>
-          )}
-          {d.discussions.length === 0 && <p className="hint">まだAI会議の記録がありません。</p>}
-          {d.discussions.map((x) => (
-            <div key={x.id} className="card" style={{ marginTop: 10 }}>
-              <b>テーマ：{x.theme}</b> <span className="sub">{x.createdAt.slice(0, 10)}　{x.byName ?? ""}</span>
-              <div style={{ whiteSpace: "pre-wrap", marginTop: 6 }}>{x.result}</div>
-              <div className="toolbar noprint">
-                <button className="ghost" onClick={async () => setOk((await copyText(x.result)) ? "コピーしました" : "コピーできませんでした")}>コピー</button>
-                {canEdit && <button className="ghost" onClick={() => { append("minutes", `\n■ AI会議（テーマ：${x.theme}）\n${x.result}`); setTab("minutes"); setOk("議事録の最後に追記しました"); }}>議事録に追記</button>}
-              </div>
-            </div>
-          ))}
-        </>
-      )}
       {canEdit && <p className="noprint" style={{ marginTop: 24 }}><button className="ghost" style={{ color: "#c00" }} onClick={async () => { if (!confirm("この会議の記録を削除しますか？（一覧から見えなくなります）")) return; try { await api("/api/meetings", { action: "delete", id }); location.href = "/meetings"; } catch (e) { setMsg((e as Error).message); } }}>この会議を削除</button></p>}
     </main>
   );

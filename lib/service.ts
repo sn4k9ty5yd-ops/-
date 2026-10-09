@@ -1258,6 +1258,64 @@ export async function listManualPages(db: Database, userId: string, q?: string):
       : c.query<ManualPageRow>(`select ${MANUAL_COLS} from manual_pages order by sort_order, title`))).rows;
 }
 
+/** 空のページの整理（外部リンク／題名なし）: 本当に空かを、中身・子ページ・ほかのページからの呼ばれ方まで調べる */
+export interface ManualCleanupRow { id: string; title: string; icon: string; path: string; sourceId: string | null; blocks: number; pending: number; children: number; calledBy: string[]; empty: boolean; reasons: string[] }
+async function scanCleanup(c: Queryable): Promise<ManualCleanupRow[]> {
+  const { isCleanupTitle, refersTo, scanBody } = await import("./manual/empty");
+  const rows = (await c.query<{ id: string; title: string; icon: string; body: Block[]; source_id: string | null; parent_id: string | null }>("select id, title, icon, body, source_id, parent_id from manual_pages")).rows;
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  const kids = new Map<string, number>();
+  for (const r of rows) if (r.parent_id) kids.set(r.parent_id, (kids.get(r.parent_id) ?? 0) + 1);
+  const key = (x: string | null) => (x ?? "").replace(/-/g, "");
+  const out: ManualCleanupRow[] = [];
+  for (const r of rows) {
+    if (!isCleanupTitle(r.title) || /メンター/.test(r.title)) continue;
+    const body = Array.isArray(r.body) ? r.body : [];
+    const sc = scanBody(body);
+    const k = key(r.source_id);
+    const calledBy = k ? rows.filter((o) => o.id !== r.id && refersTo(Array.isArray(o.body) ? o.body : [], k)).map((o) => o.title || "（題名なし）") : [];
+    const ch = kids.get(r.id) ?? 0;
+    const reasons: string[] = [];
+    if (sc.content > 0) reasons.push(`中に${sc.content}か所の中身があります`);
+    if (sc.pending > 0) reasons.push(`取り込めていない画像・ファイルの印が${sc.pending}つあります（元のNotionに本物があるかもしれません）`);
+    if (ch > 0) reasons.push(`この下に${ch}ページあります`);
+    if (calledBy.length > 0) reasons.push(`ほかのページ（${calledBy.slice(0, 3).join("、")}${calledBy.length > 3 ? "など" : ""}）から呼ばれています`);
+    const trail: string[] = []; let cur = r.parent_id ? byId.get(r.parent_id) : undefined; let guard = 0;
+    while (cur && guard++ < 12) { trail.unshift(cur.title || "（題名なし）"); cur = cur.parent_id ? byId.get(cur.parent_id) : undefined; }
+    out.push({ id: r.id, title: r.title || "（題名なし）", icon: r.icon, path: trail.join(" ／ "), sourceId: r.source_id, blocks: sc.content, pending: sc.pending, children: ch, calledBy, empty: reasons.length === 0, reasons });
+  }
+  return out;
+}
+export async function listManualCleanup(db: Database, userId: string): Promise<ManualCleanupRow[]> {
+  const me = await getMe(db, userId);
+  if (!me || me.level < 4) throw new ForbiddenError();
+  return asUser(db, userId, (c) => scanCleanup(c));
+}
+/** 本当に空のページだけを消す（調べ直してから消す。中身・下のページ・呼ばれているものは消さない） */
+export async function deleteEmptyManualPages(db: Database, userId: string, ids: string[]): Promise<{ deleted: number; skipped: number }> {
+  const me = await getMe(db, userId);
+  if (!me || me.level < 4) throw new ForbiddenError();
+  let deleted = 0, skipped = 0;
+  await asUser(db, userId, async (c) => {
+    const now = new Map((await scanCleanup(c)).map((r) => [r.id, r]));
+    for (const id of ids) {
+      const r = now.get(id);
+      if (!r || !r.empty) { skipped++; continue; }
+      const { dropChildRefs } = await import("./manual/empty");
+      const k = (r.sourceId ?? "").replace(/-/g, "");
+      const parent = (await c.query<{ id: string; body: Block[] }>("select p.id, p.body from manual_pages p join manual_pages x on x.parent_id = p.id where x.id = $1", [id])).rows[0];
+      const n = (await c.query("delete from manual_pages where id = $1 returning id", [id])).rows.length;
+      if (!n) { skipped++; continue; }
+      deleted++;
+      if (parent && k && Array.isArray(parent.body)) {
+        const nb = dropChildRefs(parent.body, k);
+        if (JSON.stringify(nb) !== JSON.stringify(parent.body)) await c.query("select app.manual_write_body($1, $2::jsonb, $3)", [parent.id, JSON.stringify(nb), `空のページ「${r.title}」を消した`]);
+      }
+    }
+  });
+  return { deleted, skipped };
+}
+
 /** マニュアルの中の外部リンク（YouTube以外）を、ページごとにまとめる（見られるページだけ） */
 export interface ManualExternal { pageId: string; title: string; icon: string; links: import("./manual/links").ExtLink[] }
 export async function listManualExternal(db: Database, userId: string): Promise<ManualExternal[]> {
@@ -3008,6 +3066,68 @@ export async function saveMeetingAiResult(db: Database, userId: string, input: {
   if (result.length > 100000) throw new Error("文字が多すぎます");
   const me = (await getMe(db, userId))!;
   await asUser(db, userId, (q) => q.query("insert into meeting_ai (company_id, store_id, meeting_id, theme, result, created_by) values ($1,$2,$3,$4,$5,$6)", [me.companyId, g.meeting.storeId, input.id, theme.slice(0, 200), result, userId]));
+}
+
+// ---------------------------------------------------------------- AI会議（課題を入れると会議してくれる。議事録とは別の画面）
+export interface CouncilRow { id: string; theme: string; result: string; byName: string | null; createdAt: string; mine: boolean; fromMeeting?: boolean }
+/** AI会議の記録の一覧。private=true は「僕専用」（アプリ制作者の本人だけ）。ふつうのは、そのお店の分（議事録の中でやった昔の分も入る） */
+export async function listCouncils(db: Database, userId: string, input: { storeId?: string; private?: boolean }): Promise<CouncilRow[]> {
+  const me = await getMe(db, userId);
+  if (!me || me.displayOnly) throw new ForbiddenError();
+  if (input.private) {
+    if (!me.appOwner) throw new ForbiddenError();
+    return (await asUser(db, userId, (q) => q.query<CouncilRow>(
+      `select id, theme, result, null::text as "byName", to_char(created_at at time zone 'Asia/Tokyo', 'YYYY-MM-DD HH24:MI') as "createdAt", true as mine
+         from ai_councils where private order by created_at desc limit 100`))).rows;
+  }
+  const storeId = input.storeId ?? "";
+  if (!/^[0-9a-f-]{36}$/i.test(storeId)) throw new Error("お店をえらんでください");
+  return asUser(db, userId, async (q) => {
+    const a = (await q.query<CouncilRow>(
+      `select c.id, c.theme, c.result, u.name as "byName", to_char(c.created_at at time zone 'Asia/Tokyo', 'YYYY-MM-DD HH24:MI') as "createdAt", (c.created_by = app.uid()) as mine
+         from ai_councils c left join memberships u on u.id = c.created_by where not c.private and c.store_id = $1 order by c.created_at desc limit 100`, [storeId])).rows;
+    const b = (await q.query<CouncilRow>(
+      `select a.id, a.theme, a.result, u.name as "byName", to_char(a.created_at at time zone 'Asia/Tokyo', 'YYYY-MM-DD HH24:MI') as "createdAt", false as mine, true as "fromMeeting"
+         from meeting_ai a left join memberships u on u.id = a.created_by where a.store_id = $1 order by a.created_at desc limit 100`, [storeId])).rows;
+    return [...a, ...b].sort((x, y) => (x.createdAt < y.createdAt ? 1 : -1));
+  });
+}
+
+/** AI会議をひらいて残す（paste を渡すと、ほかのAIの結果をそのまま残す）。private=true は僕専用（アプリ制作者だけ） */
+export async function runCouncil(db: Database, userId: string, input: { storeId?: string; private?: boolean; theme: string; paste?: string }, aiFn: (prompt: string) => Promise<string> = (p) => callAi(p)): Promise<{ id: string; text: string }> {
+  await loadAiKey(db);
+  const me = await getMe(db, userId);
+  if (!me || me.displayOnly) throw new ForbiddenError();
+  const theme = input.theme.trim();
+  if (!theme || theme.length > 200) throw new Error("テーマを入れてください（200文字まで）");
+  const priv = !!input.private;
+  if (priv && !me.appOwner) throw new ForbiddenError();
+  if (!priv && !/^[0-9a-f-]{36}$/i.test(input.storeId ?? "")) throw new Error("お店をえらんでください");
+  let text: string;
+  if (input.paste !== undefined) {
+    text = input.paste.trim();
+    if (!text) throw new Error("結果を入れてください");
+    if (text.length > 100000) throw new Error("文字が多すぎます");
+  } else {
+    if (!priv) {
+      const ok = await asUser(db, userId, async (q) => (await q.query<{ v: boolean }>("select app.meeting_edit($1) as v", [input.storeId])).rows[0].v);
+      if (!ok) throw new ForbiddenError("AI会議をひらけるのは、店長と正美さんです");
+    }
+    aiThrottle(userId);
+    text = await aiFn(discussionPrompt(theme));
+  }
+  try {
+    const r = await asUser(db, userId, (q) => q.query<{ id: string }>(
+      "insert into ai_councils (company_id, store_id, private, theme, result, created_by) values ($1,$2,$3,$4,$5,$6) returning id", [me.companyId, priv ? null : input.storeId, priv, theme, text, userId]));
+    return { id: r.rows[0].id, text };
+  } catch (e) { if ((e as { code?: string }).code === "42501") throw new ForbiddenError("AI会議をひらけるのは、店長と正美さんです"); throw e; }
+}
+
+/** 自分がひらいたAI会議の記録を消す */
+export async function deleteCouncil(db: Database, userId: string, id: string): Promise<void> {
+  if (!/^[0-9a-f-]{36}$/i.test(id)) throw new ForbiddenError();
+  const n = (await asUser(db, userId, (q) => q.query("delete from ai_councils where id = $1 returning id", [id]))).rows.length;
+  if (n === 0) throw new ForbiddenError("消せるのは、自分がひらいた記録だけです");
 }
 
 // ---------------------------------------------------------------- 変更の記録（アプリ制作者だけが見られる）

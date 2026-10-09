@@ -1,6 +1,8 @@
 "use client";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { SubTabs } from "@/app/SubTabs";
+import { meetingTabs } from "@/lib/meeting-tabs";
 import { api, MeProvider, useAutoRefresh, useMe } from "@/lib/client";
 import { reiwa } from "@/lib/era";
 import { todayJst } from "@/lib/period-nav";
@@ -31,8 +33,9 @@ function Page() {
   return (
     <main className="wide">
       <Link href="/home" className="back">← ホーム</Link>
-      <h1>🎙 ミーティング（議事録）</h1>
-      <p className="sub">会議のボイスメモから、文字起こし・議事録・要約・マインドマップをつくります。課題をAIに会議してもらうこともできます。</p>
+      <h1>🎙 議事録</h1>
+      <SubTabs items={meetingTabs(!!me.appOwner)} />
+      <p className="sub">会議のボイスメモから、文字起こし・議事録・要約・マインドマップをつくります。（課題をAIに会議してもらうのは、上の「AI会議」です）</p>
       {me.level === 4 && <select aria-label="お店" value={storeId} onChange={(e) => setStoreId(e.target.value)} style={{ marginBottom: 10 }}>{stores.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select>}
       {msg && <p className="err">{msg}</p>}
       {canEdit && !form && <button onClick={() => setForm({ title: "", heldOn: todayJst(), attendees: "" })}>＋ 新しい会議</button>}

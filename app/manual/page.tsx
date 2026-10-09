@@ -9,6 +9,8 @@ function Page() {
   const [rows, setRows] = useState<ManualPageRow[] | null>(null);
   const [q, setQ] = useState("");
   const [found, setFound] = useState<ManualPageRow[] | null>(null);
+  const [extN, setExtN] = useState(0);   // 外部リンクが1つも無いときは、「外部リンク」のカードを出さない
+  useEffect(() => { api<{ links: unknown[] }[]>("/api/manual?external=1").then((r) => setExtN(r.reduce((n, x) => n + x.links.length, 0))).catch(() => setExtN(0)); }, []);
   useEffect(() => { api<ManualPageRow[]>("/api/manual").then((r) => setRows(r.filter((x) => !/メンター/.test(x.title)))).catch(() => setRows([])); }, []);
   useEffect(() => {
     if (!q.trim()) { setFound(null); return; }
@@ -43,7 +45,8 @@ function Page() {
         <>
           <div className="mngrid mnspecial">
             <Link href="/lesson-check" className="mncard special"><span className="mnic">📝</span><span className="mnt">レッスンチェック表</span><span className="mns">アシスタントの採点</span></Link>
-            <Link href="/manual/external" className="mncard special"><span className="mnic">🔗</span><span className="mnt">外部リンク</span><span className="mns">YouTube以外の外のサイト</span></Link>
+            {extN > 0 && <Link href="/manual/external" className="mncard special"><span className="mnic">🔗</span><span className="mnt">外部リンク</span><span className="mns">YouTube以外の外のサイト</span></Link>}
+            {me.level >= 4 && <Link href="/manual/cleanup" className="mncard special"><span className="mnic">🧹</span><span className="mnt">空のページの整理</span><span className="mns">「題名なし」などを調べて消す</span></Link>}
           </div>
           {rows === null ? null : rows.length === 0 ? (
             <p className="hint">まだマニュアルがありません。{me.level >= 4 ? "取り込みが終わると、ここに並びます。" : ""}</p>
