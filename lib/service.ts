@@ -2702,6 +2702,7 @@ export async function saveCheckAttempt(db: Database, userId: string, input: { sh
     if (m.includes("self")) throw new Error("自分の採点は、自分ではつけられません");
     if (m.includes("bad assessor")) throw new Error("採点者は、このお店のスタイリストから選んでください");
     if (m.includes("bad")) throw new Error("点数が正しくありません（0〜5）");
+    if (m && m !== "forbidden") throw new Error(`保存できませんでした（原因：${m.slice(0, 160)}）`);   // 権限ではない原因は、そのまま見せる
     throw new ForbiddenError();
   }
   const sh = (await db.query<{ name: string; pass: number; max: number }>("select name, pass_points as pass, max_points as max from check_sheets where id = $1", [input.sheetId])).rows[0];

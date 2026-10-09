@@ -239,6 +239,8 @@ describe("レッスンチェック表（採点）", () => {
     expect(await svc.saveCheckAttempt(d, u.mgrA, base)).toEqual({ total: 13, passed: true });       // 13点 ≥ 合格12点
     expect(await svc.saveCheckAttempt(d, u.evalr, { ...base, attemptNo: 2, scores: sc(1, 1, 1) })).toEqual({ total: 3, passed: false });
     expect((await svc.getCheckData(d, u.styA, u.traineeA)).canAssess).toBe(true);                                      // 自店のスタイリストも採点できる
+    expect((await svc.saveCheckAttempt(d, u.styA, { ...base, attemptNo: 2, scores: sc(1, 1, 1) })).total).toBe(3);   // スタイリストも保存できる
+    expect((await svc.saveCheckAttempt(d, u.styA, { ...base, attemptNo: 2, assessorId: u.styA, scores: sc(1, 1, 1) })).total).toBe(3);
     const lst = await svc.getCheckData(d, u.styA);
     expect(lst.trainees.map((t) => t.id)).toEqual([u.traineeA]);                                                       // 一覧は、自店のアシスタントだけ
     await svc.saveCheckAttempt(d, u.edu, { ...base, attemptNo: 3, scores: sc(3, 3, 3) });
