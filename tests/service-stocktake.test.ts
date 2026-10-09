@@ -175,10 +175,18 @@ describe("昨年のデータの取り込みと、前回の数量を引きつい�
     await expect(svc.importPastStocktake(db, id.mgr1, st.s1, "retail", "2025-10-31", text)).rejects.toThrow(svc.ForbiddenError);
     const r = await svc.importPastStocktake(db, id.office, st.s1, "retail", "2025-10-31", text);
     expect(r).toMatchObject({ lines: 2, total: 6900 });
-    const now = await svc.startStocktake(db, id.office, st.s1, "retail", "2027-10-31");
+    const now = await svc.startStocktake(db, id.office, st.s1, "retail", "2025-11-30");
+    const d0 = (await svc.getStocktake(db, id.office, now))!;
+    expect(d0.items.every((i) => i.quantity === null)).toBe(true);      // 自動では入らない（ボタンでコピーする）
+    expect(d0.prevOn).toBe("2025-10-31");
+    await svc.deleteStocktakeLine(db, id.office, d0.items[0].id);
+    const cp = await svc.copyPreviousStocktake(db, id.office, now, false);
+    expect(cp).toMatchObject({ copied: 2, added: 1 });
     const d = (await svc.getStocktake(db, id.office, now))!;
+    expect(d.prevOn).not.toBeNull();
     const sh = d.items.find((i) => i.name === "シャンプー" && i.spec === "200ml")!;
-    expect(sh.quantity).toBe(3);
+    await svc.editStocktakeLine(db, id.office, sh.id, { maker: sh.maker, name: "シャンプー(改)", spec: sh.spec, costPrice: 1500 });
+    expect((await svc.getStocktake(db, id.office, now))!.items.find((i) => i.id === sh.id)!.name).toBe("シャンプー(改)");
     await svc.saveQuantities(db, id.office, now, [{ lineId: sh.id, quantity: 5 }]);
     expect((await svc.getStocktake(db, id.office, now))!.items.find((i) => i.id === sh.id)!.amount).toBe(7500);
   });

@@ -36,7 +36,17 @@ export function Stepper({ value, onChange, step = 1, bigStep, min = 0, max = 999
     <span className={`stp ${className ?? ""}`} style={width ? { width } : undefined} role="group" aria-label={label}>
       {bigStep ? <Btn d={-bigStep} big aria={`${label ?? ""}を${bigStep}減らす`}>−{bigStep >= 1000 ? `${bigStep / 1000}千` : bigStep}</Btn> : null}
       <Btn d={-step} aria={`${label ?? ""}を減らす`}>−</Btn>
-      <span className={`stp-v ${empty ? "ph" : ""}`} aria-live="polite">{empty ? (placeholder ?? "—") : String(value)}{!empty && unit ? <small>{unit}</small> : null}</span>
+      <input className={`stp-in ${empty ? "ph" : ""}`} inputMode={decimals ? "decimal" : "numeric"} aria-label={label} disabled={disabled} placeholder={placeholder ?? "—"} value={empty ? "" : String(value)}
+        onFocus={(e) => e.currentTarget.select()}
+        onChange={(e) => {
+          const t = e.target.value.replace(/[０-９．]/g, (c) => (c === "．" ? "." : String.fromCharCode(c.charCodeAt(0) - 0xfee0))).replace(decimals ? /[^\d.]/g : /\D/g, "");
+          if (t === "") { cur.current = ""; cb.current(""); return; }
+          const n = Number(t); if (!Number.isFinite(n)) return;
+          const v = decimals ? t : String(Math.min(max, n)); cur.current = v; cb.current(v);
+        }}
+        onBlur={() => { const raw = cur.current === "" ? NaN : Number(cur.current); if (Number.isFinite(raw) && (raw < min || raw > max)) { const v = fmt(Math.min(max, Math.max(min, raw))); cur.current = v; cb.current(v); } if (commit.current) commit.current(String(cur.current)); }}
+        style={{ width: Math.max(56, 14 * String(empty ? (placeholder ?? "—") : value).length + 30) }} />
+      {unit ? <small className="stp-u">{unit}</small> : null}
       <Btn d={step} aria={`${label ?? ""}を増やす`}>＋</Btn>
       {bigStep ? <Btn d={bigStep} big aria={`${label ?? ""}を${bigStep}増やす`}>＋{bigStep >= 1000 ? `${bigStep / 1000}千` : bigStep}</Btn> : null}
       {clearable && !empty && !disabled ? <button type="button" className="stp-x" aria-label="空にもどす" onClick={() => { onChange(""); onCommit?.(""); }}>✕</button> : null}

@@ -885,7 +885,7 @@ export type StocktakeStatus = "open" | "submitted" | "acknowledged";
 export const STOCKTAKE_LABEL: Record<StocktakeStatus, string> = { open: "入力中", submitted: "オフィスに提出済み", acknowledged: "確認済み" };
 export interface StocktakeRow { id: string; storeId: string; kind: ProductKind; takenOn: string; status: StocktakeStatus; lines: number; counted: number; total: number; }
 export interface StocktakeLine { id: string; productId: string | null; maker: string; name: string; spec: string; costPrice: number; quantity: number | null; amount: number; }
-export interface StocktakeDetail extends StocktakeRow { lines: number; items: StocktakeLine[]; editable: boolean; canManage: boolean; }
+export interface StocktakeDetail extends StocktakeRow { prevOn: string | null; lines: number; items: StocktakeLine[]; editable: boolean; canManage: boolean; }
 
 export async function listStocktakes(db: Database, userId: string, storeId: string, kind: ProductKind): Promise<StocktakeRow[]> {
   return (await asUser(db, userId, (q) =>
@@ -909,13 +909,6 @@ export async function startStocktake(db: Database, userId: string, storeId: stri
          select $1, $2, $3, p.id, p.maker, p.name, p.spec, p.cost_price, row_number() over (order by p.maker, p.name, p.spec)
            from products p join product_stores ps on ps.product_id = p.id
           where ps.store_id = $3 and p.kind = $4 and p.status = 'active'`, [st, me.companyId, storeId, kind]);
-      // 前回（いちばん新しい過去）の数量を引きついで始める。今回の数量は、これを直して提出する
-      await q.query(
-        `update stocktake_lines l set quantity = (
-            select pl.quantity from stocktake_lines pl join stocktakes ps on ps.id = pl.stocktake_id
-             where pl.product_id = l.product_id and ps.store_id = $2 and ps.kind = $3 and ps.taken_on < $4 and pl.quantity is not null
-             order by ps.taken_on desc limit 1)
-          where l.stocktake_id = $1 and l.product_id is not null`, [st, storeId, kind, takenOn]);
       return st;
     });
   } catch (e) {
@@ -934,8 +927,9 @@ export async function getStocktake(db: Database, userId: string, id: string): Pr
          from stocktake_lines where stocktake_id = $1 order by sort_order, maker, name, spec`, [id])).rows.map((r) => ({ ...r, amount: Number(r.amount) }));
     const flags = (await q.query<{ editable: boolean; manage: boolean }>(
       "select app.stocktake_editable($1, $2) as editable, app.has_perm('stocktake.manage', $2) as manage", [id, h.storeId])).rows[0];
+    const prev = (await q.query<{ d: string | null }>("select max(taken_on)::text as d from stocktakes where store_id = $1 and kind = $2 and taken_on < $3", [h.storeId, h.kind, h.takenOn])).rows[0].d;
     return {
-      ...h, lines: items.length, counted: items.filter((i) => i.quantity !== null).length, total: items.reduce((a, i) => a + i.amount, 0),
+      ...h, prevOn: prev, lines: items.length, counted: items.filter((i) => i.quantity !== null).length, total: items.reduce((a, i) => a + i.amount, 0),
       items, editable: flags.editable, canManage: flags.manage,
     };
   });
@@ -3254,4 +3248,48 @@ async function importPastRows(db: Database, me: Me, storeId: string, kind: Produ
   }
   const total = Number((await db.query<{ t: string }>("select coalesce(sum(amount),0)::text as t from stocktake_lines where stocktake_id = $1", [stId])).rows[0].t);
   return { lines: n, created: made.created, total };
+}
+
+/** 前の棚卸し（いちばん新しい過去・たとえば昨年）の数量を、この表に一括でコピーする。今の表にない商品は、行ごと足す。コピー後は1行ずつ直せる */
+export async function copyPreviousStocktake(db: Database, userId: string, stocktakeId: string, onlyEmpty: boolean): Promise<{ copied: number; added: number; from: string | null }> {
+  const me = await getMe(db, userId);
+  if (!me) throw new ForbiddenError();
+  try {
+    return await asUser(db, userId, async (q) => {
+      const h = (await q.query<{ storeId: string; kind: ProductKind; takenOn: string }>("select store_id as \"storeId\", kind, taken_on::text as \"takenOn\" from stocktakes where id = $1", [stocktakeId])).rows[0];
+      if (!h) throw new ForbiddenError();
+      const prev = (await q.query<{ id: string; d: string }>("select id, taken_on::text as d from stocktakes where store_id = $1 and kind = $2 and taken_on < $3 order by taken_on desc limit 1", [h.storeId, h.kind, h.takenOn])).rows[0];
+      if (!prev) return { copied: 0, added: 0, from: null };
+      const base = (await q.query<{ m: number }>("select coalesce(max(sort_order), 0) as m from stocktake_lines where stocktake_id = $1", [stocktakeId])).rows[0].m;
+      const added = (await q.query(
+        `insert into stocktake_lines (stocktake_id, company_id, store_id, product_id, maker, name, spec, cost_price, sort_order)
+         select $1, $2, $3, pl.product_id, pl.maker, pl.name, pl.spec, pl.cost_price, $5 + row_number() over (order by pl.sort_order)
+           from stocktake_lines pl where pl.stocktake_id = $4 and pl.quantity is not null
+            and not exists (select 1 from stocktake_lines l where l.stocktake_id = $1 and ((pl.product_id is not null and l.product_id = pl.product_id) or (l.maker = pl.maker and l.name = pl.name and l.spec = pl.spec)))
+         returning id`, [stocktakeId, me.companyId, h.storeId, prev.id, base])).rows.length;
+      const r = await q.query(
+        `update stocktake_lines l set quantity = pl.quantity
+           from stocktake_lines pl
+          where l.stocktake_id = $1 and pl.stocktake_id = $2 and pl.quantity is not null
+            and ((pl.product_id is not null and l.product_id = pl.product_id) or (l.maker = pl.maker and l.name = pl.name and l.spec = pl.spec))
+            and ($3::boolean = false or l.quantity is null)
+        returning l.id`, [stocktakeId, prev.id, onlyEmpty]);
+      return { copied: r.rows.length, added, from: prev.d };
+    });
+  } catch (e) { if (e instanceof ForbiddenError) throw e; throw new ForbiddenError("入力中の棚卸しだけ、コピーできます"); }
+}
+
+/** 1行（メーカー・品名・規格・仕入値）を、この表の中だけで直す。金額は数量×仕入値で、自動で変わる */
+export async function editStocktakeLine(db: Database, userId: string, lineId: string, v: { maker: string; name: string; spec: string; costPrice: number }): Promise<void> {
+  if (!v.name.trim()) throw new Error("品名を入れてください");
+  if (!Number.isInteger(v.costPrice) || v.costPrice < 0) throw new Error("仕入値は、0以上の整数で入れてください");
+  try { await asUser(db, userId, (q) => q.query("select public.stocktake_line_edit($1, $2, $3, $4, $5)", [lineId, v.maker, v.name, v.spec, v.costPrice])); }
+  catch { throw new ForbiddenError("この行は直せません（入力中の表だけ直せます）"); }
+}
+/** 1行を、この表から消す（入力中の表だけ。商品マスターは変わらない） */
+export async function deleteStocktakeLine(db: Database, userId: string, lineId: string): Promise<void> {
+  let n = 0;
+  try { n = (await asUser(db, userId, (q) => q.query("delete from stocktake_lines where id = $1 returning id", [lineId]))).rows.length; }
+  catch { throw new ForbiddenError(); }
+  if (n === 0) throw new ForbiddenError("この行は消せません（入力中の表だけ消せます）");
 }

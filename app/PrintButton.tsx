@@ -46,7 +46,12 @@ function fitToA4(sel: string): () => void {
   if (!table) return () => {};
   table.classList.add("pfit");
   (table as HTMLElement).style.zoom = "1";
+  // スマホでは表が隠れている（カード表示）ので、はかる間だけ、見えない場所に出す
+  const host = table.closest<HTMLElement>(".stwide");
+  const prev = host ? host.getAttribute("style") : null;
+  if (host && host.offsetParent === null) host.setAttribute("style", "display:block !important;position:absolute;left:-99999px;top:0;width:1100px;visibility:hidden");
   const w = table.scrollWidth, h = table.scrollHeight;
+  if (host) { if (prev === null) host.removeAttribute("style"); else host.setAttribute("style", prev); }
   const HEAD = 60, MM = 3.7795;           // 見出しの分と、1mmあたりのpx
   const land = Math.min(1, ((297 - 16) * MM) / w, ((210 - 16) * MM - HEAD) / h);
   const port = Math.min(1, ((210 - 16) * MM) / w, ((297 - 16) * MM - HEAD) / h);

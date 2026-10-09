@@ -1,5 +1,7 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { PrintButton } from "@/app/PrintButton";
 import { Stepper } from "@/app/Stepper";
 import { DateStepper } from "@/app/DateStepper";
 import { ShareMenu } from "@/app/ShareMenu";
@@ -62,7 +64,7 @@ export default function StocktakePage() {
       {canStart && (
         <div className="card">
           <b>新しい棚卸しを始める（{store?.name}　{PRODUCT_KIND_LABEL[kind]}）</b>
-          <p className="sub" style={{ margin: "4px 0 8px" }}>このお店で使う商品の一覧が、そのまま棚卸し表になります。前回の棚卸しがあれば、その数量が入った状態で始まります（直して提出します）。</p>
+          <p className="sub" style={{ margin: "4px 0 8px" }}>このお店で使う商品の一覧が、そのまま棚卸し表になります。前回の棚卸しがあれば、棚卸し表の中の「数量を今年にまとめてコピー」で、昨年の数をそのまま入れられます（1つずつ直せます）。</p>
           <div className="actions"><div style={{ margin: 0 }}><span className="sub">棚卸日</span><br /><DateStepper label="棚卸日" value={takenOn} onChange={setTakenOn} /></div>
             <button style={{ width: "auto", margin: 0, alignSelf: "flex-end" }} onClick={async () => {
               try { const r = await api<{ id: string }>("/api/stocktakes", { storeId, kind, takenOn }); setMsg(""); setOpenId(r.id); } catch (e) { setMsg((e as Error).message); }
@@ -165,6 +167,7 @@ function Detail({ id, storeName, onBack }: { id: string; storeName: string; onBa
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [adding, setAdding] = useState(false);
   const [nf, setNf] = useState({ maker: "", name: "", spec: "", cost: "" });
+  const [el, setEl] = useState<{ id: string; maker: string; name: string; spec: string; cost: string } | null>(null);
 
   const apply = useCallback((r: StocktakeDetail) => {
     setD(r);
@@ -242,6 +245,12 @@ function Detail({ id, storeName, onBack }: { id: string; storeName: string; onBa
         {me.level === 4 && d.status === "submitted" && <button style={{ width: "auto", margin: 0, padding: "10px 14px", fontSize: 14 }} onClick={() => run({ action: "status", status: "acknowledged" })}>確認済みにする</button>}
         {me.level === 4 && d.status !== "open" && <button className="ghost" style={{ color: "var(--sub)" }} onClick={() => confirm("ひとつ前の状態に戻しますか？") && run({ action: "status", status: d.status === "acknowledged" ? "submitted" : "open" })}>ひとつ戻す</button>}
         {d.canManage && d.status !== "open" && <button className="ghost" style={{ color: "var(--blue)" }} onClick={async () => { try { const r = await api<{ count: number }>("/api/stock", { action: "apply", stocktakeId: id }); setMsg(""); setNote(`在庫に反映しました（${r.count}件の差を合わせました）`); } catch (e) { setMsg((e as Error).message); } }}>この棚卸しを在庫に反映</button>}
+        {d.editable && d.prevOn && <button className="ghost" style={{ color: "var(--blue)" }} onClick={async () => {
+          const filled = live.some((i) => i.quantity !== null);
+          const onlyEmpty = filled ? !confirm(`すでに入っている数量も、${reiwaDot(d.prevOn!)} の数でおきかえますか？\n［OK］おきかえる　［キャンセル］空いている所だけコピー`) : false;
+          try { await flush(); const r = await api<{ copied: number; added: number; from: string | null }>(`/api/stocktakes/${id}`, { action: "copy-prev", onlyEmpty }); setMsg(""); setNote(`${reiwaDot(r.from ?? d.prevOn!)} の数量を ${r.copied}件コピーしました${r.added ? `（表にない商品 ${r.added}件も足しました）` : ""}。1つずつ直せます`); await load(); } catch (e) { setMsg((e as Error).message); }
+        }}>📋 {reiwaDot(d.prevOn)} の数量を、今年にまとめてコピー</button>}
+        <PrintButton label="🖨 A4に1枚で印刷" fit=".stwide .sttable" />
         <ShareMenu title={title} text={tsv()} link={`${typeof location !== "undefined" ? location.origin : ""}/admin/stocktake?id=${id}`} />
         {d.canManage && d.status === "open" && <button className="ghost" onClick={async () => { if (confirm("この棚卸しを削除しますか？（入力した数量も消えます）") && (await run({ action: "delete" }))) onBack(); }}>削除</button>}
         {note && <span className="sub">{note}</span>}
@@ -275,6 +284,22 @@ function Detail({ id, storeName, onBack }: { id: string; storeName: string; onBa
             </>}
         </div>
       )}
+      {el && typeof document !== "undefined" && createPortal(
+        <div className="sheet-bg noprint" onClick={() => setEl(null)}>
+          <div className="sheet" onClick={(e) => e.stopPropagation()} role="dialog" aria-label="この行を直す">
+            <h3>この行を直す</h3>
+            <label>メーカー<input value={el.maker} onChange={(e) => setEl({ ...el, maker: e.target.value })} /></label>
+            <label>品名<input value={el.name} onChange={(e) => setEl({ ...el, name: e.target.value })} /></label>
+            <label>規格<input value={el.spec} onChange={(e) => setEl({ ...el, spec: e.target.value })} /></label>
+            <label>仕入値（税抜・円）<Stepper label="仕入値" unit="円" step={10} bigStep={100} max={9999999} value={el.cost} onChange={(x) => setEl({ ...el, cost: x })} /></label>
+            <p className="sub">この棚卸し表の中だけが変わります。数量を入れていれば、金額も自動で変わります。</p>
+            <div className="toolbar">
+              <button disabled={!el.name.trim() || el.cost === ""} onClick={async () => { try { await flush(); await api(`/api/stocktakes/${id}`, { action: "edit-line", lineId: el.id, maker: el.maker, name: el.name, spec: el.spec, costPrice: Number(el.cost) }); setEl(null); setMsg(""); await load(); } catch (e) { setMsg((e as Error).message); } }}>直す</button>
+              {d.canManage && <button className="ghost" style={{ color: "var(--bad)" }} onClick={async () => { if (!confirm("この行を、この表から消しますか？（数量も消えます）")) return; try { await flush(); await api(`/api/stocktakes/${id}`, { action: "delete-line", lineId: el.id }); setEl(null); setMsg(""); await load(); } catch (e) { setMsg((e as Error).message); } }}>この行を消す</button>}
+              <button className="ghost" onClick={() => setEl(null)}>やめる</button>
+            </div>
+          </div>
+        </div>, document.body)}
       <div className="toolbar noprint">
         <input aria-label="さがす" placeholder="メーカー・品名でさがす" value={q} onChange={(e) => setQ(e.target.value)} style={{ flex: 2, minWidth: 180 }} />
         <label className="sub" style={{ margin: 0, display: "flex", gap: 6, alignItems: "center" }}><input type="checkbox" style={{ width: 18, height: 18 }} checked={onlyEmpty} onChange={(e) => setOnlyEmpty(e.target.checked)} />未入力だけ表示</label>
@@ -286,20 +311,17 @@ function Detail({ id, storeName, onBack }: { id: string; storeName: string; onBa
             <div className="stinfo"><b>{i.name}</b><span className="sub">{[i.maker, i.spec].filter(Boolean).join("　")}　仕入値 {i.costPrice.toLocaleString("ja-JP")}円</span></div>
             <div className="stctl">
               {d.editable ? (
-                <span className="stepper big">
-                  <button type="button" aria-label="減らす" onClick={() => step(i.id, -1)}>−</button>
-                  <Stepper label={`${i.name}の数量`} placeholder="数" step={1} value={qty[i.id] ?? ""} onChange={(x) => change(i.id, x)} />
-                  <button type="button" aria-label="増やす" onClick={() => step(i.id, 1)}>＋</button>
-                </span>
+                <Stepper label={`${i.name}の数量`} placeholder="数" step={1} value={qty[i.id] ?? ""} onChange={(x) => change(i.id, x)} />
               ) : <b style={{ fontSize: 20 }}>{i.quantity ?? "—"}</b>}
               <span className="sub">{i.quantity === null ? "" : `${i.amount.toLocaleString("ja-JP")}円`}</span>
+              {d.editable && <button type="button" className="ghost" style={{ padding: "2px 8px", fontSize: 12, margin: 0, width: "auto" }} onClick={() => setEl({ id: i.id, maker: i.maker, name: i.name, spec: i.spec, cost: String(i.costPrice) })}>名前・仕入値を直す</button>}
             </div>
           </li>
         ))}
         {shown.length === 0 && live.length > 0 && <p className="hint">該当する商品がありません。</p>}
       </ul>
       <div className="scroll stwide"><table className="sttable">
-        <thead><tr><th className="maker">メーカー</th><th>品名</th><th className="spec">規格</th><th>仕入値</th><th>数量</th><th>金額</th></tr></thead>
+        <thead><tr><th className="maker">メーカー</th><th>品名</th><th className="spec">規格</th><th>仕入値</th><th>数量</th><th>金額</th>{d.editable && <th className="noprint"></th>}</tr></thead>
         <tbody>
           {shown.map((i) => (
             <tr key={i.id} className={i.quantity === null ? "empty" : ""}>
@@ -309,14 +331,11 @@ function Detail({ id, storeName, onBack }: { id: string; storeName: string; onBa
               <td className="r">{i.costPrice.toLocaleString("ja-JP")}</td>
               <td className="q">
                 {d.editable ? (
-                  <span className="stepper">
-                    <button type="button" aria-label="減らす" onClick={() => step(i.id, -1)}>−</button>
-                    <Stepper className="cellstp" label={`${i.name}の数量`} placeholder="—" step={1} value={qty[i.id] ?? ""} onChange={(x) => change(i.id, x)} />
-                    <button type="button" aria-label="増やす" onClick={() => step(i.id, 1)}>＋</button>
-                  </span>
+                  <Stepper className="cellstp" label={`${i.name}の数量`} placeholder="—" step={1} value={qty[i.id] ?? ""} onChange={(x) => change(i.id, x)} />
                 ) : <b>{i.quantity ?? "—"}</b>}
               </td>
               <td className="r">{i.amount ? i.amount.toLocaleString("ja-JP") : i.quantity === null ? "" : "0"}</td>
+              {d.editable && <td className="noprint"><button type="button" className="ghost" style={{ padding: "2px 8px", fontSize: 12, margin: 0, width: "auto" }} onClick={() => setEl({ id: i.id, maker: i.maker, name: i.name, spec: i.spec, cost: String(i.costPrice) })}>直す</button></td>}
             </tr>
           ))}
           <tr className="sumrow"><td className="maker"></td><td colSpan={1}>{reiwaDot(d.takenOn)} 棚卸金額</td><td className="spec"></td><td></td><td></td><td className="r"><b>{yen(total)}</b></td></tr>
