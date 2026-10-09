@@ -98,7 +98,7 @@ function Checklist({ sheet, attempts, assessors, myId, traineeId, traineeName, c
   const answered = ids.filter((id) => sc[id] !== undefined).length;
   const passed = isPassed(total, sheet.passPoints);
   const editable = canScore;
-  const run = async (body: object, done: string) => { setBusy(true); try { await api("/api/lesson-check", { method: "POST", body: JSON.stringify(body) }); setOk(done); onSaved(); } catch (e) { setMsg((e as Error).message); } setBusy(false); };
+  const run = async (body: object, done: string) => { setBusy(true); try { await api("/api/lesson-check", body); setOk(done); onSaved(); } catch (e) { setMsg((e as Error).message); } setBusy(false); };
 
   return (
     <main className="wide">
@@ -168,7 +168,7 @@ function SheetEditor({ sheet, grade, onClose, onDone }: { sheet: CheckSheet | nu
   const [items, setItems] = useState<{ id?: string; name: string }[]>((sheet?.items.filter((i) => i.active) ?? []).map((i) => ({ id: i.id, name: i.name })));
   const [msg, setMsg] = useState("");
   const num = (k: "maxPoints" | "passPoints" | "maxAttempts") => <Stepper label={k} min={k === "maxAttempts" ? 1 : 0} max={9999} value={String(f[k])} onChange={(v) => setF({ ...f, [k]: Number(v) || 0 })} />;
-  const save = async () => { try { await api("/api/lesson-check", { method: "POST", body: JSON.stringify({ action: "sheet", id: sheet?.id, ...f, items: items.filter((i) => i.name.trim()) }) }); onDone(); } catch (e) { setMsg((e as Error).message); } };
+  const save = async () => { try { await api("/api/lesson-check", { action: "sheet", id: sheet?.id, ...f, items: items.filter((i) => i.name.trim()) }); onDone(); } catch (e) { setMsg((e as Error).message); } };
   return (
     <div style={{ ...bg, zIndex: 60 }} onClick={onClose}><div style={box} onClick={(e) => e.stopPropagation()}>
       <h2 style={{ marginTop: 0 }}>{sheet ? "採点表を編集" : "採点表を足す"}</h2>
