@@ -1357,8 +1357,6 @@ export async function getManualAsset(db: Database, userId: string, id: string): 
 
 import { applyOp, type EditOp } from "./manual/edit";
 import { BUNDLED_SETS, mergeBundled } from "./manual/bundled";
-import { readFile } from "node:fs/promises";
-import path from "node:path";
 
 /** アプリに入れてある資料（PDF）を、このページに取り込む（管理者・書き込める人のみ）。入っているファイルは足さない */
 export async function attachBundledManualFiles(db: Database, userId: string, pageId: string): Promise<number> {
@@ -1374,6 +1372,8 @@ export async function attachBundledManualFiles(db: Database, userId: string, pag
   const set = BUNDLED_SETS.find((x) => x.sourceId === info.sid);
   if (!set) throw new Error("このページに取り込める資料はありません");
   const refs: Record<string, string> = {};
+  const { readFile } = await import("node:fs/promises");
+  const path = await import("node:path");
   for (const f of set.files) {
     const data = await readFile(path.join(process.cwd(), "data", "manual-files", set.dir, f.file));
     const sha = createHash("sha256").update(data).digest("hex");
