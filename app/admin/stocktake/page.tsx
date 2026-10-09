@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Stepper } from "@/app/Stepper";
+import { DateStepper } from "@/app/DateStepper";
 import { ShareMenu } from "@/app/ShareMenu";
 import { api, useAutoRefresh, useMe } from "@/lib/client";
 import { reiwaDot } from "@/lib/era";
@@ -62,7 +63,7 @@ export default function StocktakePage() {
         <div className="card">
           <b>新しい棚卸しを始める（{store?.name}　{PRODUCT_KIND_LABEL[kind]}）</b>
           <p className="sub" style={{ margin: "4px 0 8px" }}>このお店で使う商品の一覧が、そのまま棚卸し表になります。前回の棚卸しがあれば、その数量が入った状態で始まります（直して提出します）。</p>
-          <div className="actions"><label style={{ margin: 0 }}>棚卸日<input type="date" value={takenOn} onChange={(e) => setTakenOn(e.target.value)} /></label>
+          <div className="actions"><div style={{ margin: 0 }}><span className="sub">棚卸日</span><br /><DateStepper label="棚卸日" value={takenOn} onChange={setTakenOn} /></div>
             <button style={{ width: "auto", margin: 0, alignSelf: "flex-end" }} onClick={async () => {
               try { const r = await api<{ id: string }>("/api/stocktakes", { storeId, kind, takenOn }); setMsg(""); setOpenId(r.id); } catch (e) { setMsg((e as Error).message); }
             }}>始める</button></div>
@@ -72,10 +73,10 @@ export default function StocktakePage() {
       {me.level === 4 && (
         <div className="card">
           <b>昨年のデータを取り込む（{store?.name}　{PRODUCT_KIND_LABEL[kind]}）</b>
-          {!imp ? <div style={{ marginTop: 6 }}><button className="ghost" style={{ width: "auto" }} onClick={() => setImp({ text: "", date: `${new Date().getFullYear() - 1}-10-31`, busy: false, res: "" })}>取り込み画面をひらく</button>
+          {!imp ? <div style={{ marginTop: 6 }}><button className="ghost" style={{ width: "auto" }} onClick={() => setImp({ text: "", date: "2025-10-31", busy: false, res: "" })}>取り込み画面をひらく</button>
             <p className="sub" style={{ margin: "6px 0 0" }}>昨年の「メーカー・品名・規格・仕入値・数量」の表を貼ると、今年の棚卸しが、その数量から始まります（数量を直して提出します。金額は数量を変えると自動で変わります）。</p></div> : (
             <div style={{ marginTop: 6 }}>
-              <label style={{ margin: 0 }}>昨年の棚卸日<input type="date" value={imp.date} onChange={(e) => setImp({ ...imp, date: e.target.value })} /></label>
+              <div style={{ margin: 0 }}><span className="sub">昨年の棚卸日</span><br /><DateStepper label="昨年の棚卸日" value={imp.date} onChange={(v) => setImp({ ...imp, date: v })} /></div>
               <textarea aria-label="昨年の表" rows={8} placeholder={"Excelの表をコピーして貼り付け\n（メーカー　品名　規格　仕入値　数量）"} style={{ width: "100%", fontSize: 14, padding: 10, borderRadius: 12, border: "1px solid var(--line)", marginTop: 6 }} value={imp.text} onChange={(e) => setImp({ ...imp, text: e.target.value })} />
               {imp.res && <p className="sub" style={{ color: "var(--ok)" }}>✅ {imp.res}</p>}
               <div className="actions">
