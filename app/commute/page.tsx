@@ -6,6 +6,7 @@ import { Stepper } from "@/app/Stepper";
 import { api, MeProvider, useAutoRefresh, useMe } from "@/lib/client";
 import type { CommuteData, CommuteMatch } from "@/lib/service";
 
+const ymj = (ym: string) => `${ym.slice(0, 4)}年${Number(ym.slice(5))}月`;
 const ST: Record<string, string> = { none: "⚪ まだ", submitted: "🟡 提出ずみ（確認まち）", checked: "✅ 確認ずみ", redo: "🔴 出し直し" };
 const shiftMonth = (ym: string, d: number) => { const [y, m] = ym.split("-").map(Number); const t = new Date(Date.UTC(y, m - 1 + d, 1)); return `${t.getUTCFullYear()}-${String(t.getUTCMonth() + 1).padStart(2, "0")}`; };
 const ml = (ym: string) => `${ym.slice(0, 4)}年${Number(ym.slice(5))}月`;
@@ -53,7 +54,7 @@ function Page() {
       {d.onRoster && (
         <div className="card">
           <b style={{ fontSize: 18 }}>あなたの提出（{ml(cur)}ぶん）</b>
-          <p style={{ margin: "6px 0" }}>{d.mine ? ST[d.mine.status] : d.overdue ? "🔴 期限（" + d.dueDate.slice(5).replace("-", "/") + "）をすぎています。早めに出してください" : "⚪ まだ出していません（" + d.dueDate.slice(5).replace("-", "/") + " まで）"}</p>
+          <p style={{ margin: "6px 0" }}>{d.mine ? ST[d.mine.status] : d.coveredUntil ? `🟦 今月は出さなくて大丈夫です（${ymj(d.coveredUntil)}まで、前に出した定期券の期間です）` : d.overdue ? "🔴 期限（" + d.dueDate.slice(5).replace("-", "/") + "）をすぎています。早めに出してください" : "⚪ まだ出していません（" + d.dueDate.slice(5).replace("-", "/") + " まで）"}</p>
           {d.mine?.status === "redo" && <p className="err">{d.mine.note || "写真が見づらいなど、出し直しをお願いします。"}</p>}
           {d.mine?.status === "checked" ? <p className="sub">確認ずみです。ありがとうございました。</p> : (
             <>
@@ -86,13 +87,13 @@ function Page() {
             </select>
           )}
           <h3 style={{ margin: "12px 0 4px" }}>名簿と提出の状況（{ml(cur)}）</h3>
-          <p className="sub">提出ずみ {d.rows.filter((r) => r.status !== "none" && r.status !== "redo").length}／{d.rows.length}人</p>
+          <p className="sub">提出ずみ {d.rows.filter((r) => (r.status !== "none" && r.status !== "redo") || r.coveredUntil).length}／{d.rows.length}人（3・6ヶ月定期の人は、その期間は出さなくてOK）</p>
           {d.rows.length === 0 && <p className="hint">名簿が空です。下の「名簿に入れる」で、定期券を買っている人を入れてください。</p>}
           <ul className="list">
             {d.rows.map((r) => (
               <li key={r.membershipId} style={{ display: "block" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                  <span><b>{r.name}</b> <span className="sub">{ST[r.status]}{r.months ? `・${r.months}ヶ月分` : ""}</span></span>
+                  <span><b>{r.name}</b> <span className="sub">{r.status === "none" && r.coveredUntil ? `🟦 出さなくてOK（${ymj(r.coveredUntil)}まで）` : ST[r.status]}{r.months ? `・${r.months}ヶ月分` : ""}</span></span>
                   <span style={{ display: "flex", gap: 6 }}>
                     {d.canCheck && r.subId && <button className="ghost" style={{ width: "auto", margin: 0, color: "var(--blue)" }} onClick={() => open(r.subId!)}>写真を見る</button>}
                     <button className="ghost" style={{ width: "auto", margin: 0, color: "var(--sub)" }} disabled={busy} onClick={() => confirm(`${r.name}さんを名簿から外しますか？（退職・やめたとき）`) && act({ action: "roster", memberId: r.membershipId, on: false }, "名簿から外しました")}>外す</button>

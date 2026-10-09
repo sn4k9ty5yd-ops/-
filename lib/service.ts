@@ -3395,10 +3395,10 @@ export async function deleteStocktakeLine(db: Database, userId: string, lineId: 
 }
 
 // ---------------------------------------------------------------- 定期券の提出（毎月1回・写メ）
-export interface CommuteRow { membershipId: string; name: string; storeName: string; subId: string | null; status: "none" | "submitted" | "checked" | "redo"; note: string; submittedAt: string | null; months: number | null }
+export interface CommuteRow { membershipId: string; name: string; storeName: string; subId: string | null; status: "none" | "submitted" | "checked" | "redo"; note: string; submittedAt: string | null; months: number | null; coveredUntil: string | null }
 export interface CommuteData {
   month: string; dueDay: number; dueDate: string; overdue: boolean;
-  onRoster: boolean; mine: { id: string; status: "submitted" | "checked" | "redo"; note: string; submittedAt: string; months: number | null } | null;
+  onRoster: boolean; coveredUntil: string | null; mine: { id: string; status: "submitted" | "checked" | "redo"; note: string; submittedAt: string; months: number | null } | null;
   canManage: boolean; canCheck: boolean; storeId: string; stores: { id: string; name: string }[];
   rows: CommuteRow[]; candidates: { id: string; name: string }[];
 }
@@ -3421,6 +3421,7 @@ export async function getCommute(db: Database, userId: string, month?: string, s
     if (canManage) {
       rows = (await q.query<CommuteRow>(
         `select m.id as "membershipId", m.name, s.name as "storeName", c.id as "subId", coalesce(c.status, 'none') as status, coalesce(c.note, '') as note, c.months,
+                (select to_char(cv.month + make_interval(months => cv.months - 1), 'YYYY-MM') from commute_submissions cv where cv.membership_id = m.id and cv.status <> 'redo' and cv.months > 1 and cv.month < $2::date and (cv.month + make_interval(months => cv.months))::date > $2::date order by cv.month desc limit 1) as "coveredUntil",
                 to_char(c.submitted_at at time zone 'Asia/Tokyo','YYYY-MM-DD"T"HH24:MI:SS"Z"') as "submittedAt"
            from commute_roster r join memberships m on m.id = r.membership_id join stores s on s.id = m.store_id
            left join commute_submissions c on c.membership_id = m.id and c.month = $2::date
@@ -3429,8 +3430,10 @@ export async function getCommute(db: Database, userId: string, month?: string, s
         `select m.id, m.name from memberships m where m.store_id = $1 and m.status = 'active' and not m.display_only
             and not exists (select 1 from commute_roster r where r.membership_id = m.id) order by m.name`, [sid])).rows;
     }
+    const coveredUntil = (await q.query<{ u: string }>(
+      `select to_char(cv.month + make_interval(months => cv.months - 1), 'YYYY-MM') as u from commute_submissions cv where cv.membership_id = $1 and cv.status <> 'redo' and cv.months > 1 and cv.month < $2::date and (cv.month + make_interval(months => cv.months))::date > $2::date order by cv.month desc limit 1`, [userId, first])).rows[0]?.u ?? null;
     const dueDate = `${ym}-${String(dueDay).padStart(2, "0")}`;
-    return { month: ym, dueDay, dueDate, overdue: jstToday() > dueDate && !mine, onRoster, mine, canManage, canCheck, storeId: sid, stores, rows, candidates };
+    return { month: ym, dueDay, dueDate, overdue: jstToday() > dueDate && !mine && !coveredUntil, onRoster, coveredUntil, mine, canManage, canCheck, storeId: sid, stores, rows, candidates };
   });
 }
 
@@ -3442,7 +3445,8 @@ export async function getCommuteSummary(db: Database, userId: string): Promise<{
     const on = (await q.query("select 1 from commute_roster where membership_id = $1", [userId])).rows.length > 0;
     const done = (await q.query("select 1 from commute_submissions where membership_id = $1 and month = $2::date and status <> 'redo'", [userId, `${ym}-01`])).rows.length > 0;
     const toCheck = me.level >= 4 ? (await q.query<{ n: number }>("select count(*)::int as n from commute_submissions where status = 'submitted' and month = $1::date", [`${ym}-01`])).rows[0].n : 0;
-    return { show: on || me.level >= 3, pending: on && !done, toCheck };
+    const cov = (await q.query("select 1 from commute_submissions cv where cv.membership_id = $1 and cv.status <> 'redo' and cv.months > 1 and cv.month < $2::date and (cv.month + make_interval(months => cv.months))::date > $2::date", [userId, `${ym}-01`])).rows.length > 0;
+    return { show: on || me.level >= 3, pending: on && !done && !cov, toCheck };
   });
 }
 
@@ -3503,6 +3507,7 @@ export async function runCommuteReminders(db: Database, force = false, at?: stri
       `select m.id from commute_roster r join memberships m on m.id = r.membership_id
         where r.company_id = $1 and m.status = 'active' and not m.display_only
           and not exists (select 1 from commute_submissions c where c.membership_id = m.id and c.month = $2::date and c.status <> 'redo')
+          and not exists (select 1 from commute_submissions cv where cv.membership_id = m.id and cv.status <> 'redo' and cv.months > 1 and cv.month < $2::date and (cv.month + make_interval(months => cv.months))::date > $2::date)
           and not exists (select 1 from commute_reminder_log l where l.day = $3::date and l.membership_id = m.id)`, [co.company_id, first, today])).rows.map((r) => r.id);
     if (todo.length === 0) continue;
     await db.query("insert into commute_reminder_log (day, membership_id) select $1::date, unnest($2::uuid[]) on conflict do nothing", [today, todo]);

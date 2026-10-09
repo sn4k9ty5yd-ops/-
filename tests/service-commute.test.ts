@@ -58,6 +58,21 @@ describe("定期券の提出", () => {
     expect(await svc.addCommuteRosterBulk(d, u.mgrA, [u.s2])).toBe(1);
     await svc.setCommuteRoster(d, u.mgrA, u.s2, false);
   });
+  it("3・6ヶ月定期は、その期間のあいだ、出さなくてよい（通知も来ない）", async () => {
+    await svc.setCommuteRoster(d, u.office, u.s2, true);
+    await svc.submitCommute(d, u.s2, ym, IMG, 6);
+    const prev = new Date(`${ym}-01T00:00:00Z`); prev.setUTCMonth(prev.getUTCMonth() + 1);
+    const next = prev.toISOString().slice(0, 7);
+    const sub = (await d.query<{ id: string }>("select id from commute_submissions where membership_id = $1", [u.s2])).rows[0].id;
+    await svc.checkCommute(d, u.office, sub, "checked");
+    // 来月: まだ期間の中 → 出さなくてよい
+    expect((await svc.getCommute(d, u.s2, next)).coveredUntil).not.toBeNull();
+    await d.query("update commute_submissions set month = (month - interval '1 month')::date where membership_id = $1", [u.s2]);   // 先月に出したことにして、今月を見る
+    const g = await svc.getCommute(d, u.s2);
+    expect(g.coveredUntil).not.toBeNull();
+    expect((await svc.getCommuteSummary(d, u.s2)).pending).toBe(false);
+    await svc.setCommuteRoster(d, u.office, u.s2, false);
+  });
   it("外すと、名簿から消える。期限日は事務員さんだけが決められる。通知は期限の3日前から、出していない人へ毎日1回", async () => {
     await expect(svc.setCommuteDue(d, u.mgrA, 20)).rejects.toThrow(svc.ForbiddenError);
     await svc.setCommuteDue(d, u.office, 20);
