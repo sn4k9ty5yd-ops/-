@@ -86,6 +86,29 @@ function Settings({ p, reload }: { p: ManualPage; reload: () => Promise<void> })
   );
 }
 
+const CHECK_DEFAULT = ["パラソル", "留守電", "iPad充電", "シャンプー台電気", "ラボ電気", "フロア電気", "トイレ電気", "自動ドア", "ホットキャビン", "ボイラー", "マーブ", "洗濯物", "空調", "音楽", "ゴミ出し", "６階鍵", "シャンプー台水回り", "水道", "オーリラ"];
+function NewChecklist({ p, reload }: { p: ManualPage; reload: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [title, setTitle] = useState("");
+  const [items, setItems] = useState(CHECK_DEFAULT.join("\n"));
+  const [days, setDays] = useState("31");
+  const [busy, setBusy] = useState(false);
+  if (!open) return <p><button className="ghost" onClick={() => setOpen(true)}>✅ タップでチェックする表を足す</button></p>;
+  return (
+    <div className="card">
+      <h3 style={{ marginTop: 0 }}>タップでチェックする表をつくる</h3>
+      <p className="hint">日にち（たて）×項目（よこ）の表ができます。マスを押すと✓がつき、もう一度押すと消えます。</p>
+      <label>表の名前（例：10月）<input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="10月" /></label>
+      <label>項目（1行に1つ）<textarea rows={8} value={items} onChange={(e) => setItems(e.target.value)} /></label>
+      <label>日数（その月の日数）<input inputMode="numeric" value={days} onChange={(e) => setDays(e.target.value.replace(/\D/g, ""))} style={{ width: 80 }} /></label>
+      <div className="row">
+        <button disabled={busy} onClick={async () => { setBusy(true); try { await api(`/api/manual/${p.id}`, { action: "addChecklist", title, items: items.split("\n"), days: Number(days) || 31 }); setOpen(false); reload(); } catch (e) { alert((e as Error).message); } setBusy(false); }}>つくる</button>
+        <button className="ghost" onClick={() => setOpen(false)}>やめる</button>
+      </div>
+    </div>
+  );
+}
+
 function Page() {
   const { me } = useMe();
   const { id } = useParams<{ id: string }>();
@@ -105,11 +128,12 @@ function Page() {
       {p.canEdit && !me.displayOnly && hasEditable(p.body) && <p className="hint" style={{ marginTop: -12 }}>このページには書き込めます（チェックや表のマスは、そのまま入力できます。自動で保存されます）。</p>}
       {p.bundledMissing ? (
         <div className="card" style={{ margin: "0 0 14px" }}>
-          <p style={{ margin: "0 0 8px" }}>📎 このアプリに用意してある資料（PDF）が、あと{p.bundledMissing}つ、このページに入っていません。</p>
-          <button onClick={async () => { try { const r = await api<{ added: number }>(`/api/manual/${p.id}`, { action: "attachBundled" }); setErr(""); await load(); alert(`資料を${r.added}つ入れました`); } catch (e) { alert((e as Error).message); } }}>資料のPDFを、このページに入れる</button>
+          <p style={{ margin: "0 0 8px" }}>📎 このアプリに用意してある資料（PDF）や、ひとつの項目へのまとめが、まだこのページに入っていません。</p>
+          <button onClick={async () => { try { const r = await api<{ added: number }>(`/api/manual/${p.id}`, { action: "attachBundled" }); setErr(""); await load(); alert(`${r.added}か所、直しました`); } catch (e) { alert((e as Error).message); } }}>資料のPDFを入れて、まとめる</button>
         </div>
       ) : null}
       <BlockView blocks={p.body} ctx={{ refs: p.refs, canEdit: p.canEdit, onEdit: async (edit) => { await api(`/api/manual/${p.id}`, { action: "edit", edit }); } }} />
+      {p.canEdit && me.level >= 3 && !me.displayOnly && p.title.includes("チェック") && <NewChecklist p={p} reload={load} />}
       {p.children.length > 0 && (
         <>
           <h2>このページの中</h2>

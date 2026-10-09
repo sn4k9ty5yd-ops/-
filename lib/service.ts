@@ -1357,6 +1357,27 @@ export async function getManualAsset(db: Database, userId: string, id: string): 
 
 import { applyOp, type EditOp } from "./manual/edit";
 import { BUNDLED_SETS, mergeBundled } from "./manual/bundled";
+import { assignIds } from "./manual/blocks";
+
+/** タップで✓がつくチェック表（日にち×項目）を、ページの終わりに足す（店長以上・書き込めるページ）。題名の見出しもつける */
+export async function addManualChecklist(db: Database, userId: string, pageId: string, input: { title: string; items: string[]; days: number }): Promise<void> {
+  if (!/^[0-9a-f-]{36}$/.test(pageId)) throw new ForbiddenError();
+  const me = await getMe(db, userId);
+  if (!me || me.level < 3) throw new ForbiddenError();
+  const items = [...new Set(input.items.map((x) => x.replace(/[\r\n]+/g, " ").trim()).filter(Boolean))].slice(0, 60);
+  const days = Math.min(31, Math.max(1, Math.floor(input.days)));
+  const title = input.title.trim().slice(0, 40);
+  if (items.length === 0) throw new Error("項目を1つ以上入れてください");
+  await asUser(db, userId, async (c) => {
+    await c.query("select pg_advisory_xact_lock(hashtext($1))", [pageId]);
+    const row = (await c.query<{ body: Block[] }>("select body from manual_pages where id = $1", [pageId])).rows[0];
+    if (!row) throw new ForbiddenError("ページが見つかりません、または見る権限がありません");
+    const table: Block = { t: "table", header: true, tap: true, edit: true, rows: [["日付", ...items], ...Array.from({ length: days }, (_, i) => [`${i + 1}日`, ...items.map(() => "")])] };
+    const body = assignIds([...row.body, ...(title ? [{ t: "h", l: 2, x: title } as Block] : []), table]);
+    try { await c.query("select app.manual_write_body($1, $2::jsonb, $3)", [pageId, JSON.stringify(body), `チェック表「${title || "（題名なし）"}」を作った（${items.length}項目×${days}日）`]); }
+    catch (e) { if ((e as { code?: string }).code === "42501") throw new ForbiddenError("このページには書き込めません"); throw e; }
+  });
+}
 
 /** アプリに入れてある資料（PDF）を、このページに取り込む（管理者・書き込める人のみ）。入っているファイルは足さない */
 export async function attachBundledManualFiles(db: Database, userId: string, pageId: string): Promise<number> {

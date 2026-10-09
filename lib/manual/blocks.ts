@@ -11,7 +11,7 @@ export type BlockBody =
   | { t: "callout"; icon: string; color: string; x?: string; children: Block[] }
   | { t: "toggle"; x: string; color?: string; children: Block[] }
   | { t: "cols"; cols: Block[][] }
-  | { t: "table"; header: boolean; headerCol?: boolean; rows: string[][]; choices?: (string[] | null)[]; edit?: boolean }   // choices: 列ごとの選べる値（点数など）／edit: 書き込める人が、マスに入力できる表（評価表など）
+  | { t: "table"; header: boolean; headerCol?: boolean; rows: string[][]; choices?: (string[] | null)[]; edit?: boolean; tap?: boolean }   // tap: マスを押すと「✓」がつく／消える表（帰りのチェック表など）。 choices: 列ごとの選べる値（点数など）／edit: 書き込める人が、マスに入力できる表（評価表など）
   | { t: "img"; src: string; cap?: string }
   | { t: "video"; url: string }
   | { t: "file"; src: string; name: string }

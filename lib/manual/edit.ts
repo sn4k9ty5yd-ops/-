@@ -29,9 +29,11 @@ export function applyOp(body: Block[], op: EditOp): { body: Block[]; summary: st
   const row = b.rows[op.r];
   if (!row || op.c < 0 || op.c >= row.length) throw new Error("表のマスが見つかりません");
   const text = String(op.text ?? "").replace(/[\r\n]+/g, " ").trim().slice(0, MAX_CELL);
-  const choices = b.choices?.[op.c];
+  if (b.tap && (op.c < 1 || op.r < 1 || (text !== "" && text !== "✓"))) throw new Error("ここは押せません");
+  const choices = b.tap ? null : b.choices?.[op.c];
   if (choices && text !== "" && !choices.includes(text)) throw new Error("選べる値ではありません");
   row[op.c] = text;
+  if (b.tap) return { body: next, summary: `チェック表「${b.rows[0]?.[op.c] ?? ""}」の${(row[0] ?? "").replace(/<[^>]+>/g, "")}を${text ? "✓にした" : "外した"}` };
   const head = (b.rows[0]?.[op.c] ?? "").replace(/<[^>]+>/g, "");
   const who = (row[0] ?? "").replace(/<[^>]+>/g, "");
   return { body: next, summary: `表「${who}／${head}」を「${text}」にした` };

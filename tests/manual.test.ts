@@ -173,4 +173,16 @@ describe("取り込み", () => {
     expect(kid.t).toBe("file");
     expect((await svc.getManualAsset(db, id.admin, kid.src!.slice(6)))?.mime).toBe("application/pdf");
   }, 180000);
+
+  it("チェック表を足せる（店長以上だけ）", async () => {
+    const pid = (await db.query<{ id: string }>("insert into manual_pages (company_id, title, body, edit_level) values ($1,'帰りのチェック表','[]'::jsonb,1) returning id", [co])).rows[0].id;
+    await expect(svc.addManualChecklist(db, id.assistA, pid, { title: "10月", items: ["ボイラー", "水道"], days: 31 })).rejects.toThrow();
+    await svc.addManualChecklist(db, id.mgrA, pid, { title: "10月", items: ["ボイラー", "水道", "水道"], days: 31 });
+    const pg = await svc.getManualPage(db, id.mgrA, pid);
+    const t = pg.body.find((b) => b.t === "table") as Extract<Block, { t: "table" }>;
+    expect(t.rows.length).toBe(32);
+    expect(t.rows[0]).toEqual(["日付", "ボイラー", "水道"]);
+    await svc.editManualBlock(db, id.assistA, pid, { op: "cell", id: t.id!, r: 3, c: 2, text: "✓" });
+    expect(((await svc.getManualPage(db, id.mgrA, pid)).body.find((b) => b.t === "table") as Extract<Block, { t: "table" }>).rows[3][2]).toBe("✓");
+  });
 });

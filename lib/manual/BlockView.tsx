@@ -82,10 +82,15 @@ function Blocks({ blocks, ctx }: { blocks: Block[]; ctx: ViewCtx }) {
   return <>{out}</>;
 }
 
-function Cell({ id, r, c, value, choices, ctx, header }: { id: string; r: number; c: number; value: string; choices?: string[] | null; ctx: ViewCtx; header: boolean }) {
+function Cell({ id, r, c, value, choices, ctx, header, tap }: { id: string; r: number; c: number; value: string; choices?: string[] | null; ctx: ViewCtx; header: boolean; tap?: boolean }) {
   const [v, setV] = useState(value);
   const [err, setErr] = useState("");
   const raw = value.replace(/<[^>]+>/g, "");
+  if (tap && !header && c > 0 && r > 0) {
+    const on = v.replace(/<[^>]+>/g, "") === "✓";
+    const flip = async () => { const t = on ? "" : "✓"; setV(t); setErr(""); try { await ctx.onEdit({ op: "cell", id, r, c, text: t }); } catch (e) { setErr((e as Error).message); setV(raw); } };
+    return <button type="button" className={"mn-tap" + (on ? " on" : "")} onClick={ctx.canEdit ? flip : undefined} disabled={!ctx.canEdit} aria-pressed={on} title={err}>{on ? "✓" : ""}</button>;
+  }
   if (!ctx.canEdit || header) return <Inline text={value} refs={ctx.refs} />;
   const save = async (t: string) => { setV(t); setErr(""); try { await ctx.onEdit({ op: "cell", id, r, c, text: t }); } catch (e) { setErr((e as Error).message); setV(raw); } };
   return choices ? (
@@ -126,12 +131,12 @@ function BlockItem({ b, ctx }: { b: Block; ctx: ViewCtx }) {
     );
     case "cols": return <div className="mn-cols">{b.cols.map((c, i) => <div key={i}><Blocks blocks={c} ctx={ctx} /></div>)}</div>;
     case "table": return (
-      <div className="mn-tablewrap"><table className="mn-table"><tbody>
+      <div className="mn-tablewrap"><table className={"mn-table" + (b.tap ? " tap" : "")}><tbody>
         {b.rows.map((row, r) => (
           <tr key={r}>{row.map((cell, c) => {
             const head = (b.header && r === 0) || (b.headerCol && c === 0);
             const T = head ? "th" : "td";
-            return <T key={c}>{b.id && b.edit ? <Cell id={b.id} r={r} c={c} value={cell} choices={b.choices?.[c]} ctx={ctx} header={!!head} /> : <Inline text={cell} refs={ctx.refs} />}</T>;
+            return <T key={c}>{b.id && b.edit ? <Cell id={b.id} r={r} c={c} value={cell} choices={b.choices?.[c]} ctx={ctx} header={!!head} tap={b.tap} /> : <Inline text={cell} refs={ctx.refs} />}</T>;
           })}</tr>
         ))}
       </tbody></table></div>

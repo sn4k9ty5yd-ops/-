@@ -41,3 +41,28 @@ describe("同梱の資料（アキバ塾のPDF）", () => {
     expect(mergeBundled([], set, refs).body.length).toBe(6);
   });
 });
+
+import { groupSection } from "../lib/manual/bundled";
+import { applyOp } from "../lib/manual/edit";
+describe("あきば塾のまとめ・タップ表", () => {
+  it("見出しから後ろを、ひとつの項目にまとめ、📕・🎥はその中の項目にする。2回目は何もしない", () => {
+    const body: Block[] = [
+      { t: "h", l: 1, x: "教育動画🎥" }, { t: "toggle", x: "カット", children: [] },
+      { t: "h", l: 1, x: "あきば塾🏫" }, { t: "p", x: "📕各種教科書" }, { t: "p", x: "１回目授業" }, { t: "p", x: "🎥動画" }, { t: "video", url: "https://youtu.be/abcdefghijk" },
+    ];
+    const g = groupSection(body, "アキバ塾");
+    expect(g.grouped).toBe(true);
+    expect(g.body.map((b) => b.t)).toEqual(["h", "toggle", "toggle"]);
+    const t = g.body[2] as Extract<Block, { t: "toggle" }>;
+    expect(t.children.map((b) => b.t)).toEqual(["toggle", "toggle"]);
+    expect(groupSection(g.body, "あきば塾").grouped).toBe(false);
+  });
+  it("タップ表は ✓ か空だけ。見出しの行・日付の列は押せない", () => {
+    const body: Block[] = [{ t: "table", header: true, tap: true, edit: true, id: "t1", rows: [["日付", "ボイラー"], ["1日", ""]] }];
+    const a = applyOp(body, { op: "cell", id: "t1", r: 1, c: 1, text: "✓" });
+    expect((a.body[0] as Extract<Block, { t: "table" }>).rows[1][1]).toBe("✓");
+    expect(() => applyOp(body, { op: "cell", id: "t1", r: 1, c: 1, text: "あ" })).toThrow();
+    expect(() => applyOp(body, { op: "cell", id: "t1", r: 0, c: 1, text: "✓" })).toThrow();
+    expect(() => applyOp(body, { op: "cell", id: "t1", r: 1, c: 0, text: "✓" })).toThrow();
+  });
+});
