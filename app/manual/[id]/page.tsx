@@ -103,6 +103,12 @@ function Page() {
       <p className="mn-crumbs">{p.trail.map((t) => <span key={t.id}><Link href={`/manual/${t.id}`}>{t.title}</Link> ／ </span>)}</p>
       <h1>{p.icon} {p.title}</h1>
       {p.canEdit && !me.displayOnly && hasEditable(p.body) && <p className="hint" style={{ marginTop: -12 }}>このページには書き込めます（チェックや表のマスは、そのまま入力できます。自動で保存されます）。</p>}
+      {p.bundledMissing ? (
+        <div className="card" style={{ margin: "0 0 14px" }}>
+          <p style={{ margin: "0 0 8px" }}>📎 このアプリに用意してある資料（PDF）が、あと{p.bundledMissing}つ、このページに入っていません。</p>
+          <button onClick={async () => { try { const r = await api<{ added: number }>(`/api/manual/${p.id}`, { action: "attachBundled" }); setErr(""); await load(); alert(`資料を${r.added}つ入れました`); } catch (e) { alert((e as Error).message); } }}>資料のPDFを、このページに入れる</button>
+        </div>
+      ) : null}
       <BlockView blocks={p.body} ctx={{ refs: p.refs, canEdit: p.canEdit, onEdit: async (edit) => { await api(`/api/manual/${p.id}`, { action: "edit", edit }); } }} />
       {p.children.length > 0 && (
         <>

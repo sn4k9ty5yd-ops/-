@@ -1244,7 +1244,7 @@ export async function addStaffBulk(db: Database, userId: string, rows: BulkStaff
 import type { Block } from "./manual/blocks";
 export interface ManualPageRow { id: string; parentId: string | null; title: string; icon: string; sortOrder: number; minLevel: number; editLevel: number; storeId: string | null; ownerId: string | null; evaluatorsEdit: boolean; viewRanks: string[]; editRanks: string[]; }
 export interface ManualGrant { membershipId: string; name: string; canEdit: boolean; }
-export interface ManualPage extends ManualPageRow { canEdit: boolean; grants?: ManualGrant[]; log: { at: string; by: string | null; summary: string }[]; body: Block[]; refs: Record<string, { id: string; title: string; icon: string }>; trail: { id: string; title: string }[]; children: ManualPageRow[]; }
+export interface ManualPage extends ManualPageRow { canEdit: boolean; grants?: ManualGrant[]; log: { at: string; by: string | null; summary: string }[]; body: Block[]; refs: Record<string, { id: string; title: string; icon: string }>; trail: { id: string; title: string }[]; children: ManualPageRow[]; bundledMissing?: number; }
 
 const MANUAL_COLS = `id, parent_id as "parentId", title, icon, sort_order as "sortOrder", min_level as "minLevel", edit_level as "editLevel", store_id as "storeId", owner_id as "ownerId", evaluators_edit as "evaluatorsEdit", view_ranks as "viewRanks", edit_ranks as "editRanks"`;
 
@@ -1300,7 +1300,13 @@ export async function getManualPage(db: Database, userId: string, id: string): P
     const grants = me && me.level >= 4
       ? (await c.query<ManualGrant>(`select g.membership_id as "membershipId", m.name, g.can_edit as "canEdit" from manual_page_grants g join memberships m on m.id = g.membership_id where g.page_id = $1 order by m.name`, [id])).rows
       : undefined;
-    return { ...r, refs, trail, children, canEdit, log, grants };
+    let bundledMissing: number | undefined;
+    if (canEdit && me && me.level >= 4) {
+      const sid = (await c.query<{ source_id: string | null }>("select source_id from manual_pages where id = $1", [id])).rows[0]?.source_id?.replace(/-/g, "");
+      const set = BUNDLED_SETS.find((x) => x.sourceId === sid);
+      if (set) { const m = mergeBundled(r.body, set, Object.fromEntries(set.files.map((f) => [f.file, "asset:x"]))).added; if (m > 0) bundledMissing = m; }
+    }
+    return { ...r, refs, trail, children, canEdit, log, grants, bundledMissing };
   });
 }
 
@@ -1350,6 +1356,44 @@ export async function getManualAsset(db: Database, userId: string, id: string): 
 }
 
 import { applyOp, type EditOp } from "./manual/edit";
+import { BUNDLED_SETS, mergeBundled } from "./manual/bundled";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+
+/** アプリに入れてある資料（PDF）を、このページに取り込む（管理者・書き込める人のみ）。入っているファイルは足さない */
+export async function attachBundledManualFiles(db: Database, userId: string, pageId: string): Promise<number> {
+  if (!/^[0-9a-f-]{36}$/.test(pageId)) throw new ForbiddenError();
+  const me = await getMe(db, userId);
+  if (!me || me.level < 4) throw new ForbiddenError();
+  const info = await asUser(db, userId, async (c) => {
+    const ok = (await c.query<{ ok: boolean }>("select app.manual_can_edit($1) as ok", [pageId])).rows[0]?.ok;
+    const sid = (await c.query<{ source_id: string | null }>("select source_id from manual_pages where id = $1", [pageId])).rows[0]?.source_id;
+    return { ok: !!ok, sid: sid?.replace(/-/g, "") ?? null };
+  });
+  if (!info.ok) throw new ForbiddenError("このページには書き込めません");
+  const set = BUNDLED_SETS.find((x) => x.sourceId === info.sid);
+  if (!set) throw new Error("このページに取り込める資料はありません");
+  const refs: Record<string, string> = {};
+  for (const f of set.files) {
+    const data = await readFile(path.join(process.cwd(), "data", "manual-files", set.dir, f.file));
+    const sha = createHash("sha256").update(data).digest("hex");
+    const have = (await db.query<{ id: string }>("select id from manual_assets where company_id = $1 and sha = $2", [me.companyId, sha])).rows[0];
+    const id = have?.id ?? (await db.query<{ id: string }>(
+      `insert into manual_assets (company_id, name, mime, size, sha, data) values ($1,$2,'application/pdf',$3,$4,$5) returning id`,
+      [me.companyId, f.name, data.length, sha, data])).rows[0].id;
+    refs[f.file] = `asset:${id}`;
+  }
+  let added = 0;
+  await asUser(db, userId, async (c) => {
+    await c.query("select pg_advisory_xact_lock(hashtext($1))", [pageId]);
+    const row = (await c.query<{ body: Block[] }>("select body from manual_pages where id = $1", [pageId])).rows[0];
+    if (!row) throw new ForbiddenError();
+    const m = mergeBundled(row.body, set, refs);
+    added = m.added;
+    if (added > 0) await c.query("select app.manual_write_body($1, $2::jsonb, $3)", [pageId, JSON.stringify(m.body), `資料のPDFを${added}つ取り込んだ`]);
+  });
+  return added;
+}
 /** ページへの書き込み（チェック・表のマス）。権限はDBが確かめる。同時に書き込んでも消し合わないよう、ページごとに順番に処理する */
 export async function editManualBlock(db: Database, userId: string, pageId: string, op: EditOp): Promise<void> {
   if (!/^[0-9a-f-]{36}$/.test(pageId)) throw new ForbiddenError();

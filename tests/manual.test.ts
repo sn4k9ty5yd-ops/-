@@ -158,4 +158,19 @@ describe("取り込み", () => {
     expect(again).toMatchObject({ created: 0, updated: 3 });
     expect((await svc.getManualPage(db, id.admin, top.id)).children).toHaveLength(2);
   });
+
+  it("同梱のPDFを取り込める（管理者だけ・2回やっても増えない）", async () => {
+    const pid = (await db.query<{ id: string }>(
+      "insert into manual_pages (company_id, title, body, source_id) values ($1,'アキバ塾',$2::jsonb,$3) returning id",
+      [co, JSON.stringify([{ t: "toggle", x: "各種教科書", children: [{ t: "p", x: "１回目授業" }] }]), "a5cfe309-115c-8311-b9af-017f6ad0fd6a"])).rows[0].id;
+    expect((await svc.getManualPage(db, id.admin, pid)).bundledMissing).toBe(6);
+    await expect(svc.attachBundledManualFiles(db, id.mgrA, pid)).rejects.toThrow();
+    expect(await svc.attachBundledManualFiles(db, id.admin, pid)).toBe(6);
+    expect(await svc.attachBundledManualFiles(db, id.admin, pid)).toBe(0);
+    const pg = await svc.getManualPage(db, id.admin, pid);
+    expect(pg.bundledMissing).toBeUndefined();
+    const kid = (pg.body[0] as { children: { t: string; src?: string }[] }).children[1];
+    expect(kid.t).toBe("file");
+    expect((await svc.getManualAsset(db, id.admin, kid.src!.slice(6)))?.mime).toBe("application/pdf");
+  }, 180000);
 });

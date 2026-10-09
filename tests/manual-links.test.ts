@@ -24,3 +24,20 @@ describe("マニュアルの外部リンク", () => {
     expect(r.find((x) => x.url.endsWith("/x.pdf"))?.kind).toBe("file");
   });
 });
+
+import { BUNDLED_SETS, mergeBundled } from "../lib/manual/bundled";
+describe("同梱の資料（アキバ塾のPDF）", () => {
+  const set = BUNDLED_SETS[0];
+  const refs = Object.fromEntries(set.files.map((f) => [f.file, "asset:" + f.file]));
+  it("「教科書」の中の、各回の文章の下に入れる。2回目をやっても増えない", () => {
+    const body: Block[] = [{ t: "toggle", x: "📕各種教科書", children: [{ t: "p", x: "１回目授業" }, { t: "p", x: "２回目授業" }, { t: "p", x: "３回目授業" }] }];
+    const a = mergeBundled(body, set, refs);
+    expect(a.added).toBe(6);
+    const kids = (a.body[0] as Extract<Block, { t: "toggle" }>).children;
+    expect(kids.slice(0, 4).map((b) => b.t)).toEqual(["p", "file", "p", "file"]);
+    expect(mergeBundled(a.body, set, refs).added).toBe(0);
+  });
+  it("見つからなければページの終わりに足す", () => {
+    expect(mergeBundled([], set, refs).body.length).toBe(6);
+  });
+});
