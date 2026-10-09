@@ -207,3 +207,10 @@ describe("全店まとめての取り込み", () => {
     expect(r2.bad).toHaveLength(1);
   });
 });
+
+describe("メーカー名のそろえ", () => {
+  it("ウェラは、取り込むときにウエラにそろう", () => {
+    const r = svc.parsePastStocktakeAll("店舗名\t区分\tメーカー\t品名\t規格\t単価\t数量\t金額\nATENA\t業務\tウェラ\tカラー\t80g\t750\t1\t750");
+    expect(r.rows[0].maker).toBe("ウエラ");
+  });
+});

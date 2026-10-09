@@ -3174,7 +3174,7 @@ export function parsePastStocktake(text: string): { rows: PastStocktakeRow[]; ba
     const [maker, name, spec] = cols; const cost = half(cols[3]), q = half(cols[4]);
     if (!/^\d+$/.test(cost) || !/^\d+$/.test(q)) { if (i === 0 || /棚卸|合計|金額/.test(raw)) return; bad.push({ line: i + 1, text: raw, reason: "仕入値か数量が数字ではありません" }); return; }
     if (!name) { bad.push({ line: i + 1, text: raw, reason: "品名がありません" }); return; }
-    rows.push({ maker, name, spec: spec ?? "", costPrice: Number(cost), quantity: Number(q) });
+    rows.push({ maker: normMaker(maker), name, spec: spec ?? "", costPrice: Number(cost), quantity: Number(q) });
   });
   return { rows, bad };
 }
@@ -3198,10 +3198,12 @@ export function parsePastStocktakeAll(text: string): { rows: (PastStocktakeRow &
       const am = half(cols[ix.amount] ?? "");
       if (!/^\d+$/.test(am) || Number(am) !== Number(cost) * Number(q)) { bad.push({ line: i + 1, text: raw, reason: "金額が 単価×数量 と合いません（列がずれている可能性）" }); return; }
     }
-    rows.push({ store: cols[ix.store], kind, maker: cols[ix.maker] ?? "", name: cols[ix.name], spec: cols[ix.spec] ?? "", costPrice: Number(cost), quantity: Number(q) });
+    rows.push({ store: cols[ix.store], kind, maker: normMaker(cols[ix.maker] ?? ""), name: cols[ix.name], spec: cols[ix.spec] ?? "", costPrice: Number(cost), quantity: Number(q) });
   });
   return { rows, bad };
 }
+/** メーカー名の表記ゆれをそろえる（ユーザー指示: ウェラ→ウエラ） */
+const normMaker = (m: string) => m.replace(/ウェラ/g, "ウエラ");
 const normStore = (v: string) => v.normalize("NFKC").toLowerCase().replace(/\s+/g, "");
 /** 全店の昨年データを、お店×店販/業務ごとに取り込む（事務員さんだけ）。お店の名前は、少し違っていても（ATENA→ATENA天神、organ→Organ）合わせる */
 export async function importPastStocktakeAll(db: Database, userId: string, takenOn: string, text: string): Promise<{ groups: { store: string; kind: ProductKind; lines: number; total: number; error?: string }[]; bad: number; badLines: string[] }> {
