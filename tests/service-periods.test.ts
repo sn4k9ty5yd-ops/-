@@ -241,6 +241,9 @@ describe("レッスンチェック表（採点）", () => {
     expect((await svc.getCheckData(d, u.styA, u.traineeA)).canAssess).toBe(true);                                      // 自店のスタイリストも採点できる
     expect((await svc.saveCheckAttempt(d, u.styA, { ...base, attemptNo: 2, scores: sc(1, 1, 1) })).total).toBe(3);   // スタイリストも保存できる
     expect((await svc.saveCheckAttempt(d, u.styA, { ...base, attemptNo: 2, assessorId: u.styA, scores: sc(1, 1, 1) })).total).toBe(3);
+    const { setViewAsKey } = await import("../lib/db/view-as");
+    setViewAsKey(u.office, "stylist");   // 制作者が「スタイリスト」の見え方でも、採点できる
+    try { expect((await svc.saveCheckAttempt(d, u.office, { ...base, attemptNo: 2, scores: sc(1, 1, 1) })).total).toBe(3); } finally { setViewAsKey(u.office, null); }
     const lst = await svc.getCheckData(d, u.styA);
     expect(lst.trainees.map((t) => t.id)).toEqual([u.traineeA]);                                                       // 一覧は、自店のアシスタントだけ
     await svc.saveCheckAttempt(d, u.edu, { ...base, attemptNo: 3, scores: sc(3, 3, 3) });

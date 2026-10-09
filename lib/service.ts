@@ -1724,6 +1724,8 @@ export async function purgeOldMaterialImages(db: Database, force = false, today?
        delete from material_order_images i using material_orders o, cutoff c
         where o.id = i.order_id and o.ordered_on < c.d returning i.id
      ) select count(*)::int as n from gone`, [today ?? null]);
+  // 定期券の写真は、3か月ぶんだけ残す（提出の記録は残る）
+  await db.query("update commute_submissions set image = '' where image <> '' and month < (date_trunc('month', (now() at time zone 'Asia/Tokyo')::date) - interval '2 month')::date");
   // 売上のレジ画面の写真も、同じ（今月と先月だけ残す）
   await db.query(
     `delete from sales_images where month < (date_trunc('month', coalesce($1::date, (now() at time zone 'Asia/Tokyo')::date)) - interval '1 month')::date`, [today ?? null]);
@@ -3387,4 +3389,124 @@ export async function deleteStocktakeLine(db: Database, userId: string, lineId: 
   try { n = (await asUser(db, userId, (q) => q.query("delete from stocktake_lines where id = $1 returning id", [lineId]))).rows.length; }
   catch { throw new ForbiddenError(); }
   if (n === 0) throw new ForbiddenError("この行は消せません（入力中の表だけ消せます）");
+}
+
+// ---------------------------------------------------------------- 定期券の提出（毎月1回・写メ）
+export interface CommuteRow { membershipId: string; name: string; storeName: string; subId: string | null; status: "none" | "submitted" | "checked" | "redo"; note: string; submittedAt: string | null }
+export interface CommuteData {
+  month: string; dueDay: number; dueDate: string; overdue: boolean;
+  onRoster: boolean; mine: { id: string; status: "submitted" | "checked" | "redo"; note: string; submittedAt: string } | null;
+  canManage: boolean; canCheck: boolean; storeId: string; stores: { id: string; name: string }[];
+  rows: CommuteRow[]; candidates: { id: string; name: string }[];
+}
+const jstToday = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
+
+export async function getCommute(db: Database, userId: string, month?: string, storeId?: string): Promise<CommuteData> {
+  const me = await getMe(db, userId);
+  if (!me || me.displayOnly) throw new ForbiddenError();
+  const ym = month && /^\d{4}-\d{2}$/.test(month) ? month : jstToday().slice(0, 7);
+  const first = `${ym}-01`;
+  return asUser(db, userId, async (q) => {
+    const dueDay = (await q.query<{ d: number }>("select due_day as d from commute_settings")).rows[0]?.d ?? 25;
+    const onRoster = (await q.query("select 1 from commute_roster where membership_id = $1", [userId])).rows.length > 0;
+    const mine = (await q.query<NonNullable<CommuteData["mine"]>>(
+      `select id, status, note, to_char(submitted_at at time zone 'Asia/Tokyo','YYYY-MM-DD"T"HH24:MI:SS"Z"') as "submittedAt" from commute_submissions where membership_id = $1 and month = $2::date`, [userId, first])).rows[0] ?? null;
+    const canManage = me.level >= 3, canCheck = me.level >= 4;
+    const stores = canManage ? (await q.query<{ id: string; name: string }>("select id, name from stores where status = 'active' order by sort_order")).rows.filter((s) => canCheck || s.id === me.storeId) : [];
+    const sid = canCheck && storeId && stores.some((s) => s.id === storeId) ? storeId : me.storeId;
+    let rows: CommuteRow[] = [], candidates: { id: string; name: string }[] = [];
+    if (canManage) {
+      rows = (await q.query<CommuteRow>(
+        `select m.id as "membershipId", m.name, s.name as "storeName", c.id as "subId", coalesce(c.status, 'none') as status, coalesce(c.note, '') as note,
+                to_char(c.submitted_at at time zone 'Asia/Tokyo','YYYY-MM-DD"T"HH24:MI:SS"Z"') as "submittedAt"
+           from commute_roster r join memberships m on m.id = r.membership_id join stores s on s.id = m.store_id
+           left join commute_submissions c on c.membership_id = m.id and c.month = $2::date
+          where m.store_id = $1 and m.status = 'active' order by m.employee_code::text`, [sid, first])).rows;
+      candidates = (await q.query<{ id: string; name: string }>(
+        `select m.id, m.name from memberships m where m.store_id = $1 and m.status = 'active' and not m.display_only
+            and not exists (select 1 from commute_roster r where r.membership_id = m.id) order by m.name`, [sid])).rows;
+    }
+    const dueDate = `${ym}-${String(dueDay).padStart(2, "0")}`;
+    return { month: ym, dueDay, dueDate, overdue: jstToday() > dueDate && !mine, onRoster, mine, canManage, canCheck, storeId: sid, stores, rows, candidates };
+  });
+}
+
+export async function getCommuteSummary(db: Database, userId: string): Promise<{ show: boolean; pending: boolean; toCheck: number }> {
+  const me = await getMe(db, userId);
+  if (!me || me.displayOnly) return { show: false, pending: false, toCheck: 0 };
+  return asUser(db, userId, async (q) => {
+    const ym = jstToday().slice(0, 7);
+    const on = (await q.query("select 1 from commute_roster where membership_id = $1", [userId])).rows.length > 0;
+    const done = (await q.query("select 1 from commute_submissions where membership_id = $1 and month = $2::date and status <> 'redo'", [userId, `${ym}-01`])).rows.length > 0;
+    const toCheck = me.level >= 4 ? (await q.query<{ n: number }>("select count(*)::int as n from commute_submissions where status = 'submitted' and month = $1::date", [`${ym}-01`])).rows[0].n : 0;
+    return { show: on || me.level >= 3, pending: on && !done, toCheck };
+  });
+}
+
+export async function submitCommute(db: Database, userId: string, month: string, image: string): Promise<void> {
+  const me = await getMe(db, userId);
+  if (!me) throw new ForbiddenError();
+  try { await asUser(db, userId, (q) => q.query("select public.commute_submit($1::date, $2)", [`${month}-01`, image])); }
+  catch (e) {
+    const m = (e as Error).message ?? "";
+    if (m.includes("locked")) throw new Error("この月は、もう確認ずみです（出し直せません）");
+    if (m.includes("bad image")) throw new Error("写真が大きすぎるか、形式が正しくありません（JPEG・PNG）");
+    if (m.includes("bad month")) throw new Error("出せるのは、今月と先月ぶんだけです");
+    throw new ForbiddenError();
+  }
+  // 事務員さん以上にお知らせ
+  const title = `定期券の提出：${me.name}さん`;
+  const people = (await db.query<{ id: string }>("select id from memberships where company_id = $1 and level = 4 and status = 'active' and not display_only", [me.companyId])).rows.map((r) => r.id);
+  for (const uid of people) await db.query("insert into notifications (company_id, user_id, kind, title, body, link) values ($1,$2,'commute',$3,$4,'/commute')", [me.companyId, uid, title, `${Number(month.slice(5))}月ぶんが届きました。確認してください。`]);
+  await pushToUsers(db, people, { title, body: `${Number(month.slice(5))}月ぶんが届きました`, url: "/commute", tag: "commute-submit" }).catch(() => 0);
+}
+
+export async function setCommuteRoster(db: Database, userId: string, memberId: string, on: boolean): Promise<void> {
+  try { await asUser(db, userId, (q) => q.query("select public.commute_roster_set($1, $2)", [memberId, on])); } catch { throw new ForbiddenError(); }
+}
+
+export async function checkCommute(db: Database, userId: string, subId: string, status: "checked" | "redo", note = ""): Promise<void> {
+  const me = await getMe(db, userId);
+  if (!me) throw new ForbiddenError();
+  let target: string;
+  try { target = (await asUser(db, userId, (q) => q.query<{ r: string }>("select public.commute_check($1,$2,$3) as r", [subId, status, note]))).rows[0].r; } catch { throw new ForbiddenError(); }
+  const title = status === "checked" ? "定期券：確認しました" : "定期券：もういちど出してください";
+  const body = status === "checked" ? "ありがとうございます。" : (note || "写真が見づらいなど、出し直しをお願いします。");
+  await pushNotifyOne(db, me.companyId, target, title, body, "/commute").catch(() => undefined);
+}
+
+export async function getCommuteImage(db: Database, userId: string, subId: string): Promise<string> {
+  try { return (await asUser(db, userId, (q) => q.query<{ r: string }>("select public.commute_image($1) as r", [subId]))).rows[0].r; } catch { throw new ForbiddenError(); }
+}
+
+export async function setCommuteDue(db: Database, userId: string, day: number): Promise<void> {
+  try { await asUser(db, userId, (q) => q.query("select public.commute_set_due($1)", [day])); } catch { throw new ForbiddenError(); }
+}
+
+let lastCommuteRun = 0;
+/** 期限の3日前から、出すまで毎日（朝9時以降に1回）、まだの人の携帯に通知する。期限をすぎても続く */
+export async function runCommuteReminders(db: Database, force = false, at?: string): Promise<{ sent: number }> {
+  if (!force && Date.now() - lastCommuteRun < 60_000) return { sent: 0 };
+  lastCommuteRun = Date.now();
+  const now = at ?? jstNow(), today = now.slice(0, 10), hhmm = now.slice(11, 16);
+  if (hhmm < "09:00") return { sent: 0 };
+  const day = Number(today.slice(8, 10)), first = `${today.slice(0, 7)}-01`;
+  const cos = (await db.query<{ company_id: string; d: number }>("select distinct r.company_id, coalesce(s.due_day, 25) as d from commute_roster r left join commute_settings s on s.company_id = r.company_id")).rows;
+  let sent = 0;
+  for (const co of cos) {
+    if (day < Math.max(1, co.d - 3)) continue;
+    const todo = (await db.query<{ id: string }>(
+      `select m.id from commute_roster r join memberships m on m.id = r.membership_id
+        where r.company_id = $1 and m.status = 'active' and not m.display_only
+          and not exists (select 1 from commute_submissions c where c.membership_id = m.id and c.month = $2::date and c.status <> 'redo')
+          and not exists (select 1 from commute_reminder_log l where l.day = $3::date and l.membership_id = m.id)`, [co.company_id, first, today])).rows.map((r) => r.id);
+    if (todo.length === 0) continue;
+    await db.query("insert into commute_reminder_log (day, membership_id) select $1::date, unnest($2::uuid[]) on conflict do nothing", [today, todo]);
+    const late = day > co.d;
+    const title = late ? "定期券の提出期限をすぎています" : `定期券の提出は ${Number(today.slice(5, 7))}月${co.d}日まで`;
+    const body = "アプリで定期券の写真を撮って、出してください。";
+    for (const uid of todo) await db.query("insert into notifications (company_id, user_id, kind, title, body, link) values ($1,$2,'commute',$3,$4,'/commute')", [co.company_id, uid, title, body]);
+    sent += await pushToUsers(db, todo, { title, body, url: "/commute", tag: "commute-remind" });
+  }
+  return { sent };
 }

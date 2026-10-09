@@ -15,6 +15,7 @@ export const SEARCH_ITEMS: SearchItem[] = [
   { icon: "✏️", title: "出勤簿予定", sub: "入店・退店・休憩を入れる表（シフトの予定）", href: "/admin/shifts", keys: "出勤簿 予定 a4 一枚 入店 退店 休憩 実働 時間 プリント 印刷 並び", show: (me) => me.level >= 2 },
   { icon: "🧾", title: "出勤簿確定", sub: "実際の勤務の表（同期・税務署に出す用）", href: "/admin/attendance", keys: "出勤簿 確定 実際 勤務 税務署 同期 入店 退店 休憩 実働 プリント 印刷", show: (me) => me.level >= 2 },
   { icon: "📖", title: "マニュアル", sub: "教育・営業マニュアル・技術動画・技術評価", href: "/manual", keys: "マニュアル 教育 営業 技術 動画 カット カラー ルール 評価 手順" },
+  { icon: "🚃", title: "定期券の提出", sub: "毎月1回、定期券の写真を出す・名簿・確認", href: "/commute", keys: "定期券 定期 通勤 写真 提出 名簿 交通費 期限", show: (me) => !me.displayOnly },
   { icon: "📝", title: "レッスンチェック表", sub: "アシスタントの採点（1〜5点）", href: "/lesson-check", keys: "レッスン チェック 採点 点数 合格 アシスタント 技術評価", show: (me) => !me.displayOnly },
   { icon: "🎓", title: "レッスン記録", sub: "アシスタントが今日何をしたかを記録・報告", href: "/lessons", keys: "レッスン 記録 報告 何人目 カット モデル ウィッグ", show: (me) => (me.level >= 3 || !!me.eduLead) && !isOfficeOnly(me) },
   { icon: "🎓", title: "自分のレッスン", sub: "自分がしたレッスンをカレンダーで見る", href: "/my-lessons", keys: "自分 レッスン 練習 何人目 時間", show: (me) => me.rank === "assistant" },

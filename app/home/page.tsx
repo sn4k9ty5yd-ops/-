@@ -24,6 +24,8 @@ function Cards() {
   useEffect(() => { pushState().then(setPush).catch(() => {}); }, []);
   useEffect(() => { if (!me.displayOnly) api<{ unread: number }>("/api/notifications").then((r) => setUnread(r.unread)).catch(() => {}); }, [me.displayOnly]);
   useEffect(() => { if (me.level >= 4) api<{ open: number }>("/api/office-inbox").then((r) => setStaffN(r.open)).catch(() => {}); }, [me.level]);
+  const [commute, setCommute] = useState<{ show: boolean; pending: boolean; toCheck: number }>({ show: false, pending: false, toCheck: 0 });
+  useEffect(() => { if (!me.displayOnly) api<{ show: boolean; pending: boolean; toCheck: number }>("/api/commute?summary=1").then((r) => setCommute(r)).catch(() => {}); }, [me.displayOnly]);
   const [q, setQ] = useState("");
   if (me.displayOnly) return null;
   const hits = q.trim() ? searchAll(q, me) : [];
@@ -38,6 +40,7 @@ function Cards() {
     { href: "/material/summary", title: "材料費統括", sub: "月ごと・お店ごと・商品ごとの割合（管理者・材料担当）", show: me.level === 4 || !!me.materialManager },
     { big: true, href: "/my-lessons", title: "自分のレッスン", sub: "何をしたか・何人目か・かかった時間をカレンダーで見る", show: me.rank === "assistant" },
     { href: "/lessons", title: "レッスン記録", sub: "アシスタントが今日何をしたかを、ボタンで記録・報告", show: (me.level >= 3 || !!me.eduLead) && !isOfficeOnly(me) },
+    { big: true, href: "/commute", title: commute.toCheck ? `定期券の提出（確認まち${commute.toCheck}件）` : commute.pending ? "定期券の提出（まだです）" : "定期券の提出", sub: "毎月1回、定期券の写真を出す（名簿の人だけ・事務員さんが確認）", show: commute.show },
     { href: "/admin/stocktake", title: "棚卸し", sub: "店販・業務の棚卸し（みんなで数量を入れます）", show: !me.displayOnly },
     { href: "/admin/products", title: "商品一覧", sub: "店販・業務の商品と仕入値", show: me.level >= 3 },
     { href: "/admin/shifts", title: "出勤簿", sub: "日ごと・人ごと・一覧表で入力します", show: false },
@@ -54,7 +57,7 @@ function Cards() {
     { href: "/admin/stores", title: "店舗の編集", sub: "新店舗の追加・名前の変更・閉店（管理者のみ）", show: me.level >= 4 },
   ].filter((c) => c.show);
   const ICON: Record<string, [string, number, string]> = {
-    "/inbox": ["🔔", 8, ""], "/staff-notices": ["📨", 20, ""], "/meetings": ["🎙️", 300, ""], "/mentor": ["💬", 330, ""], "/manual": ["📖", 265, ""], "/shifts": ["📅", 212, ""], "/requests": ["🌴", 168, ""], "/material": ["🧴", 28, ""],
+    "/inbox": ["🔔", 8, ""], "/staff-notices": ["📨", 20, ""], "/meetings": ["🎙️", 300, ""], "/mentor": ["💬", 330, ""], "/manual": ["📖", 265, ""], "/shifts": ["📅", 212, ""], "/requests": ["🌴", 168, ""], "/material": ["🧴", 28, ""], "/commute": ["🚃", 200, ""],
     "/material/summary": ["📊", 28, "材料・在庫"], "/my-lessons": ["🎓", 262, ""], "/leave": ["🏝️", 172, ""], "/my-sales": ["📈", 140, ""], "/sales": ["💴", 140, "シフト・勤怠"], "/lessons": ["🎓", 262, "スタッフ・設定"], "/lesson-check": ["📝", 262, "スタッフ・設定"], "/admin/stock": ["📦", 150, "材料・在庫"], "/admin/stocktake": ["📋", 190, "材料・在庫"], "/admin/products": ["🏷️", 320, "材料・在庫"],
     "/admin/periods": ["🗂️", 212, "シフト・勤怠"], "/admin/shifts": ["✏️", 212, "シフト・勤怠"], "/admin/requests": ["👥", 168, "シフト・勤怠"], 
     "/admin/staff": ["🧑‍🤝‍🧑", 340, "スタッフ・設定"], "/admin/settings": ["⚙️", 220, "スタッフ・設定"], "/admin/activity": ["🕵️", 20, "スタッフ・設定"], "/security": ["🔐", 8, "スタッフ・設定"], "/admin/records": ["🧾", 45, "スタッフ・設定"], "/admin/guide": ["📘", 205, "スタッフ・設定"], "/help": ["❓", 200, ""], "/admin/feedback": ["💌", 330, "スタッフ・設定"], "/admin/stores": ["🏬", 280, "スタッフ・設定"],
