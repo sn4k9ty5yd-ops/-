@@ -419,9 +419,9 @@ export async function setPeriodStatus(
   if (input.status === "collecting" && before === "preparing") {
     const miss = (await asUser(db, userId, (q) => q.query<{ n: number }>(
       `select count(*)::int as n from shift_periods p, generate_series(p.start_date, p.end_date, interval '1 day') g(d)
-        where p.id = $1 and app.has_perm('period.manage', $2) and not exists (select 1 from day_limits l where l.period_id = p.id and l.store_id = $2 and l.day = g.d::date)`,
+        where p.id = $1 and app.has_perm('period.manage', $2) and not exists (select 1 from day_limits l where l.period_id = p.id and l.store_id = $2 and l.day = g.d::date and l.max_stylist is not null and l.max_assistant is not null)`,
       [input.periodId, input.storeId]))).rows[0]?.n ?? 0;
-    if (miss > 0) throw new Error(`希望休を集める前に、「1日に何人まで休めるか」を決めてください（まだ決まっていない日が${miss}日あります）。スタッフは、この人数をこえても希望休を出せます。人数は、あとで調整するときの目安になります。`);
+    if (miss > 0) throw new Error(`希望休を集める前に、「1日に、スタイリストは何人・アシスタントは何人まで休めるか」を決めてください（まだ決まっていない日が${miss}日あります）。スタッフは、この人数をこえても希望休を出せます。人数は、あとで調整するときの目安になります。`);
   }
   let n = 0;
   try {
@@ -514,11 +514,11 @@ export async function setOnShift(db: Database, userId: string, targetId: string,
 }
 
 /** シフト表に載せる人（その店舗の在籍者でシフトに入る人） */
-export async function listRoster(db: Database, userId: string, storeId: string): Promise<{ id: string; name: string; level: Level | 0; shortName: string | null }[]> {
+export async function listRoster(db: Database, userId: string, storeId: string): Promise<{ id: string; name: string; level: Level | 0; shortName: string | null; rank: string | null }[]> {
   const me = await getMe(db, userId);
   const rows = (await asUser(db, userId, (q) =>
-    q.query<{ id: string; name: string; level: Level; shortName: string | null }>(
-      "select id, name, level, short_name as \"shortName\" from memberships where store_id = $1 and status = 'active' and on_shift order by level desc, name", [storeId]))).rows;
+    q.query<{ id: string; name: string; level: Level; shortName: string | null; rank: string | null }>(
+      "select id, name, level, short_name as \"shortName\", rank from memberships where store_id = $1 and status = 'active' and on_shift order by level desc, name", [storeId]))).rows;
   return sortRoster(rows.map((r) => (r.id === userId && me?.viewAs ? { ...r, level: me.level as Level } : me?.appOwner || r.id === userId ? r : { ...r, level: 0 as const })));   // ほかの人のレベルの数字は、返事に入れない。並びは、決めた順
 }
 
@@ -1380,8 +1380,8 @@ export async function setRank(db: Database, userId: string, targetId: string, ra
 
 // ------------------------------------------------------------------ 休みの上限・かぶりの知らせ・話し合い
 const jpDay = (iso: string) => { const d = new Date(iso + "T00:00:00Z"); return `${d.getUTCMonth() + 1}/${d.getUTCDate()}（${"日月火水木金土"[d.getUTCDay()]}）`; };
-export interface DayLimit { day: string; maxOff: number }
-export interface Conflict { day: string; maxOff: number; count: number }
+export interface DayLimit { day: string; maxOff: number; maxStylist: number | null; maxAssistant: number | null }
+export interface Conflict { day: string; maxOff: number; count: number; maxStylist: number | null; countStylist: number; maxAssistant: number | null; countAssistant: number }
 export interface DayInfo {
   day: string; label: string; maxOff: number | null; people: { id: string; name: string; kind: string }[];
   messages: { id: number; userId: string; name: string; body: string; at: string }[]; canEdit: boolean;
@@ -1390,11 +1390,12 @@ export interface NotificationRow { id: string; kind: string; title: string; body
 
 export async function listDayLimits(db: Database, userId: string, periodId: string, storeId: string): Promise<DayLimit[]> {
   return (await asUser(db, userId, (q) => q.query<DayLimit>(
-    `select day::text as day, max_off as "maxOff" from day_limits where period_id = $1 and store_id = $2 order by day`, [periodId, storeId]))).rows;
+    `select day::text as day, max_off as "maxOff", max_stylist as "maxStylist", max_assistant as "maxAssistant" from day_limits where period_id = $1 and store_id = $2 order by day`, [periodId, storeId]))).rows;
 }
 
 /** 日ごとの「休みの上限（◯人まで）」を決める。null で、上限なしに戻す（シフトを作れる人だけ） */
-export async function setDayLimits(db: Database, userId: string, periodId: string, storeId: string, days: string[], maxOff: number | null): Promise<number> {
+export async function setDayLimits(db: Database, userId: string, periodId: string, storeId: string, days: string[], maxOff: number | null, roles?: { stylist: number; assistant: number }): Promise<number> {
+  if (roles) { for (const v of [roles.stylist, roles.assistant]) if (!Number.isInteger(v) || v < 0 || v > 99) throw new Error("人数は、0〜99で入れてください"); maxOff = roles.stylist + roles.assistant; }
   if (maxOff !== null && (!Number.isInteger(maxOff) || maxOff < 0 || maxOff > 99)) throw new Error("人数は、0〜99で入れてください");
   if (days.length === 0 || days.length > 62 || days.some((d) => !/^\d{4}-\d{2}-\d{2}$/.test(d))) throw new Error("日付が正しくありません");
   try {
@@ -1404,9 +1405,9 @@ export async function setDayLimits(db: Database, userId: string, periodId: strin
       if (maxOff === null) { await q.query("delete from day_limits where period_id = $1 and store_id = $2 and day = any($3::date[])", [periodId, storeId, days]); return days.length; }
       for (const d of days) {
         await q.query(
-          `insert into day_limits (period_id, store_id, company_id, day, max_off, updated_by) values ($1,$2,$3,$4,$5,$6)
-           on conflict (period_id, store_id, day) do update set max_off = excluded.max_off, updated_at = now(), updated_by = excluded.updated_by`,
-          [periodId, storeId, per.company_id, d, maxOff, userId]);
+          `insert into day_limits (period_id, store_id, company_id, day, max_off, max_stylist, max_assistant, updated_by) values ($1,$2,$3,$4,$5,$6,$7,$8)
+           on conflict (period_id, store_id, day) do update set max_off = excluded.max_off, max_stylist = excluded.max_stylist, max_assistant = excluded.max_assistant, updated_at = now(), updated_by = excluded.updated_by`,
+          [periodId, storeId, per.company_id, d, maxOff, roles?.stylist ?? null, roles?.assistant ?? null, userId]);
       }
       return days.length;
     });
@@ -1415,7 +1416,7 @@ export async function setDayLimits(db: Database, userId: string, periodId: strin
 
 export async function listConflicts(db: Database, userId: string, periodId: string, storeId: string): Promise<Conflict[]> {
   return (await asUser(db, userId, (q) => q.query<Conflict>(
-    `select day::text as day, max_off as "maxOff", cnt as count from app.period_conflicts($1, $2)`, [periodId, storeId]))).rows;
+    `select day::text as day, max_off as "maxOff", cnt as count, max_stylist as "maxStylist", cnt_stylist as "countStylist", max_assistant as "maxAssistant", cnt_assistant as "countAssistant" from app.period_conflicts($1, $2)`, [periodId, storeId]))).rows;
 }
 
 export async function getDayInfo(db: Database, userId: string, periodId: string, storeId: string, day: string): Promise<DayInfo> {
@@ -2704,6 +2705,8 @@ export async function saveCheckAttempt(db: Database, userId: string, input: { sh
     if (m.includes("self")) throw new Error("自分の採点は、自分ではつけられません");
     if (m.includes("bad assessor")) throw new Error("採点者は、このお店のスタイリストから選んでください");
     if (m.includes("bad")) throw new Error("点数が正しくありません（0〜5）");
+    const fb = /forbidden:(\w+)/.exec(m)?.[1];
+    if (fb) throw new ForbiddenError(`この操作をする権限がありません（止まった所：${({ login: "ログインの情報", trainee: "採点される人が見つかりません", sheet: "チェック表が見つかりません", assess: "この人を採点できる権限（お店・ランク）" } as Record<string, string>)[fb] ?? fb}）`);
     if (m && m !== "forbidden") throw new Error(`保存できませんでした（原因：${m.slice(0, 160)}）`);   // 権限ではない原因は、そのまま見せる
     throw new ForbiddenError();
   }

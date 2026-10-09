@@ -22,7 +22,7 @@ beforeAll(async () => {
   await svc.setOnShift(db, id.office, id.office, false);
   await svc.createNextPeriod(db, id.office, "2026-11-20"); // 11/16〜12/15
   periodId = (await svc.listPeriods(db, id.office))[0].id;
-  for (const sid of [st.s1, st.s2]) await svc.setDayLimits(db, id.office, periodId, sid, daysOf("2026-11-16", "2026-12-15"), 3);
+  for (const sid of [st.s1, st.s2]) await svc.setDayLimits(db, id.office, periodId, sid, daysOf("2026-11-16", "2026-12-15"), 3, { stylist: 2, assistant: 1 });
   await svc.setPeriodStatus(db, id.office, { periodId, storeId: st.s1, status: "collecting" });
   await svc.setPeriodStatus(db, id.office, { periodId, storeId: st.s2, status: "collecting" });
 });
@@ -35,7 +35,7 @@ describe("シフト作成サービス", () => {
     expect((await svc.listRequests(db, id.a, periodId)).filter((r) => r.day === "2026-11-25")).toHaveLength(2);
     expect((await svc.listDayLimits(db, id.a, periodId, st.s1)).find((l) => l.day === "2026-11-25")?.maxOff).toBe(0);
     await svc.toggleMyRequest(db, id.a, periodId, "2026-11-25"); await svc.toggleMyRequest(db, id.b, periodId, "2026-11-25");   // 元にもどす
-    await svc.setDayLimits(db, id.office, periodId, st.s1, ["2026-11-25"], 3);
+    await svc.setDayLimits(db, id.office, periodId, st.s1, ["2026-11-25"], 3, { stylist: 2, assistant: 1 });
   });
 
   it("シフト表に載る人: 自店舗の在籍者で「シフトに入る」人だけ（オフィスは外せる）", async () => {
@@ -174,8 +174,8 @@ describe("休みの上限・かぶりの知らせ・話し合い", () => {
     await expect(svc.setDayLimits(db, id.a, periodId, st.s1, [day], 1)).rejects.toThrow(svc.ForbiddenError);           // スタッフは決められない
     expect(await svc.setDayLimits(db, id.shift1, periodId, st.s1, [day], 1)).toBe(1);
     await expect(svc.setDayLimits(db, id.shift1, periodId, st.s1, ["2030-01-01"], 1)).rejects.toThrow("期間の外");
-    expect(await svc.listDayLimits(db, id.a, periodId, st.s1)).toEqual([{ day, maxOff: 1 }]);                         // 自店のスタッフは上限が見える
-    expect(await svc.listConflicts(db, id.shift1, periodId, st.s1)).toEqual([{ day, maxOff: 1, count: 2 }]);
+    expect(await svc.listDayLimits(db, id.a, periodId, st.s1)).toMatchObject([{ day, maxOff: 1 }]);                         // 自店のスタッフは上限が見える
+    expect(await svc.listConflicts(db, id.shift1, periodId, st.s1)).toMatchObject([{ day, maxOff: 1, count: 2 }]);
     expect(await svc.listConflicts(db, id.a, periodId, st.s1)).toEqual([]);                                           // スタッフには、一覧は出ない
     // 知らせる
     expect(await svc.notifyConflicts(db, id.shift1, periodId, st.s1)).toEqual({ days: 1, people: 2 });

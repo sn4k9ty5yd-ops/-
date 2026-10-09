@@ -86,7 +86,7 @@ describe("スタッフのまとめて登録", () => {
     const l = (await db.query<{ id: string }>("select id from memberships where employee_code = '9101'")).rows[0].id;
     await svc.createNextPeriod(db, id.office, "2026-11-20");
     const p = (await svc.listPeriods(db, id.office))[0];
-    await svc.setDayLimits(db, id.office, p.id, st.s1, daysOf(p.start, p.end), 3);
+    await svc.setDayLimits(db, id.office, p.id, st.s1, daysOf(p.start, p.end), 3, { stylist: 2, assistant: 1 });
     await svc.setPeriodStatus(db, id.office, { periodId: p.id, storeId: st.s1, status: "collecting" });
     await expect(svc.toggleMyRequest(db, l, p.id, "2026-11-20")).rejects.toThrow("見るだけ");
     await expect(svc.addStaffBulk(db, l, [row("x", "9103")])).rejects.toThrow(svc.ForbiddenError);

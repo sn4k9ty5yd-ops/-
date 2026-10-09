@@ -13,7 +13,7 @@ import type { Period } from "@/lib/periods";
 import { STATUS_ORDER, type PeriodRow, type ShiftRow, type StoreRow } from "@/lib/service";
 import { longText } from "@/lib/shift-ui";
 
-type Person = { id: string; name: string; shortName?: string | null };
+type Person = { id: string; name: string; shortName?: string | null; rank?: string | null };
 const LABEL: Record<string, string> = { off: "休", paid: "有給", holiday: "公休", other: "他" };
 
 function Page() {
@@ -31,7 +31,10 @@ function Page() {
   const [editable, setEditable] = useState(false);
   const [limits, setLimits] = useState<Map<string, number>>(new Map());
   const [conflicts, setConflicts] = useState<Map<string, { maxOff: number; count: number }>>(new Map());
+  const [limS, setLimS] = useState<Map<string, number | null>>(new Map());
+  const [limA, setLimA] = useState<Map<string, number | null>>(new Map());
   const [limitInput, setLimitInput] = useState("");
+  const [limitInputA, setLimitInputA] = useState("");
   const [limitMsg, setLimitMsg] = useState("");
   const [detail, setDetail] = useState<string | null>(null);
   const [editTarget, setEditTarget] = useState<{ id: string; name: string } | null>(null);
@@ -64,8 +67,8 @@ function Page() {
       .map((r) => ({ id: `req-${r.id}`, membershipId: r.membershipId, storeId, periodId: db.id, day: r.day, kind: r.kind === "paid" ? "paid" as const : "holiday" as const, start: null, end: null })) : [];
     setShifts([...sh.shifts, ...fromReq]); setEditable(!!sh.editable && !me.displayOnly);
     if (!me.displayOnly) {
-      const dl = await api<{ limits: { day: string; maxOff: number }[]; conflicts: { day: string; maxOff: number; count: number }[] }>(`/api/day-limits?periodId=${db.id}&storeId=${storeId}`).catch(() => null);
-      if (dl) { setLimits(new Map(dl.limits.map((l) => [l.day, l.maxOff]))); setConflicts(new Map(dl.conflicts.map((c) => [c.day, c]))); }
+      const dl = await api<{ limits: { day: string; maxOff: number; maxStylist: number | null; maxAssistant: number | null }[]; conflicts: { day: string; maxOff: number; count: number }[] }>(`/api/day-limits?periodId=${db.id}&storeId=${storeId}`).catch(() => null);
+      if (dl) { setLimits(new Map(dl.limits.map((l) => [l.day, l.maxOff]))); setLimS(new Map(dl.limits.map((l) => [l.day, l.maxStylist]))); setLimA(new Map(dl.limits.map((l) => [l.day, l.maxAssistant]))); setConflicts(new Map(dl.conflicts.map((c) => [c.day, c]))); }
     }
   }, [db, storeId, view, me.id, me.displayOnly]);
   useEffect(() => { load().catch(() => {}); }, [load]);
@@ -73,6 +76,7 @@ function Page() {
 
   const name = useMemo(() => new Map(roster.map((r) => [r.id, r.name])), [roster]);
   const short = useMemo(() => shortNames(roster), [roster]);
+  const rankOf = useMemo(() => new Map(roster.map((r) => [r.id, r.rank ?? null])), [roster]);
   const byDay = useMemo(() => { const m = new Map<string, ShiftRow[]>(); for (const s of shifts) m.set(s.day, [...(m.get(s.day) ?? []), s]); return m; }, [shifts]);
   if (!ready || !view) return null;
   const days = daysOf(view.start, view.end);
@@ -120,7 +124,7 @@ function Page() {
                             return (
                 <div key={d} role="button" tabIndex={0} aria-label={`${md(d)}の詳細`} onClick={() => { setLimitInput(""); setLimitMsg(""); setDetail(d); }} onKeyDown={(e) => { if (e.key === "Enter") setDetail(d); }}
                   className={`mday ${d === today ? "today" : ""} ${myOff.has(d) ? "myoff" : ""} ${holidayName(d) ? "hol" : ""} ${dow(d) === 0 ? "sun" : dow(d) === 6 ? "sat" : ""}`} style={{ cursor: "pointer" }}>
-                  <div className="num"><span>{md(d)}</span>{holidayName(d) && <small className="holname"> {holidayName(d)}</small>}{myOff.has(d) && <small className="myoff-tag"> 休み</small>}{limits.has(d) && (() => { const n = (byDay.get(d) ?? []).filter((x) => x.kind !== "work").length, m = limits.get(d)!; return <small style={{ color: n > m ? "#d70015" : "var(--sub)", fontWeight: n > m ? 800 : 500 }}> {n > m ? "⚠" : ""}休{n}/{m}</small>; })()}</div>
+                  <div className="num"><span>{md(d)}</span>{holidayName(d) && <small className="holname"> {holidayName(d)}</small>}{myOff.has(d) && <small className="myoff-tag"> 休み</small>}{limits.has(d) && (() => { const o = (byDay.get(d) ?? []).filter((x) => x.kind !== "work"); const n = o.length, m = limits.get(d)!; const ns = o.filter((x) => rankOf.get(x.membershipId) === "stylist").length, na = o.filter((x) => rankOf.get(x.membershipId) === "assistant").length; const ms = limS.get(d), ma = limA.get(d); const over = n > m || (ms != null && ns > ms) || (ma != null && na > ma); return <small style={{ color: over ? "#d70015" : "var(--sub)", fontWeight: over ? 800 : 500 }}> {over ? "⚠" : ""}休{n}/{m}</small>; })()}</div>
                   {(byDay.get(d) ?? []).length > 0 && <span className="wcount" title="この日の出勤人数">{(byDay.get(d) ?? []).filter((s) => s.kind === "work").length}人</span>}
                   {list.length === 0 && show === "off" ? <small className="sub">なし</small> : (
                     <div className="names">
@@ -156,16 +160,19 @@ function Page() {
                   この日の出勤簿を開く（全員一括・ひとりずつ直せます）
                 </Link>
               )}
-              {me.level < 2 && limits.has(detail) && <p className="sub" style={{ margin: "6px 0" }}>この日に休める人数の目安：{limits.get(detail)}人（いま{off.length}人が休み）。目安をこえても希望休は出せます。</p>}
+              {me.level < 2 && limits.has(detail) && <p className="sub" style={{ margin: "6px 0" }}>この日に休める人数の目安：{limS.get(detail) != null ? `スタイリスト${limS.get(detail)}人・アシスタント${limA.get(detail)}人` : `${limits.get(detail)}人`}（いま{off.length}人が休み）。目安をこえても希望休は出せます。</p>}
               {me.level >= 2 && db && (
                 <div className="card" style={{ margin: "8px 0", padding: 10 }}>
-                  <div className="sub">この日に休める人数の上限（出勤簿をつける人が決めます）</div>
+                  <div className="sub">この日に休める人数の目安（シフト担当・店長が決めます）</div>
                   {conflicts.has(detail) && <p style={{ color: "#d70015", margin: "4px 0", fontWeight: 700 }}>⚠ いま{conflicts.get(detail)!.count}人が休み（上限{conflicts.get(detail)!.maxOff}人）。かぶっています。</p>}
                   <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                    <Stepper label="休める人数の上限" unit="人" max={99} value={limitInput !== "" ? limitInput : limits.has(detail) ? String(limits.get(detail)) : ""} placeholder="なし" onChange={setLimitInput} />
+                    <span>スタイリスト</span>
+                    <Stepper label="スタイリストの人数" unit="人" max={99} value={limitInput !== "" ? limitInput : limS.get(detail) != null ? String(limS.get(detail)) : ""} placeholder="未" onChange={setLimitInput} />
+                    <span>アシスタント</span>
+                    <Stepper label="アシスタントの人数" unit="人" max={99} value={limitInputA !== "" ? limitInputA : limA.get(detail) != null ? String(limA.get(detail)) : ""} placeholder="未" onChange={setLimitInputA} />
                     <span>人まで</span>
-                    <button style={{ width: "auto", margin: 0, padding: "8px 12px" }} onClick={async () => { try { await api("/api/day-limits", { periodId: db.id, storeId, days: [detail], maxOff: limitInput === "" ? null : Number(limitInput) }); setLimitInput(""); setLimitMsg("決めました"); await load(); } catch (e) { setLimitMsg((e as Error).message); } }}>決める</button>
-                    <button className="ghost" style={{ width: "auto", margin: 0 }} onClick={async () => { try { await api("/api/day-limits", { periodId: db.id, storeId, days: [detail], maxOff: null }); setLimitInput(""); setLimitMsg("上限をなくしました"); await load(); } catch (e) { setLimitMsg((e as Error).message); } }}>上限なし</button>
+                    <button style={{ width: "auto", margin: 0, padding: "8px 12px" }} onClick={async () => { try { const st = limitInput !== "" ? limitInput : String(limS.get(detail) ?? ""), as = limitInputA !== "" ? limitInputA : String(limA.get(detail) ?? ""); if (st === "" || as === "" || st === "null" || as === "null") { setLimitMsg("スタイリストとアシスタントの人数を、両方入れてください"); return; } await api("/api/day-limits", { periodId: db.id, storeId, days: [detail], maxStylist: Number(st), maxAssistant: Number(as) }); setLimitInput(""); setLimitInputA(""); setLimitMsg("決めました"); await load(); } catch (e) { setLimitMsg((e as Error).message); } }}>決める</button>
+                    <button className="ghost" style={{ width: "auto", margin: 0 }} onClick={async () => { try { await api("/api/day-limits", { periodId: db.id, storeId, days: [detail], maxOff: null }); setLimitInput(""); setLimitInputA(""); setLimitMsg("目安をなくしました（受付を始めたあとは、決めなおしてください）"); await load(); } catch (e) { setLimitMsg((e as Error).message); } }}>なくす</button>
                   </div>
                   {conflicts.has(detail) && (
                     <div className="actions" style={{ marginTop: 8 }}>
