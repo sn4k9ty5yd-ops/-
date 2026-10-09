@@ -25,7 +25,7 @@ function PresenceBadge({ s }: { s: StaffRow }) {
 
 export default function StaffPage() {
   const { me } = useMe();
-  const LEVEL_CHOICES: Tier[] = me.appOwner ? [1, 2, 3, 4, 5] : [1, 2, 3];   // レベル4（社長）・5（正美さん）に決められるのは、アプリ制作者だけ
+  const LEVEL_CHOICES: Tier[] = me.appOwner ? [1, 2, 3, 4, 5] : [1, 2, 3];   // レベル4（鬼塚さん）・5（正美さん）に決められるのは、アプリ制作者だけ
   const [staff, setStaff] = useState<StaffRow[]>([]);
   const [stores, setStores] = useState<Store[]>([]);
   const [form, setForm] = useState({ name: "", employeeCode: "", storeId: me.storeId, level: 1 as number, displayOnly: false });

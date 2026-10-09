@@ -7,7 +7,7 @@ const admin = { canAssignLevel: true }, mgr = { canAssignLevel: false, defaultSt
 describe("レベルの言葉", () => {
   it("数字・日本語どちらも読める", () => {
     expect([parseLevel("1"), parseLevel("スタッフ"), parseLevel("シフト担当"), parseLevel("店長"), parseLevel("オフィス"), parseLevel("管理者"), parseLevel("４")]).toEqual([1, 1, 2, 3, 4, 4, 4]);
-    expect(parseLevel("社長")).toBeNull();
+    expect(parseLevel("鬼塚さん")).toBeNull();
   });
 });
 
@@ -27,9 +27,9 @@ describe("スタッフの貼り付け", () => {
     expect(r.rows.map((x) => [x.storeId, x.level, x.error])).toEqual([["s2", 1, null], ["s2", 3, null]]);
   });
   it("おかしな行は、行ごとにやさしい理由をつける（ほかの行は読む）", () => {
-    const r = parseStaffPaste("A\t1\tATENA\nB\t\tATENA\n\t3\tATENA\nC\t4\tなぞの店\nD\t5\tATENA\t社長\nE\t1\tATENA\nF\t6-あ\tATENA\n", stores, admin);
+    const r = parseStaffPaste("A\t1\tATENA\nB\t\tATENA\n\t3\tATENA\nC\t4\tなぞの店\nD\t5\tATENA\t鬼塚さん\nE\t1\tATENA\nF\t6-あ\tATENA\n", stores, admin);
     expect(r.rows.map((x) => x.error)).toEqual([
-      null, "社員番号がありません", "名前がありません", "お店「なぞの店」が見つかりません", "レベル「社長」が読めません（スタッフ・シフト担当・店長・管理者・表示専用）",
+      null, "社員番号がありません", "名前がありません", "お店「なぞの店」が見つかりません", "レベル「鬼塚さん」が読めません（スタッフ・シフト担当・店長・管理者・表示専用）",
       "同じ社員番号が、この表の中に2つあります", "社員番号は、英数字（20文字まで）にしてください",
     ]);
   });

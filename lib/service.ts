@@ -209,7 +209,7 @@ async function assertNotOwnerTarget(db: Database, userId: string, targetId: stri
   if (targetId === userId) return;
   const r = await asUser(db, userId, (q) => q.query<{ o: boolean; x: boolean }>("select app_owner as o, exec_view as x from memberships where id = $1", [targetId]));
   if (r.rows[0]?.o) throw new ForbiddenError("この人は、アプリ制作者です。ほかの人は変更できません");
-  if (r.rows[0]?.x && !(await getMe(db, userId))?.appOwner) throw new ForbiddenError("この人は、社長のアカウントです。変更できるのは、アプリ制作者だけです");
+  if (r.rows[0]?.x && !(await getMe(db, userId))?.appOwner) throw new ForbiddenError("この人は、鬼塚さんのアカウントです。変更できるのは、アプリ制作者だけです");
 }
 
 export async function disableStaff(db: Database, userId: string, targetId: string): Promise<void> {
@@ -224,7 +224,7 @@ export async function disableStaff(db: Database, userId: string, targetId: strin
   await db.query("delete from sessions where membership_id = $1", [targetId]);
 }
 
-/** レベルを変える。1〜3は正美さん以上。4（社長・見るだけ）と5（正美さん）に決められるのは、アプリ制作者だけ（中の数字はどちらも4。社長だけ exec_view の印をつける） */
+/** レベルを変える。1〜3は正美さん以上。4（鬼塚さん・見るだけ）と5（正美さん）に決められるのは、アプリ制作者だけ（中の数字はどちらも4。鬼塚さんだけ exec_view の印をつける） */
 export async function setStaffLevel(db: Database, userId: string, targetId: string, level: Level | 5): Promise<void> {
   const me = await getMe(db, userId);
   if (!me) throw new ForbiddenError();
@@ -3077,7 +3077,7 @@ export async function saveInterview(db: Database, userId: string, id: string, pa
   if (n === 0) throw new ForbiddenError("提出ずみの面談シートは、直せません");
 }
 
-/** 店長に提出する（提出すると、書いた人は直せない）。店長にお知らせ。店長がいないときは、だれにも送らない（正美さん・社長には届けない） */
+/** 店長に提出する（提出すると、書いた人は直せない）。店長にお知らせ。店長がいないときは、だれにも送らない（正美さん・鬼塚さんには届けない） */
 export async function submitInterview(db: Database, userId: string, id: string): Promise<{ notified: number }> {
   const me = await getMe(db, userId);
   if (!me) throw new ForbiddenError();
@@ -3107,7 +3107,7 @@ export async function reopenInterview(db: Database, userId: string, id: string):
   try { await asUser(db, userId, (q) => q.query("select public.interview_reopen($1)", [id])); } catch { throw new ForbiddenError("取り下げられません（提出前か、店長が確認ずみです）"); }
 }
 
-/** みんなのMBTI（社長以上は全店、ほかの人は自分のお店だけ。名前・お店・MBTIだけ） */
+/** みんなのMBTI（鬼塚さん以上は全店、ほかの人は自分のお店だけ。名前・お店・MBTIだけ） */
 export async function listMbtiDirectory(db: Database, userId: string): Promise<{ name: string; storeName: string; mbti: string }[]> {
   const me = await getMe(db, userId);
   if (!me || me.displayOnly) throw new ForbiddenError();

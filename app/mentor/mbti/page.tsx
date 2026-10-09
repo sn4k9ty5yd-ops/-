@@ -17,7 +17,7 @@ function Page() {
       <Link href="/home" className="back">← ホーム</Link>
       <h1>メンター</h1>
       <SubTabs items={mentorTabs(me.displayOnly, me.rank)} />
-      <p className="sub">みんなのMBTIです（自分のお店の人が見られます。全店は社長以上）。MBTIを入れている人だけが出ます。</p>
+      <p className="sub">みんなのMBTIです（自分のお店の人が見られます。全店は鬼塚さん以上）。MBTIを入れている人だけが出ます。</p>
       {msg && <p className="err">{msg}</p>}
       <input placeholder="名前・MBTIでさがす（例：ENFP）" value={q} onChange={(e) => setQ(e.target.value)} />
       {rows && rows.length === 0 && !msg && <p className="hint">まだ、MBTIを入れている人がいません。</p>}

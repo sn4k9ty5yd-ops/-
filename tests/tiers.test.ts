@@ -6,7 +6,7 @@ import * as svc from "../lib/service";
 import { asUser } from "../lib/db/user-context";
 import { isOfficeOnly, tierOf } from "../lib/permissions";
 
-describe("レベル4（社長・見るだけ）・5（正美さん）・6（アプリ制作者）", () => {
+describe("レベル4（鬼塚さん・見るだけ）・5（正美さん）・6（アプリ制作者）", () => {
   let d: Database; const u: Record<string, string> = {}; let sid = "";
   beforeAll(async () => {
     d = await newDb(); await migrate(d);
@@ -19,7 +19,7 @@ describe("レベル4（社長・見るだけ）・5（正美さん）・6（ア�
     await mk("owner", "1", 4, "app_owner = true"); await mk("office", "2", 4); await mk("boss", "3", 4, "exec_view = true"); await mk("staff", "4", 1);
     await svc.setRank(d, u.owner, u.staff, "assistant");
   });
-  it("画面のレベル: 制作者=6・正美さん=5・社長=4。レッスンの状況を見られないのは正美さんだけ", async () => {
+  it("画面のレベル: 制作者=6・正美さん=5・鬼塚さん=4。レッスンの状況を見られないのは正美さんだけ", async () => {
     const t = async (k: string) => tierOf((await svc.getMe(d, u[k]))!);
     expect([await t("owner"), await t("office"), await t("boss"), await t("staff")]).toEqual([6, 5, 4, 1]);
     expect(isOfficeOnly((await svc.getMe(d, u.office))!)).toBe(true);
@@ -33,13 +33,13 @@ describe("レベル4（社長・見るだけ）・5（正美さん）・6（ア�
     expect(await lv("owner", "boss")).toBe(4);
     expect(await lv("staff", "office")).toBe(0);
   });
-  it("レベル4・5に決められるのは、アプリ制作者だけ。正美さんは社長のアカウントを変えられない", async () => {
+  it("レベル4・5に決められるのは、アプリ制作者だけ。正美さんは鬼塚さんのアカウントを変えられない", async () => {
     await expect(svc.setStaffLevel(d, u.office, u.staff, 4)).rejects.toThrow(svc.ForbiddenError);
     await expect(svc.setStaffLevel(d, u.office, u.staff, 5)).rejects.toThrow(svc.ForbiddenError);
     await svc.setStaffLevel(d, u.office, u.staff, 2);                                       // 1〜3は、正美さんもできる
     await svc.setStaffLevel(d, u.owner, u.staff, 4);
-    expect(tierOf((await svc.getMe(d, u.staff))!)).toBe(4);                                 // 社長（見るだけ）
-    await expect(svc.reissuePasscode(d, u.office, u.staff)).rejects.toThrow(svc.ForbiddenError);   // 社長のアカウントは、制作者だけ
+    expect(tierOf((await svc.getMe(d, u.staff))!)).toBe(4);                                 // 鬼塚さん（見るだけ）
+    await expect(svc.reissuePasscode(d, u.office, u.staff)).rejects.toThrow(svc.ForbiddenError);   // 鬼塚さんのアカウントは、制作者だけ
     await svc.setStaffLevel(d, u.owner, u.staff, 5);
     expect(tierOf((await svc.getMe(d, u.staff))!)).toBe(5);
     await svc.setStaffLevel(d, u.owner, u.staff, 1);
@@ -48,7 +48,7 @@ describe("レベル4（社長・見るだけ）・5（正美さん）・6（ア�
   });
   it("アカウントを作るとき、レベル4・5は制作者だけ", async () => {
     await expect(svc.addStaff(d, u.office, { name: "X", employeeCode: "50", storeId: sid, level: 4 })).rejects.toThrow(svc.ForbiddenError);
-    const r = await svc.addStaff(d, u.owner, { name: "社長2", employeeCode: "51", storeId: sid, level: 4 });
+    const r = await svc.addStaff(d, u.owner, { name: "鬼塚さん2", employeeCode: "51", storeId: sid, level: 4 });
     expect(tierOf((await svc.getMe(d, r.id))!)).toBe(4);
     const r2 = await svc.addStaff(d, u.owner, { name: "事務員2", employeeCode: "52", storeId: sid, level: 5 });
     expect(tierOf((await svc.getMe(d, r2.id))!)).toBe(5);

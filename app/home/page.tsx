@@ -52,7 +52,7 @@ function Cards() {
     { big: true, href: "/help", title: "ヘルプ", sub: "このアプリでできることと、やり方・ご要望を送る", show: true },
     { href: "/admin/activity", title: "変更の記録", sub: "だれが・どこを・いつ変更したか（制作者だけ）", show: !!me.appOwner },
     { href: "/admin/feedback", title: "届いたご要望", sub: "みんなからの「こうしてほしい」（制作者だけ）", show: !!me.appOwner },
-    { href: "/admin/guide", title: "アプリの説明書", sub: "社長用・正美さん用・全社員Zoom台本（印刷・コピー）", show: !!me.appOwner },
+    { href: "/admin/guide", title: "アプリの説明書", sub: "鬼塚さん用・正美さん用・全社員Zoom台本（印刷・コピー）", show: !!me.appOwner },
     { href: "/admin/settings", title: "設定", sub: "休憩・実働のルール", show: me.level >= 4 },
     { href: "/admin/stores", title: "店舗の編集", sub: "新店舗の追加・名前の変更・閉店（管理者のみ）", show: me.level >= 4 },
   ].filter((c) => c.show);

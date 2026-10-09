@@ -62,7 +62,7 @@ describe("メンターの会話は本人だけ。面談シートは、書いた�
     expect(g.messages.map((m) => m.role)).toEqual(["user", "assistant", "user", "assistant"]);
     expect(g.mbti).toBe("ENFP");
   });
-  it("ほかの人は、だれも読めない（アプリ制作者・正美さん・社長・店長も）", async () => {
+  it("ほかの人は、だれも読めない（アプリ制作者・正美さん・鬼塚さん・店長も）", async () => {
     for (const k of ["owner", "office", "boss", "mgrA", "mgrB", "mentor", "other"]) {
       const n = (await asUser(d, u[k], (q) => q.query("select 1 from mentor_messages"))).rows.length;
       expect(n, k).toBe(0);
@@ -93,7 +93,7 @@ describe("メンターの会話は本人だけ。面談シートは、書いた�
     await expect(svc.saveInterview(d, u.mentor, iv, { memo: "あとから直す" })).rejects.toThrow(svc.ForbiddenError);
     await expect(svc.submitInterview(d, u.mentor, iv)).rejects.toThrow(svc.ForbiddenError);
   });
-  it("読めるのは、書いた人と、そのお店の店長だけ（他店の店長・正美さん・社長・制作者も読めない）", async () => {
+  it("読めるのは、書いた人と、そのお店の店長だけ（他店の店長・正美さん・鬼塚さん・制作者も読めない）", async () => {
     expect((await svc.listInterviews(d, u.mentor)).rows).toHaveLength(1);
     expect((await svc.listInterviews(d, u.mgrA)).rows).toHaveLength(1);
     for (const k of ["mgrB", "office", "boss", "owner", "kid", "other"]) expect((await svc.listInterviews(d, u[k])).rows, k).toHaveLength(0);
@@ -145,7 +145,7 @@ describe("面談シートの編集・削除", () => {
   });
 });
 
-describe("みんなのMBTI（社長以上は全店・ほかは自分のお店）", () => {
+describe("みんなのMBTI（鬼塚さん以上は全店・ほかは自分のお店）", () => {
   let mkOffice: () => Promise<void> = async () => {};
   let d: Database; const u: Record<string, string> = {};
   beforeAll(async () => {
@@ -159,7 +159,7 @@ describe("みんなのMBTI（社長以上は全店・ほかは自分のお店）
     mkOffice = async () => { if (!u.office) await mk("office", "9", 4, a); };
     await svc.setMentorMbti(d, u.kid, "ENFP"); await svc.setMentorMbti(d, u.styB, "ISTJ");
   });
-  it("社長以上は、お店がちがう人のMBTIも見られる。スタイリストも自分のお店だけ。会話は見えない", async () => {
+  it("鬼塚さん以上は、お店がちがう人のMBTIも見られる。スタイリストも自分のお店だけ。会話は見えない", async () => {
     await mkOffice();
     const r = await svc.listMbtiDirectory(d, u.office);
     expect(r.map((x) => [x.name, x.mbti]).sort()).toEqual([["kid", "ENFP"], ["styB", "ISTJ"]]);

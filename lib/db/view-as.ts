@@ -2,7 +2,7 @@
 export interface ViewAsPreset { key: string; label: string; level: 1 | 2 | 3 | 4; rank: "stylist" | "assistant" | null; displayOnly: boolean; execView: boolean }
 export const VIEW_AS_PRESETS: ViewAsPreset[] = [
   { key: "office", label: "正美さん（レベル5）", level: 4, rank: null, displayOnly: false, execView: false },
-  { key: "president", label: "社長（レベル4・見るだけ）", level: 4, rank: null, displayOnly: false, execView: true },
+  { key: "president", label: "鬼塚さん（レベル4・見るだけ）", level: 4, rank: null, displayOnly: false, execView: true },
   { key: "manager", label: "店長（レベル3）", level: 3, rank: null, displayOnly: false, execView: false },
   { key: "shifter", label: "シフト担当（レベル2）", level: 2, rank: null, displayOnly: false, execView: false },
   { key: "stylist", label: "スタイリスト（レベル1）", level: 1, rank: "stylist", displayOnly: false, execView: false },

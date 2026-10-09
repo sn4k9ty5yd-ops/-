@@ -24,7 +24,7 @@ describe("変更の記録の言葉づかい・提出の判定・レベルの表�
   });
   it("レベルの表示: アプリ制作者には内訳つき、ほかの人には「レベル◯」だけ", () => {
     const boss = { level: 4, execView: true }, off = { level: 4 }, owner = { level: 4, appOwner: true };
-    expect(levelLabel({ appOwner: true }, boss)).toBe("レベル4 社長（見るだけ）");
+    expect(levelLabel({ appOwner: true }, boss)).toBe("レベル4 鬼塚さん（見るだけ）");
     expect(levelLabel({ appOwner: true }, owner)).toBe("レベル6 アプリ制作者");
     expect(levelLabel({}, boss)).toBe("レベル4");
     expect(levelLabel({}, off)).toBe("レベル5");
