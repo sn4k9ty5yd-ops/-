@@ -86,8 +86,8 @@ export default function StocktakePage() {
                   setImp({ ...imp, busy: true, res: "" });
                   try {
                     if (/^店舗名/.test(imp.text.trim())) {
-                      const r = await api<{ groups: { store: string; kind: ProductKind; lines: number; total: number; error?: string }[]; bad: number }>("/api/stocktakes", { action: "import-all", storeId, kind, takenOn: imp.date, text: imp.text }); setMsg("");
-                      setImp({ ...imp, busy: false, text: "", res: r.groups.map((g) => `${g.store}（${PRODUCT_KIND_LABEL[g.kind]}）：${g.error ? `⚠ ${g.error}` : `${g.lines}行・${g.total.toLocaleString("ja-JP")}円`}`).join(" ／ ") + (r.bad ? `　読めなかった行 ${r.bad}` : "") });
+                      const r = await api<{ groups: { store: string; kind: ProductKind; lines: number; total: number; error?: string }[]; bad: number; badLines: string[] }>("/api/stocktakes", { action: "import-all", storeId, kind, takenOn: imp.date, text: imp.text }); setMsg("");
+                      setImp({ ...imp, busy: false, text: "", res: r.groups.map((g) => `${g.store}（${PRODUCT_KIND_LABEL[g.kind]}）：${g.error ? `⚠ ${g.error}` : `${g.lines}行・${g.total.toLocaleString("ja-JP")}円`}`).join(" ／ ") + (r.bad ? `　⚠ 取り込まなかった行 ${r.bad}件：${r.badLines.join(" ／ ")}` : "") });
                     } else {
                       const r = await api<{ lines: number; created: number; bad: number; total: number }>("/api/stocktakes", { action: "import", storeId, kind, takenOn: imp.date, text: imp.text }); setMsg("");
                       setImp({ ...imp, busy: false, text: "", res: `${r.lines}行を取り込みました（新しい商品 ${r.created}件・合計 ${r.total.toLocaleString("ja-JP")}円${r.bad ? `・読めなかった行 ${r.bad}` : ""}）` });

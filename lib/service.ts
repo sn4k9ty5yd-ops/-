@@ -3178,24 +3178,33 @@ export function parsePastStocktake(text: string): { rows: PastStocktakeRow[]; ba
   });
   return { rows, bad };
 }
-/** 全店まとめて（店舗名・区分・メーカー・品名・規格・単価・数量・金額・備考）の表を読む。区分は「業務」「店販」 */
+/** 全店まとめての表を読む。見出し（店舗名・区分・メーカー・品名・規格・単価（または仕入値）・数量［・金額］）の言葉で列を探す。「原本頁」「備考」などの余分な列があってもよい。区分は「業務」「店販」 */
 export function parsePastStocktakeAll(text: string): { rows: (PastStocktakeRow & { store: string; kind: ProductKind })[]; bad: { line: number; text: string; reason: string }[] } {
   const half = (v: string) => v.replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0)).replace(/[¥￥円,，\s]/g, "");
   const rows: (PastStocktakeRow & { store: string; kind: ProductKind })[] = []; const bad: { line: number; text: string; reason: string }[] = [];
+  let ix = { store: 0, kind: 1, maker: 2, name: 3, spec: 4, cost: 5, qty: 6, amount: -1 };
   text.split(/\r?\n/).forEach((raw, i) => {
     if (!raw.trim()) return;
     const cols = (raw.includes("\t") ? raw.split("\t") : raw.split(/[,，]/)).map((c) => c.trim());
-    if (/^店舗名/.test(cols[0])) return;
-    const kind = cols[1] === "店販" ? "retail" : cols[1] === "業務" ? "supply" : null;
-    const cost = half(cols[5] ?? ""), q = half(cols[6] ?? "");
-    if (cols.length < 7 || !kind || !cols[0] || !cols[3] || !/^\d+$/.test(cost) || !/^\d+$/.test(q)) { bad.push({ line: i + 1, text: raw, reason: "店舗名・区分・品名・単価・数量が読めません" }); return; }
-    rows.push({ store: cols[0], kind, maker: cols[2], name: cols[3], spec: cols[4] ?? "", costPrice: Number(cost), quantity: Number(q) });
+    if (/^店舗名/.test(cols[0])) {
+      const f = (...names: string[]) => cols.findIndex((c) => names.includes(c));
+      ix = { store: f("店舗名"), kind: f("区分"), maker: f("メーカー"), name: f("品名"), spec: f("規格"), cost: f("単価", "仕入値"), qty: f("数量"), amount: f("金額") };
+      return;
+    }
+    const kind = cols[ix.kind] === "店販" ? "retail" : cols[ix.kind] === "業務" ? "supply" : null;
+    const cost = half(cols[ix.cost] ?? ""), q = half(cols[ix.qty] ?? "");
+    if (!kind || !cols[ix.store] || !cols[ix.name] || !/^\d+$/.test(cost) || !/^\d+$/.test(q)) { bad.push({ line: i + 1, text: raw, reason: "店舗名・区分・品名・単価・数量が読めません（列がずれていないか確認）" }); return; }
+    if (ix.amount >= 0) {
+      const am = half(cols[ix.amount] ?? "");
+      if (!/^\d+$/.test(am) || Number(am) !== Number(cost) * Number(q)) { bad.push({ line: i + 1, text: raw, reason: "金額が 単価×数量 と合いません（列がずれている可能性）" }); return; }
+    }
+    rows.push({ store: cols[ix.store], kind, maker: cols[ix.maker] ?? "", name: cols[ix.name], spec: cols[ix.spec] ?? "", costPrice: Number(cost), quantity: Number(q) });
   });
   return { rows, bad };
 }
 const normStore = (v: string) => v.normalize("NFKC").toLowerCase().replace(/\s+/g, "");
 /** 全店の昨年データを、お店×店販/業務ごとに取り込む（事務員さんだけ）。お店の名前は、少し違っていても（ATENA→ATENA天神、organ→Organ）合わせる */
-export async function importPastStocktakeAll(db: Database, userId: string, takenOn: string, text: string): Promise<{ groups: { store: string; kind: ProductKind; lines: number; total: number; error?: string }[]; bad: number }> {
+export async function importPastStocktakeAll(db: Database, userId: string, takenOn: string, text: string): Promise<{ groups: { store: string; kind: ProductKind; lines: number; total: number; error?: string }[]; bad: number; badLines: string[] }> {
   const me = await getMe(db, userId);
   if (!me || me.level < 4) throw new ForbiddenError();
   const { rows, bad } = parsePastStocktakeAll(text);
@@ -3214,7 +3223,7 @@ export async function importPastStocktakeAll(db: Database, userId: string, taken
     try { const r = await importPastRows(db, me, st.id, g.kind, takenOn, g.rows); out.push({ store: st.name, kind: g.kind, lines: r.lines, total: r.total }); }
     catch (e) { out.push({ store: st.name, kind: g.kind, lines: 0, total: 0, error: e instanceof Error ? e.message : "取り込めませんでした" }); }
   }
-  return { groups: out, bad: bad.length };
+  return { groups: out, bad: bad.length, badLines: bad.slice(0, 20).map((b) => `${b.line}行目：${b.reason}　${b.text.slice(0, 60)}`) };
 }
 /** 昨年の棚卸し（店×種類×日）を取り込む。商品がなければ登録し、確認ずみの棚卸しとして残す（事務員さんだけ）。今年の棚卸しは、この数量から始まる */
 export async function importPastStocktake(db: Database, userId: string, storeId: string, kind: ProductKind, takenOn: string, text: string): Promise<{ lines: number; created: number; bad: number; total: number }> {
