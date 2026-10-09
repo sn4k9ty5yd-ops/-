@@ -77,13 +77,20 @@ export default function StocktakePage() {
             <p className="sub" style={{ margin: "6px 0 0" }}>昨年の「メーカー・品名・規格・仕入値・数量」の表を貼ると、今年の棚卸しが、その数量から始まります（数量を直して提出します。金額は数量を変えると自動で変わります）。</p></div> : (
             <div style={{ marginTop: 6 }}>
               <div style={{ margin: 0 }}><span className="sub">昨年の棚卸日</span><br /><DateStepper label="昨年の棚卸日" value={imp.date} onChange={(v) => setImp({ ...imp, date: v })} /></div>
-              <textarea aria-label="昨年の表" rows={8} placeholder={"Excelの表をコピーして貼り付け\n（メーカー　品名　規格　仕入値　数量）"} style={{ width: "100%", fontSize: 14, padding: 10, borderRadius: 12, border: "1px solid var(--line)", marginTop: 6 }} value={imp.text} onChange={(e) => setImp({ ...imp, text: e.target.value })} />
+              <textarea aria-label="昨年の表" rows={8} placeholder={"Excelの表をコピーして貼り付け\n・全店まとめて：店舗名 区分 メーカー 品名 規格 単価 数量 金額 備考（見出しの行ごと貼る）\n・1つのお店だけ：メーカー 品名 規格 仕入値 数量"} style={{ width: "100%", fontSize: 14, padding: 10, borderRadius: 12, border: "1px solid var(--line)", marginTop: 6 }} value={imp.text} onChange={(e) => setImp({ ...imp, text: e.target.value })} />
               {imp.res && <p className="sub" style={{ color: "var(--ok)" }}>✅ {imp.res}</p>}
               <div className="actions">
                 <button disabled={imp.busy || !imp.text.trim() || !imp.date} onClick={async () => {
                   setImp({ ...imp, busy: true, res: "" });
-                  try { const r = await api<{ lines: number; created: number; bad: number; total: number }>("/api/stocktakes", { action: "import", storeId, kind, takenOn: imp.date, text: imp.text }); setMsg("");
-                    setImp({ ...imp, busy: false, text: "", res: `${r.lines}行を取り込みました（新しい商品 ${r.created}件・合計 ${r.total.toLocaleString("ja-JP")}円${r.bad ? `・読めなかった行 ${r.bad}` : ""}）` }); await loadList(); }
+                  try {
+                    if (/^店舗名/.test(imp.text.trim())) {
+                      const r = await api<{ groups: { store: string; kind: ProductKind; lines: number; total: number; error?: string }[]; bad: number }>("/api/stocktakes", { action: "import-all", storeId, kind, takenOn: imp.date, text: imp.text }); setMsg("");
+                      setImp({ ...imp, busy: false, text: "", res: r.groups.map((g) => `${g.store}（${PRODUCT_KIND_LABEL[g.kind]}）：${g.error ? `⚠ ${g.error}` : `${g.lines}行・${g.total.toLocaleString("ja-JP")}円`}`).join(" ／ ") + (r.bad ? `　読めなかった行 ${r.bad}` : "") });
+                    } else {
+                      const r = await api<{ lines: number; created: number; bad: number; total: number }>("/api/stocktakes", { action: "import", storeId, kind, takenOn: imp.date, text: imp.text }); setMsg("");
+                      setImp({ ...imp, busy: false, text: "", res: `${r.lines}行を取り込みました（新しい商品 ${r.created}件・合計 ${r.total.toLocaleString("ja-JP")}円${r.bad ? `・読めなかった行 ${r.bad}` : ""}）` });
+                    }
+                    await loadList(); }
                   catch (e) { setMsg((e as Error).message); setImp({ ...imp, busy: false }); }
                 }}>取り込む</button>
                 <button className="ghost" onClick={() => setImp(null)}>閉じる</button>

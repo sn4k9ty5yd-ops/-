@@ -183,3 +183,13 @@ describe("昨年のデータの取り込みと、前回の数量を引きつい�
     expect((await svc.getStocktake(db, id.office, now))!.items.find((i) => i.id === sh.id)!.amount).toBe(7500);
   });
 });
+
+describe("全店まとめての取り込み", () => {
+  it("店舗名・区分つきの表を、お店×店販/業務ごとに取り込む。お店の名前は少し違っても合わせる", async () => {
+    const text = "店舗名\t区分\tメーカー\t品名\t規格\t単価\t数量\t金額\t備考\ns1\t店販\tミルボン\tオイル\t100ml\t2000\t2\t4000\t\nS2\t業務\tウェラ\tカラー 6\t80g\t750\t3\t2250\t数量空欄\n存在しない店\t業務\tX\tY\t1\t100\t1\t100\t";
+    const r = await svc.importPastStocktakeAll(db, id.office, "2024-10-31", text);
+    expect(r.groups.filter((g) => !g.error).map((g) => g.total).sort()).toEqual([2250, 4000]);
+    expect(r.groups.some((g) => g.error)).toBe(true);
+    await expect(svc.importPastStocktakeAll(db, id.mgr1, "2024-10-31", text)).rejects.toThrow(svc.ForbiddenError);
+  });
+});

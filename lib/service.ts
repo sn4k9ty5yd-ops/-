@@ -3184,6 +3184,44 @@ export function parsePastStocktake(text: string): { rows: PastStocktakeRow[]; ba
   });
   return { rows, bad };
 }
+/** 全店まとめて（店舗名・区分・メーカー・品名・規格・単価・数量・金額・備考）の表を読む。区分は「業務」「店販」 */
+export function parsePastStocktakeAll(text: string): { rows: (PastStocktakeRow & { store: string; kind: ProductKind })[]; bad: { line: number; text: string; reason: string }[] } {
+  const half = (v: string) => v.replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0)).replace(/[¥￥円,，\s]/g, "");
+  const rows: (PastStocktakeRow & { store: string; kind: ProductKind })[] = []; const bad: { line: number; text: string; reason: string }[] = [];
+  text.split(/\r?\n/).forEach((raw, i) => {
+    if (!raw.trim()) return;
+    const cols = (raw.includes("\t") ? raw.split("\t") : raw.split(/[,，]/)).map((c) => c.trim());
+    if (/^店舗名/.test(cols[0])) return;
+    const kind = cols[1] === "店販" ? "retail" : cols[1] === "業務" ? "supply" : null;
+    const cost = half(cols[5] ?? ""), q = half(cols[6] ?? "");
+    if (cols.length < 7 || !kind || !cols[0] || !cols[3] || !/^\d+$/.test(cost) || !/^\d+$/.test(q)) { bad.push({ line: i + 1, text: raw, reason: "店舗名・区分・品名・単価・数量が読めません" }); return; }
+    rows.push({ store: cols[0], kind, maker: cols[2], name: cols[3], spec: cols[4] ?? "", costPrice: Number(cost), quantity: Number(q) });
+  });
+  return { rows, bad };
+}
+const normStore = (v: string) => v.normalize("NFKC").toLowerCase().replace(/\s+/g, "");
+/** 全店の昨年データを、お店×店販/業務ごとに取り込む（事務員さんだけ）。お店の名前は、少し違っていても（ATENA→ATENA天神、organ→Organ）合わせる */
+export async function importPastStocktakeAll(db: Database, userId: string, takenOn: string, text: string): Promise<{ groups: { store: string; kind: ProductKind; lines: number; total: number; error?: string }[]; bad: number }> {
+  const me = await getMe(db, userId);
+  if (!me || me.level < 4) throw new ForbiddenError();
+  const { rows, bad } = parsePastStocktakeAll(text);
+  if (rows.length === 0) throw new Error("取り込める行がありません（店舗名・区分・メーカー・品名・規格・単価・数量の表を貼ってください）");
+  const stores = (await db.query<{ id: string; name: string }>("select id, name from stores where company_id = $1 and status = 'active'", [me.companyId])).rows;
+  const find = (n: string) => {
+    const k = normStore(n);
+    return stores.find((s) => normStore(s.name) === k) ?? (k === "atena" ? stores.find((s) => normStore(s.name) === "atena天神") : undefined) ?? (stores.filter((s) => normStore(s.name).startsWith(k)).length === 1 ? stores.find((s) => normStore(s.name).startsWith(k)) : undefined);
+  };
+  const groups = new Map<string, { store: string; kind: ProductKind; rows: PastStocktakeRow[] }>();
+  for (const r of rows) { const key = `${r.store}|${r.kind}`; if (!groups.has(key)) groups.set(key, { store: r.store, kind: r.kind, rows: [] }); groups.get(key)!.rows.push(r); }
+  const out: { store: string; kind: ProductKind; lines: number; total: number; error?: string }[] = [];
+  for (const g of groups.values()) {
+    const st = find(g.store);
+    if (!st) { out.push({ store: g.store, kind: g.kind, lines: 0, total: 0, error: "この名前のお店が見つかりません" }); continue; }
+    try { const r = await importPastRows(db, me, st.id, g.kind, takenOn, g.rows); out.push({ store: st.name, kind: g.kind, lines: r.lines, total: r.total }); }
+    catch (e) { out.push({ store: st.name, kind: g.kind, lines: 0, total: 0, error: e instanceof Error ? e.message : "取り込めませんでした" }); }
+  }
+  return { groups: out, bad: bad.length };
+}
 /** 昨年の棚卸し（店×種類×日）を取り込む。商品がなければ登録し、確認ずみの棚卸しとして残す（事務員さんだけ）。今年の棚卸しは、この数量から始まる */
 export async function importPastStocktake(db: Database, userId: string, storeId: string, kind: ProductKind, takenOn: string, text: string): Promise<{ lines: number; created: number; bad: number; total: number }> {
   const me = await getMe(db, userId);
@@ -3192,6 +3230,11 @@ export async function importPastStocktake(db: Database, userId: string, storeId:
   const { rows, bad } = parsePastStocktake(text);
   if (rows.length === 0) throw new Error("取り込める行がありません（メーカー・品名・規格・仕入値・数量の順に貼ってください）");
   if (rows.length > 3000) throw new Error("一度に取り込めるのは3000行までです");
+  const r = await importPastRows(db, me, storeId, kind, takenOn, rows);
+  return { ...r, bad: bad.length };
+}
+async function importPastRows(db: Database, me: Me, storeId: string, kind: ProductKind, takenOn: string, rows: PastStocktakeRow[]): Promise<{ lines: number; created: number; total: number }> {
+  const userId = me.id;
   const uniq = new Map<string, PastStocktakeRow>();
   for (const r of rows) uniq.set(`${r.maker}|${r.name}|${r.spec}`, r);
   const items = [...uniq.values()];
@@ -3210,5 +3253,5 @@ export async function importPastStocktake(db: Database, userId: string, storeId:
     n++;
   }
   const total = Number((await db.query<{ t: string }>("select coalesce(sum(amount),0)::text as t from stocktake_lines where stocktake_id = $1", [stId])).rows[0].t);
-  return { lines: n, created: made.created, bad: bad.length, total };
+  return { lines: n, created: made.created, total };
 }
