@@ -211,4 +211,28 @@ describe("休みの上限・かぶりの知らせ・話し合い", () => {
     expect(after.find((r) => r.day === "2026-11-18")?.kind).toBe("holiday");
     expect(await svc.autoDraftShifts(db, id.office, periodId, sp)).toBe(0);                     // 2回目は何も増えない
   });
+
+  it("受付から直接シフトづくりへ進める。確定すると出勤簿確定が自動で作られ、閉店30分後に直していない日は店長・シフト担当にだけ通知が1回届く", async () => {
+    const sp = (await db.query<{ id: string }>("insert into stores (company_id, name, default_open, default_close) select company_id, 'rem', '10:00','19:00' from stores where id = $1 returning id", [st.s1])).rows[0].id;
+    const mk2 = async (code: string, level: number) => (await db.query<{ id: string }>("insert into memberships (company_id, store_id, employee_code, name, level) select company_id, $1, $2, $3, $4 from stores where id = $1 returning id", [sp, code, `r${code}`, level])).rows[0].id;
+    const mgr = await mk2("81", 3), staff = await mk2("82", 1);
+    await db.query("update store_period_status set status = 'collecting' where period_id = $1 and store_id = $2", [periodId, sp]);
+    await svc.setPeriodStatus(db, id.office, { periodId, storeId: sp, status: "drafting" });         // 「受付おわり」を飛ばせる
+    await svc.setPeriodStatus(db, id.office, { periodId, storeId: sp, status: "confirmed" });
+    const att = await svc.listAttendance(db, id.office, periodId, sp);
+    expect(att.rows.length).toBeGreaterThan(0);                                                       // 出勤簿確定が、自動でできている
+    const day = "2026-11-24";
+    expect(att.rows.some((r) => r.day === day && r.kind === "work")).toBe(true);
+    const before = await svc.runCloseTimeReminders(db, true, `${day}T19:20:00.000Z`);
+    expect(before.stores).toBe(0);                                                                    // 閉店30分前は、まだ
+    const r1 = await svc.runCloseTimeReminders(db, true, `${day}T19:31:00.000Z`);
+    expect(r1.stores).toBe(1);
+    expect((await svc.listNotifications(db, mgr)).items.some((n) => n.title.includes("今日の退店時間を登録してください"))).toBe(true);
+    expect((await svc.listNotifications(db, staff)).items.length).toBe(0);                            // 一般スタッフには届かない
+    expect((await svc.runCloseTimeReminders(db, true, `${day}T19:45:00.000Z`)).stores).toBe(0);     // その日は1回だけ
+    // 登録した印があれば、通知は来ない
+    await svc.confirmAttendanceDay(db, mgr, sp, "2026-11-25");
+    expect((await svc.runCloseTimeReminders(db, true, "2026-11-25T20:00:00.000Z")).stores).toBe(0);
+    await expect(svc.confirmAttendanceDay(db, staff, sp, "2026-11-26")).rejects.toThrow(svc.ForbiddenError);
+  });
 });

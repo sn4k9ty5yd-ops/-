@@ -52,7 +52,7 @@ export default function PeriodsPage() {
             <span className="sub">いま進めるシフト（{name(s.storeId)}）</span>
             <div style={{ marginBottom: 8 }}><b style={{ fontSize: 20 }}>{p.label}</b>　<span className="sub">{reiwaRange(p.start, p.end)}</span></div>
             <ol className="stepguide">
-              {STEP_GUIDE.map((g, i) => (
+              {STEP_GUIDE.filter((g) => g.key !== "closed" || s.status === "closed").map((g) => { const i = STATUS_ORDER.indexOf(g.key); return (
                 <li key={g.key} className={i < idx ? "done" : i === idx ? "now" : ""}>
                   <span className="sgdot">{i < idx ? "✓" : i === idx ? "●" : ""}</span>
                   <div>
@@ -60,7 +60,7 @@ export default function PeriodsPage() {
                     {i === idx && <p className="whatnow">{cur.now}</p>}
                   </div>
                 </li>
-              ))}
+              ); })}
             </ol>
             {can && <button onClick={() => { advance(p.id, s.storeId, next); }}>次は：{next.label}</button>}
             {!can && next && <p className="hint" style={{ margin: "6px 0 0" }}>この次の操作は、{cur.who || "店長・事務員さん"}が行います。</p>}

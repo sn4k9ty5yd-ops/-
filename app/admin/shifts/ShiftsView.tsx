@@ -115,7 +115,10 @@ export function ShiftsView({ final = false }: { final?: boolean }) {
         const a = body.action;
         if (a === "save") count = (await api<{ count: number }>("/api/attendance", { periodId, storeId, action: "save", entries: (body.entries as ShiftEntry[]).map((e) => ({ membershipId: e.membershipId, day: e.day, kind: e.kind, clockIn: e.start, clockOut: e.end, breakMin: e.breakMin ?? undefined })) })).count;
         else if (a === "clear") count = (await api<{ count: number }>("/api/attendance", { periodId, storeId, action: "clear", items: body.items })).count;
-        else if (a === "fill") count = (await api<{ saved: number }>("/api/attendance", { periodId, storeId, action: "fill", days: body.days, clockIn: body.start, clockOut: body.end, overwrite: true })).saved;
+        else if (a === "fill") {
+          count = (await api<{ saved: number }>("/api/attendance", { periodId, storeId, action: "fill", days: body.days, clockIn: body.start, clockOut: body.end, overwrite: true })).saved;
+          for (const d of (body.days as string[] | undefined) ?? []) await api("/api/attendance", { periodId, storeId, action: "day-confirm", day: d }).catch(() => undefined);   // まとめて直したら、その日は「登録した」
+        }
         else if (a === "autoDraft") count = (await api<{ count: number }>("/api/attendance", { periodId, storeId, action: "draft" })).count;
       }
       await load(); return count;
@@ -123,6 +126,14 @@ export function ShiftsView({ final = false }: { final?: boolean }) {
     catch (e) { setMsg((e as Error).message); throw e; }
   };
   const save = async (entries: ShiftEntry[]) => { await post({ action: "save", entries }); };
+  // 出勤簿確定: その日の退店時間を「登録した」印（毎日の通知は、印がなくて直していない人がいるときだけ届く）
+  const [dayConf, setDayConf] = useState<{ confirmed: boolean; unfixed: number } | null>(null);
+  const confDay = day || "";
+  useEffect(() => {
+    if (!final || mode !== "day" || !confDay || !periodId || !storeId) { setDayConf(null); return; }
+    api<{ confirmed: boolean; unfixed: number }>(`/api/attendance?periodId=${periodId}&storeId=${storeId}&confirmDay=${confDay}`).then(setDayConf).catch(() => setDayConf(null));
+  }, [final, mode, confDay, periodId, storeId, shifts]);
+  const confirmDay = async () => { try { await api("/api/attendance", { periodId, storeId, action: "day-confirm", day: confDay }); setNote(`${md(confDay)} の退店時間を、登録しました`); setDayConf({ confirmed: true, unfixed: dayConf?.unfixed ?? 0 }); } catch (e) { setMsg((e as Error).message); } };
   const loading = loadedKey !== `${storeId}|${view.start}`;
   const readOnlyReason = loading ? "" : !dbPeriod ? "この期間は、まだ作成されていません。" : editable ? "" : storeId !== me.storeId && me.level < 4 ? "他のお店の出勤簿です（見るだけ）。" : final ? "いまは出勤簿確定を変更できません（提出済み・確認済みなど）。" : pstatus === "preparing" ? "まだ準備中です。希望休の受付を始めるか、出勤簿づくりを始めると入力できます。" : "いまは出勤簿を変更できません（確定済みなど）。";
 
@@ -176,6 +187,12 @@ export function ShiftsView({ final = false }: { final?: boolean }) {
                 <b style={{ fontSize: 20 }}>{md(day || days[0])}（{WEEKDAYS[dow(day || days[0])]}）</b>
                 <button className="ghost" style={{ width: "auto", margin: 0 }} disabled={days.indexOf(day || days[0]) >= days.length - 1} onClick={() => setDay(days[days.indexOf(day || days[0]) + 1])}>次の日 ›</button>
               </div>
+              {final && dayConf && (
+                <div className="card" style={{ margin: "10px 0 0", background: dayConf.confirmed ? "color-mix(in srgb,var(--ok) 14%,#fff)" : "color-mix(in srgb,#ff9500 14%,#fff)" }}>
+                  {dayConf.confirmed ? <b>✅ この日の退店時間は、登録ずみです</b> : <><b>この日の退店時間を、登録してください</b><div className="sub">ひとりずつ直すか、下で全員をまとめて直します。直し終わったら、下のボタンを押します。{dayConf.unfixed > 0 ? `（まだ直していない人：${dayConf.unfixed}人）` : ""}</div></>}
+                  {editable && !dayConf.confirmed && <button style={{ marginTop: 8 }} onClick={confirmDay}>この日の退店時間を、登録した</button>}
+                </div>
+              )}
               {editable && (() => {
                 const dd = day || days[0];
                 const t = fillTime && fillTime.day === dd ? fillTime : { day: dd, ...hoursOn(store, dd) };

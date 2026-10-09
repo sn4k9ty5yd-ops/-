@@ -3,9 +3,9 @@ import type { PeriodStatus } from "./service";
 /** 次に進めるときのボタンの文言（やさしい言葉） */
 export const NEXT_ACTION: Partial<Record<PeriodStatus, { to: PeriodStatus; label: string }>> = {
   preparing: { to: "collecting", label: "希望休の受付を始める" },
-  collecting: { to: "closed", label: "受付を締め切る" },
-  closed: { to: "drafting", label: "出勤簿づくりを始める" },
-  drafting: { to: "confirmed", label: "出勤簿を確定する" },
+  collecting: { to: "drafting", label: "受付を締め切って、シフトづくりへ" },
+  closed: { to: "drafting", label: "シフトづくりを始める" },
+  drafting: { to: "confirmed", label: "シフトを確定する" },
   confirmed: { to: "published", label: "スタッフに公開する" },
   published: { to: "submitted", label: "オフィスに提出する" },
   submitted: { to: "acknowledged", label: "確認済みにする" },

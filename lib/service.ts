@@ -412,7 +412,7 @@ export async function setPeriodStatus(
     if (cs.length > 0) throw new Error(`休みがかぶっている日があります（${cs.slice(0, 6).map((c) => `${jpDay(c.day)} ${c.count}人／上限${c.maxOff}人`).join("、")}${cs.length > 6 ? " ほか" : ""}）。先に、かぶっている人に知らせて、話し合ってください。`);
   }
   // 「出勤簿づくり」より前から進めるときだけ、自動の下書きを入れる（ひとつ戻したときは、入っている内容をそのままにする）
-  const before = input.status === "drafting"
+  const before = input.status === "drafting" || input.status === "confirmed"
     ? (await asUser(db, userId, (q) => q.query<{ s: PeriodStatus }>("select status as s from store_period_status where period_id = $1 and store_id = $2", [input.periodId, input.storeId]))).rows[0]?.s
     : undefined;
   let n = 0;
@@ -429,6 +429,8 @@ export async function setPeriodStatus(
   } catch { throw new ForbiddenError(); }
   if (n === 0) throw new ForbiddenError();
   if (input.status === "drafting" && before && STATUS_ORDER.indexOf(before) < STATUS_ORDER.indexOf("drafting")) await autoDraftShifts(db, userId, input.periodId, input.storeId).catch(() => 0);   // 出勤簿づくりを始めたら、シフトカレンダーの内容を自動で反映
+  // シフトが確定したら、出勤簿確定（月末に提出する表）を、シフトのとおりに自動で作る（入っているところは変えない）
+  if (input.status === "confirmed" && before && STATUS_ORDER.indexOf(before) < STATUS_ORDER.indexOf("confirmed")) await draftAttendanceFromShifts(db, userId, input.periodId, input.storeId).catch(() => 0);
   if (input.status === "published") await notifyShiftPublished(db, input.periodId, input.storeId).catch(() => 0);   // 通知が失敗しても、公開は成功
 }
 
@@ -1792,6 +1794,55 @@ export async function runMorningNotices(db: Database, force = false, at?: string
     stCount++;
   }
   return { stores: stCount, sent };
+}
+
+// ------------------------------------------------------------------ 毎日の退店時間の登録（店長・シフト担当に、お知らせ）
+let lastCloseRun = 0;
+/** 「この日の退店時間を登録した」の印を付ける（店長・シフト担当は自店、事務員さんは全店） */
+export async function confirmAttendanceDay(db: Database, userId: string, storeId: string, day: string): Promise<void> {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) throw new Error("日付が正しくありません");
+  const me = await getMe(db, userId);
+  if (!me || me.displayOnly || me.level < 2 || (me.level < 4 && me.storeId !== storeId)) throw new ForbiddenError();
+  await db.query("insert into attendance_day_confirm (store_id, day, company_id, confirmed_by) values ($1,$2,$3,$4) on conflict (store_id, day) do update set confirmed_by = $4, confirmed_at = now()", [storeId, day, me.companyId, userId]);
+}
+export async function getAttendanceDayConfirm(db: Database, userId: string, storeId: string, day: string): Promise<{ confirmed: boolean; unfixed: number }> {
+  const me = await getMe(db, userId);
+  if (!me || me.level < 2 || (me.level < 4 && me.storeId !== storeId)) throw new ForbiddenError();
+  const c = (await db.query("select 1 from attendance_day_confirm where store_id = $1 and day = $2::date", [storeId, day])).rows.length > 0;
+  const n = (await db.query<{ n: number }>("select count(*)::int as n from attendance_records r join memberships m on m.id = r.membership_id where r.store_id = $1 and r.day = $2::date and r.kind = 'work' and not r.edited and m.status = 'active'", [storeId, day])).rows[0].n;
+  return { confirmed: c, unfixed: n };
+}
+/**
+ * お店が閉まる30分あとになっても、今日の出勤簿確定の退店時間が、まだ直されていない（確認の印もない）お店の、
+ * 店長・シフト担当の携帯に「今日の退店時間を登録してください」と通知する。1店舗・1日・1回だけ。
+ */
+export async function runCloseTimeReminders(db: Database, force = false, at?: string): Promise<{ stores: number; sent: number }> {
+  if (!force && Date.now() - lastCloseRun < 60_000) return { stores: 0, sent: 0 };
+  lastCloseRun = Date.now();
+  const now = at ?? jstNow(), today = now.slice(0, 10), hhmm = now.slice(11, 16);
+  const stores = (await db.query<{ id: string; name: string; company_id: string; o: string; c: string; so: string | null; sc: string | null }>(
+    `select id, name, company_id, to_char(default_open,'HH24:MI') as o, to_char(default_close,'HH24:MI') as c, to_char(sat_open,'HH24:MI') as so, to_char(sat_close,'HH24:MI') as sc from stores where status = 'active'`)).rows;
+  let n = 0, sent = 0;
+  for (const st of stores) {
+    const close = hoursOn({ defaultOpen: st.o, defaultClose: st.c, satOpen: st.so, satClose: st.sc }, today).end;
+    const [h, m] = close.split(":").map(Number); const t = h * 60 + m + 30;
+    const due = `${String(Math.min(23, Math.floor(t / 60))).padStart(2, "0")}:${String(t >= 24 * 60 ? 59 : t % 60).padStart(2, "0")}`;
+    if (hhmm < due) continue;
+    if ((await db.query("select 1 from attendance_reminder_log where store_id = $1 and day = $2::date", [st.id, today])).rows.length > 0) continue;
+    if ((await db.query("select 1 from attendance_day_confirm where store_id = $1 and day = $2::date", [st.id, today])).rows.length > 0) continue;
+    const un = (await db.query<{ n: number }>("select count(*)::int as n from attendance_records r join memberships m on m.id = r.membership_id where r.store_id = $1 and r.day = $2::date and r.kind = 'work' and not r.edited and m.status = 'active'", [st.id, today])).rows[0].n;
+    if (un === 0) continue;
+    const claim = await db.query("insert into attendance_reminder_log (store_id, day) values ($1,$2::date) on conflict do nothing returning store_id", [st.id, today]);
+    if (claim.rows.length === 0) continue;
+    const people = (await db.query<{ id: string }>("select id from memberships where store_id = $1 and company_id = $2 and status = 'active' and not display_only and level in (2,3)", [st.id, st.company_id])).rows.map((r) => r.id);
+    const link = `/admin/attendance?day=${today}&storeId=${st.id}`;
+    const title = `${st.name}：今日の退店時間を登録してください`;
+    const body = `まだ直していない人が ${un}人います。押して、退店時間を直してください。`;
+    for (const uid of people) await db.query("insert into notifications (company_id, user_id, kind, title, body, link) values ($1,$2,'attendance',$3,$4,$5)", [st.company_id, uid, title, body, link]);
+    sent += await pushToUsers(db, people, { title, body, url: link, tag: `closetime-${st.id}` });
+    n++;
+  }
+  return { stores: n, sent };
 }
 
 /** シフトが公開されたとき、そのお店の全員に通知（アプリの中のお知らせにも入れる） */
