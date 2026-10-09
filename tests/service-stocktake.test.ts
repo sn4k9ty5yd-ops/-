@@ -168,3 +168,18 @@ describe("棚卸しの合算（店販・業務・店舗・全店）", () => {
     expect((await svc.stocktakeSummary(db, id.office, "2026-10-31")).grandTotal).toBe(before);
   });
 });
+
+describe("昨年のデータの取り込みと、前回の数量を引きついだ棚卸し", () => {
+  it("取り込んだ昨年の数量から今年が始まり、数量を直すと金額が変わる。取り込めるのは事務員さんだけ", async () => {
+    const text = "メーカー\t品名\t規格\t仕入値\t数量\t金額\nアヴェダ\tシャンプー\t200ml\t1,500\t3\t4500\nアヴェダ\tリンス\t200ml\t1200\t2\t2400\n\t\t\t\t2025.10.31 棚卸金額\t6900";
+    await expect(svc.importPastStocktake(db, id.mgr1, st.s1, "retail", "2025-10-31", text)).rejects.toThrow(svc.ForbiddenError);
+    const r = await svc.importPastStocktake(db, id.office, st.s1, "retail", "2025-10-31", text);
+    expect(r).toMatchObject({ lines: 2, total: 6900 });
+    const now = await svc.startStocktake(db, id.office, st.s1, "retail", "2027-10-31");
+    const d = (await svc.getStocktake(db, id.office, now))!;
+    const sh = d.items.find((i) => i.name === "シャンプー" && i.spec === "200ml")!;
+    expect(sh.quantity).toBe(3);
+    await svc.saveQuantities(db, id.office, now, [{ lineId: sh.id, quantity: 5 }]);
+    expect((await svc.getStocktake(db, id.office, now))!.items.find((i) => i.id === sh.id)!.amount).toBe(7500);
+  });
+});

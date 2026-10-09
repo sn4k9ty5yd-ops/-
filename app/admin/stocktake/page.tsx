@@ -30,6 +30,7 @@ export default function StocktakePage() {
   const [view, setView] = useState<"list" | "summary">("list");
   const [takenOn, setTakenOn] = useState(monthEnd());
   const [msg, setMsg] = useState("");
+  const [imp, setImp] = useState<{ text: string; date: string; busy: boolean; res: string } | null>(null);
   const store = stores.find((s) => s.id === storeId);
   const canStart = !me.displayOnly && (me.level === 4 || storeId === me.storeId);
 
@@ -60,12 +61,33 @@ export default function StocktakePage() {
       {canStart && (
         <div className="card">
           <b>新しい棚卸しを始める（{store?.name}　{PRODUCT_KIND_LABEL[kind]}）</b>
-          <p className="sub" style={{ margin: "4px 0 8px" }}>このお店で使う商品の一覧が、そのまま棚卸し表になります。</p>
+          <p className="sub" style={{ margin: "4px 0 8px" }}>このお店で使う商品の一覧が、そのまま棚卸し表になります。前回の棚卸しがあれば、その数量が入った状態で始まります（直して提出します）。</p>
           <div className="actions"><label style={{ margin: 0 }}>棚卸日<input type="date" value={takenOn} onChange={(e) => setTakenOn(e.target.value)} /></label>
             <button style={{ width: "auto", margin: 0, alignSelf: "flex-end" }} onClick={async () => {
               try { const r = await api<{ id: string }>("/api/stocktakes", { storeId, kind, takenOn }); setMsg(""); setOpenId(r.id); } catch (e) { setMsg((e as Error).message); }
             }}>始める</button></div>
           {takenOn && <p className="sub" style={{ margin: "6px 0 0" }}>{reiwaDot(takenOn)} 棚卸</p>}
+        </div>
+      )}
+      {me.level === 4 && (
+        <div className="card">
+          <b>昨年のデータを取り込む（{store?.name}　{PRODUCT_KIND_LABEL[kind]}）</b>
+          {!imp ? <div style={{ marginTop: 6 }}><button className="ghost" style={{ width: "auto" }} onClick={() => setImp({ text: "", date: `${new Date().getFullYear() - 1}-10-31`, busy: false, res: "" })}>取り込み画面をひらく</button>
+            <p className="sub" style={{ margin: "6px 0 0" }}>昨年の「メーカー・品名・規格・仕入値・数量」の表を貼ると、今年の棚卸しが、その数量から始まります（数量を直して提出します。金額は数量を変えると自動で変わります）。</p></div> : (
+            <div style={{ marginTop: 6 }}>
+              <label style={{ margin: 0 }}>昨年の棚卸日<input type="date" value={imp.date} onChange={(e) => setImp({ ...imp, date: e.target.value })} /></label>
+              <textarea aria-label="昨年の表" rows={8} placeholder={"Excelの表をコピーして貼り付け\n（メーカー　品名　規格　仕入値　数量）"} style={{ width: "100%", fontSize: 14, padding: 10, borderRadius: 12, border: "1px solid var(--line)", marginTop: 6 }} value={imp.text} onChange={(e) => setImp({ ...imp, text: e.target.value })} />
+              {imp.res && <p className="sub" style={{ color: "var(--ok)" }}>✅ {imp.res}</p>}
+              <div className="actions">
+                <button disabled={imp.busy || !imp.text.trim() || !imp.date} onClick={async () => {
+                  setImp({ ...imp, busy: true, res: "" });
+                  try { const r = await api<{ lines: number; created: number; bad: number; total: number }>("/api/stocktakes", { action: "import", storeId, kind, takenOn: imp.date, text: imp.text }); setMsg("");
+                    setImp({ ...imp, busy: false, text: "", res: `${r.lines}行を取り込みました（新しい商品 ${r.created}件・合計 ${r.total.toLocaleString("ja-JP")}円${r.bad ? `・読めなかった行 ${r.bad}` : ""}）` }); await loadList(); }
+                  catch (e) { setMsg((e as Error).message); setImp({ ...imp, busy: false }); }
+                }}>取り込む</button>
+                <button className="ghost" onClick={() => setImp(null)}>閉じる</button>
+              </div>
+            </div>)}
         </div>
       )}
       {msg && <p className="err">{msg}</p>}

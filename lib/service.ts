@@ -909,6 +909,13 @@ export async function startStocktake(db: Database, userId: string, storeId: stri
          select $1, $2, $3, p.id, p.maker, p.name, p.spec, p.cost_price, row_number() over (order by p.maker, p.name, p.spec)
            from products p join product_stores ps on ps.product_id = p.id
           where ps.store_id = $3 and p.kind = $4 and p.status = 'active'`, [st, me.companyId, storeId, kind]);
+      // 前回（いちばん新しい過去）の数量を引きついで始める。今回の数量は、これを直して提出する
+      await q.query(
+        `update stocktake_lines l set quantity = (
+            select pl.quantity from stocktake_lines pl join stocktakes ps on ps.id = pl.stocktake_id
+             where pl.product_id = l.product_id and ps.store_id = $2 and ps.kind = $3 and ps.taken_on < $4 and pl.quantity is not null
+             order by ps.taken_on desc limit 1)
+          where l.stocktake_id = $1 and l.product_id is not null`, [st, storeId, kind, takenOn]);
       return st;
     });
   } catch (e) {
@@ -3158,4 +3165,50 @@ export async function markOfficeInboxDone(db: Database, userId: string, ids?: nu
   if (!me || me.level < 4) throw new ForbiddenError();
   if (ids?.length) await db.query("update office_inbox set done_at = now(), done_by = $3 where company_id = $1 and done_at is null and id = any($2::bigint[])", [me.companyId, ids, me.name]);
   else await db.query("update office_inbox set done_at = now(), done_by = $2 where company_id = $1 and done_at is null", [me.companyId, me.name]);
+}
+
+// ------------------------------------------------------------------ 昨年（過去）の棚卸しデータの取り込み
+export interface PastStocktakeRow { maker: string; name: string; spec: string; costPrice: number; quantity: number }
+/** 貼り付けた表（メーカー・品名・規格・仕入値・数量［・金額］）を読む。見出し・合計の行は飛ばす */
+export function parsePastStocktake(text: string): { rows: PastStocktakeRow[]; bad: { line: number; text: string; reason: string }[] } {
+  const half = (v: string) => v.replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0)).replace(/[¥￥円,，\s]/g, "");
+  const rows: PastStocktakeRow[] = []; const bad: { line: number; text: string; reason: string }[] = [];
+  text.split(/\r?\n/).forEach((raw, i) => {
+    if (!raw.trim()) return;
+    const cols = (raw.includes("\t") ? raw.split("\t") : raw.split(/[,，]/)).map((c) => c.trim());
+    if (cols.length < 5) { if (i > 0) bad.push({ line: i + 1, text: raw, reason: "列が足りません（メーカー・品名・規格・仕入値・数量）" }); return; }
+    const [maker, name, spec] = cols; const cost = half(cols[3]), q = half(cols[4]);
+    if (!/^\d+$/.test(cost) || !/^\d+$/.test(q)) { if (i === 0 || /棚卸|合計|金額/.test(raw)) return; bad.push({ line: i + 1, text: raw, reason: "仕入値か数量が数字ではありません" }); return; }
+    if (!name) { bad.push({ line: i + 1, text: raw, reason: "品名がありません" }); return; }
+    rows.push({ maker, name, spec: spec ?? "", costPrice: Number(cost), quantity: Number(q) });
+  });
+  return { rows, bad };
+}
+/** 昨年の棚卸し（店×種類×日）を取り込む。商品がなければ登録し、確認ずみの棚卸しとして残す（事務員さんだけ）。今年の棚卸しは、この数量から始まる */
+export async function importPastStocktake(db: Database, userId: string, storeId: string, kind: ProductKind, takenOn: string, text: string): Promise<{ lines: number; created: number; bad: number; total: number }> {
+  const me = await getMe(db, userId);
+  if (!me || me.level < 4) throw new ForbiddenError();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(takenOn)) throw new Error("棚卸日を入れてください");
+  const { rows, bad } = parsePastStocktake(text);
+  if (rows.length === 0) throw new Error("取り込める行がありません（メーカー・品名・規格・仕入値・数量の順に貼ってください）");
+  if (rows.length > 3000) throw new Error("一度に取り込めるのは3000行までです");
+  const uniq = new Map<string, PastStocktakeRow>();
+  for (const r of rows) uniq.set(`${r.maker}|${r.name}|${r.spec}`, r);
+  const items = [...uniq.values()];
+  const made = await createProducts(db, userId, kind, items.map((r) => ({ maker: r.maker, name: r.name, spec: r.spec, costPrice: r.costPrice })), [storeId]);
+  // 商品が前からあって、このお店で使っていないものは、このお店の一覧にも入れる
+  await db.query(`insert into product_stores (product_id, store_id, company_id)
+    select p.id, $2, p.company_id from products p where p.company_id = $1 and p.kind = $3 and (p.maker, p.name, p.spec) in (select * from unnest($4::text[], $5::text[], $6::text[])) on conflict do nothing`,
+    [me.companyId, storeId, kind, items.map((r) => r.maker), items.map((r) => r.name), items.map((r) => r.spec)]).catch(() => undefined);
+  let stId = "";
+  try { stId = (await db.query<{ id: string }>("insert into stocktakes (company_id, store_id, kind, taken_on, status, created_by, submitted_at, submitted_by, acknowledged_at, acknowledged_by) values ($1,$2,$3,$4,'acknowledged',$5,now(),$5,now(),$5) returning id", [me.companyId, storeId, kind, takenOn, userId])).rows[0].id; }
+  catch (e) { if (isUnique(e)) throw new Error("その日の棚卸しは、すでにあります（別の日にするか、先に消してください）"); throw e; }
+  let n = 0;
+  for (const [i, r] of items.entries()) {
+    const pid = (await db.query<{ id: string }>("select id from products where company_id = $1 and kind = $2 and maker = $3 and name = $4 and spec = $5", [me.companyId, kind, r.maker, r.name, r.spec])).rows[0]?.id ?? null;
+    await db.query("insert into stocktake_lines (stocktake_id, company_id, store_id, product_id, maker, name, spec, cost_price, quantity, sort_order) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) on conflict do nothing", [stId, me.companyId, storeId, pid, r.maker, r.name, r.spec, r.costPrice, r.quantity, i + 1]);
+    n++;
+  }
+  const total = Number((await db.query<{ t: string }>("select coalesce(sum(amount),0)::text as t from stocktake_lines where stocktake_id = $1", [stId])).rows[0].t);
+  return { lines: n, created: made.created, bad: bad.length, total };
 }
