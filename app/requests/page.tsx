@@ -15,6 +15,8 @@ function Page() {
   const [all, setAll] = useState<PeriodRow[] | null>(null);
   const [view, setView] = useState<Period | null>(null);
   const [mine, setMine] = useState<Map<string, string>>(new Map());
+  const [cnt, setCnt] = useState<Map<string, number>>(new Map());
+  const [lim, setLim] = useState<Map<string, number>>(new Map());
   const [msg, setMsg] = useState("");
   const [pick, setPick] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -30,10 +32,15 @@ function Page() {
 
   const db = all?.find((p) => p.start === view?.start);
   const load = useCallback(async () => {
-    if (!db) { setMine(new Map()); return; }
+    if (!db) { setMine(new Map()); setCnt(new Map()); setLim(new Map()); return; }
     const rs = await api<RequestRow[]>(`/api/requests?periodId=${db.id}`);
     setMine(new Map(rs.filter((r) => r.membershipId === me.id).map((r) => [r.day, r.kind])));
-  }, [db, me.id]);
+    const c = new Map<string, number>();
+    for (const r of rs) if (r.storeId === me.storeId) c.set(r.day, (c.get(r.day) ?? 0) + 1);
+    setCnt(c);
+    const dl = await api<{ limits: { day: string; maxOff: number }[] }>(`/api/day-limits?periodId=${db.id}&storeId=${me.storeId}`).catch(() => null);
+    setLim(new Map((dl?.limits ?? []).map((l) => [l.day, l.maxOff])));
+  }, [db, me.id, me.storeId]);
   useEffect(() => { load(); }, [load]);
   useAutoRefresh(load);
 
@@ -63,15 +70,18 @@ function Page() {
           {Array.from({ length: lead }).map((_, i) => <div key={`b${i}`} />)}
           {days.map((d) => {
             const kind = mine.get(d);
+            const n = cnt.get(d) ?? 0, m = lim.get(d);
             return (
               <button key={d} disabled={!open && !kind} className={`d ${kind ? "on" : ""} ${holidayName(d) ? "hol" : ""}`}
                 onClick={() => { setMsg(""); setPick(d); }}>
                 <span>{md(d)}</span>{holidayName(d) && <small className="holname">{holidayName(d)}</small>}{kind && <small>{KIND_LABEL[kind]}</small>}
+                {(m !== undefined || n > 0) && <small style={{ display: "block", fontSize: 10, color: m !== undefined && n > m ? "#d70015" : "var(--sub)", fontWeight: m !== undefined && n > m ? 800 : 400 }}>{n}人{m !== undefined ? `/${m}` : ""}</small>}
               </button>
             );
           })}
         </div>
       </div>
+      <p className="hint">日付の下の数字は「休みを出している人／休める人数の目安」です。目安をこえても、希望休は出せます（あとで店長・シフト担当が調整します）。みんなの休みは、<Link href="/shifts" style={{ color: "var(--blue)" }}>「見る」</Link>のカレンダーで見られます（見るだけ）。</p>
       <p className="hint">この期間に出した希望休：{mine.size}日（公休 {[...mine.values()].filter((k) => k !== "paid").length}日・有給 {[...mine.values()].filter((k) => k === "paid").length}日）</p>
       {pick && (
         <div className="sheet-bg" onClick={() => setPick(null)}>

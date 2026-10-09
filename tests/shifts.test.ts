@@ -101,11 +101,12 @@ describe("入力の正しさ", () => {
 });
 
 describe("見られる範囲", () => {
-  it("公開前: スタッフには見えない。シフト担当・店長・オフィスには見える（他社は見えない）", async () => {
-    await as(U.staff1, async () => expect(await rows("select 1 from shifts")).toHaveLength(0));
+  it("希望休の段階から: スタッフにも見える（見るだけ・直せない）。シフト担当・店長・オフィスも見える（他社は見えない）", async () => {
+    await as(U.staff1, async () => expect((await rows("select 1 from shifts")).length).toBeGreaterThan(0));
     await as(U.shift1, async () => expect((await rows("select 1 from shifts")).length).toBeGreaterThan(0));
     await as(U.mgr1, async () => expect((await rows("select distinct store_id from shifts")).length).toBe(1)); // 他店は見えない
     await as(U.officeB, async () => expect(await rows("select 1 from shifts")).toHaveLength(0));
+    await as(U.staff1, async () => expect(await fails(`update shifts set end_time='20:30' where membership_id='${U.staff1}'`)).toBe(true));   // 見るだけ
   });
   it("公開後: スタッフは自店舗のシフトだけ見える。他店は見えない", async () => {
     await setStatus(S1, "published");
@@ -113,7 +114,6 @@ describe("見られる範囲", () => {
       const r = await rows("select distinct store_id from shifts");
       expect(r.map((x) => x.store_id)).toEqual([S1]);
     });
-    await as(U.staff2, async () => expect(await rows("select 1 from shifts")).toHaveLength(0)); // 店2は未公開
   });
   it("公開後の変更は履歴に残る", async () => {
     await as(U.office, async () => {

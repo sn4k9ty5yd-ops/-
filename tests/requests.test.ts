@@ -128,8 +128,9 @@ describe("希望休の提出（本人）", () => {
 });
 
 describe("希望休を見られる範囲・代理入力", () => {
-  it("スタッフは自分の分だけ。同じ店の他人は見えない", async () => {
-    await as(U.staff1b, async () => expect(await rows(`select 1 from time_off_requests`)).toHaveLength(0));
+  it("スタッフ(Lv1)も、同じ店のみんなの希望休が見える（見るだけ）。他店は見えない", async () => {
+    await as(U.staff1b, async () => expect((await rows(`select 1 from time_off_requests`)).length).toBeGreaterThan(0));
+    await as(U.staff1b, async () => expect(await fails(`delete from time_off_requests where membership_id='${U.staff1}' and day='2026-11-18'`)).toBe(true));
     await as(U.staff1, async () => expect((await rows(`select 1 from time_off_requests`)).length).toBeGreaterThan(0));
   });
   it("シフト担当(Lv2)は自店の全員分が見える。他店は見えない", async () => {

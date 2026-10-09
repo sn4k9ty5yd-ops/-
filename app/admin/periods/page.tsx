@@ -6,6 +6,8 @@ import { NEXT_ACTION } from "@/lib/labels";
 import { reiwaRange } from "@/lib/era";
 import { periodFor, todayJst, tintStyle } from "@/lib/period-nav";
 import { relationLabel } from "@/lib/periods";
+import { LimitRequired } from "@/app/admin/shifts/LimitAll";
+import { daysOf } from "@/lib/labels";
 import { STEP_GUIDE } from "@/lib/step-guide";
 import { STATUS_LABEL, STATUS_ORDER, type PeriodRow, type PeriodStatus } from "@/lib/service";
 
@@ -62,6 +64,7 @@ export default function PeriodsPage() {
                 </li>
               ); })}
             </ol>
+            {s.status === "preparing" && canManage(s.storeId) && <LimitRequired periodId={p.id} storeId={s.storeId} days={daysOf(p.start, p.end)} />}
             {can && <button onClick={() => { advance(p.id, s.storeId, next); }}>次は：{next.label}</button>}
             {!can && next && <p className="hint" style={{ margin: "6px 0 0" }}>この次の操作は、{cur.who || "店長・事務員さん"}が行います。</p>}
             {cur.open && <Link href="/admin/shifts" className="ghost" style={{ display: "block", textAlign: "center", padding: 10 }}>出勤簿予定を開く</Link>}

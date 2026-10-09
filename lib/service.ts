@@ -412,9 +412,17 @@ export async function setPeriodStatus(
     if (cs.length > 0) throw new Error(`休みがかぶっている日があります（${cs.slice(0, 6).map((c) => `${jpDay(c.day)} ${c.count}人／上限${c.maxOff}人`).join("、")}${cs.length > 6 ? " ほか" : ""}）。先に、かぶっている人に知らせて、話し合ってください。`);
   }
   // 「出勤簿づくり」より前から進めるときだけ、自動の下書きを入れる（ひとつ戻したときは、入っている内容をそのままにする）
-  const before = input.status === "drafting" || input.status === "confirmed"
+  const before = input.status === "drafting" || input.status === "confirmed" || input.status === "collecting"
     ? (await asUser(db, userId, (q) => q.query<{ s: PeriodStatus }>("select status as s from store_period_status where period_id = $1 and store_id = $2", [input.periodId, input.storeId]))).rows[0]?.s
     : undefined;
+  // 希望休の受付を始める前に、「1日に何人まで休めるか」を、すべての日に決めておく（スタッフは、上限をこえても出せる。あくまで目安）
+  if (input.status === "collecting" && before === "preparing") {
+    const miss = (await asUser(db, userId, (q) => q.query<{ n: number }>(
+      `select count(*)::int as n from shift_periods p, generate_series(p.start_date, p.end_date, interval '1 day') g(d)
+        where p.id = $1 and app.has_perm('period.manage', $2) and not exists (select 1 from day_limits l where l.period_id = p.id and l.store_id = $2 and l.day = g.d::date)`,
+      [input.periodId, input.storeId]))).rows[0]?.n ?? 0;
+    if (miss > 0) throw new Error(`希望休を集める前に、「1日に何人まで休めるか」を決めてください（まだ決まっていない日が${miss}日あります）。スタッフは、この人数をこえても希望休を出せます。人数は、あとで調整するときの目安になります。`);
+  }
   let n = 0;
   try {
     n = (await asUser(db, userId, (q) =>
@@ -1783,7 +1791,7 @@ export async function runMorningNotices(db: Database, force = false, at?: string
     if (claim.rows.length === 0) continue;
     const rows = (await db.query<{ id: string; name: string; short_name: string | null; kind: string }>(
       `select m.id, m.name, m.short_name, s.kind from shifts s join memberships m on m.id = s.membership_id
-        where s.store_id = $1 and s.day = $2::date and m.status = 'active' and app.is_published(s.period_id, s.store_id)`, [st.id, today])).rows;
+        where s.store_id = $1 and s.day = $2::date and m.status = 'active' and exists (select 1 from store_period_status sp where sp.period_id = s.period_id and sp.store_id = s.store_id and app.status_rank(sp.status) >= app.status_rank('published'))`, [st.id, today])).rows;
     if (rows.length === 0) continue;
     const short = shortNames(rows.map((r) => ({ id: r.id, name: r.name, shortName: r.short_name })));
     const work = rows.filter((r) => r.kind === "work").map((r) => short.get(r.id) ?? r.name);

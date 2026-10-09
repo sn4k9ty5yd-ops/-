@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, it } from "vitest";
+import { daysOf } from "../lib/labels";
 import { newDb } from "./helpers";
 import { migrate } from "../lib/db/migrate";
 import type { Database } from "../lib/db/types";
@@ -21,11 +22,22 @@ beforeAll(async () => {
   await svc.setOnShift(db, id.office, id.office, false);
   await svc.createNextPeriod(db, id.office, "2026-11-20"); // 11/16〜12/15
   periodId = (await svc.listPeriods(db, id.office))[0].id;
+  for (const sid of [st.s1, st.s2]) await svc.setDayLimits(db, id.office, periodId, sid, daysOf("2026-11-16", "2026-12-15"), 3);
   await svc.setPeriodStatus(db, id.office, { periodId, storeId: st.s1, status: "collecting" });
   await svc.setPeriodStatus(db, id.office, { periodId, storeId: st.s2, status: "collecting" });
 });
 
 describe("シフト作成サービス", () => {
+  it("休める人数の上限をこえても、スタッフは希望休を出せる（目安なので止めない）。みんなの希望休は見える", async () => {
+    await svc.setDayLimits(db, id.office, periodId, st.s1, ["2026-11-25"], 0);
+    expect(await svc.toggleMyRequest(db, id.a, periodId, "2026-11-25")).toBe("added");
+    expect(await svc.toggleMyRequest(db, id.b, periodId, "2026-11-25")).toBe("added");
+    expect((await svc.listRequests(db, id.a, periodId)).filter((r) => r.day === "2026-11-25")).toHaveLength(2);
+    expect((await svc.listDayLimits(db, id.a, periodId, st.s1)).find((l) => l.day === "2026-11-25")?.maxOff).toBe(0);
+    await svc.toggleMyRequest(db, id.a, periodId, "2026-11-25"); await svc.toggleMyRequest(db, id.b, periodId, "2026-11-25");   // 元にもどす
+    await svc.setDayLimits(db, id.office, periodId, st.s1, ["2026-11-25"], 3);
+  });
+
   it("シフト表に載る人: 自店舗の在籍者で「シフトに入る」人だけ（オフィスは外せる）", async () => {
     const names = (await svc.listRoster(db, id.shift1, st.s1)).map((r) => r.name);
     expect(names.sort()).toEqual(["a", "b", "mgr1", "shift1"]);
@@ -117,8 +129,8 @@ describe("シフト作成サービス", () => {
     await expect(svc.saveShifts(db, id.a, periodId, st.s1, [{ membershipId: id.b, day: "2026-11-21", kind: "work", start: "10:00", end: "19:00" }])).rejects.toThrow();   // スタッフは不可
   });
 
-  it("公開すると、スタッフは自店舗のシフトが見られる。公開前は見えない", async () => {
-    expect(await svc.listShifts(db, id.a, periodId, st.s1)).toHaveLength(0);
+  it("希望休の段階から、スタッフは自店舗のシフトが見られる（他店は見えない）", async () => {
+    expect((await svc.listShifts(db, id.a, periodId, st.s1)).length).toBeGreaterThan(5);   // 希望休の受付中から、見るだけで見える
     await svc.setPeriodStatus(db, id.mgr1, { periodId, storeId: st.s1, status: "published" });
     expect((await svc.listShifts(db, id.a, periodId, st.s1)).length).toBeGreaterThan(5);
     expect(await svc.listShifts(db, id.a, periodId, st.s2)).toHaveLength(0);

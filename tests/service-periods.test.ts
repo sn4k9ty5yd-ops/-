@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, it } from "vitest";
+import { daysOf } from "../lib/labels";
 import { newDb } from "./helpers";
 import { migrate } from "../lib/db/migrate";
 import type { Database } from "../lib/db/types";
@@ -35,6 +36,8 @@ describe("期間と希望休のサービス", () => {
   it("店長は自店の期間だけ見える/動かせる。スタッフは動かせない", async () => {
     const p = (await svc.listPeriods(db, id.office))[0];
     expect((await svc.listPeriods(db, id.staff2))[0].stores.map((s) => s.storeId)).toEqual([st.s2]);
+    await expect(svc.setPeriodStatus(db, id.mgr1, { periodId: p.id, storeId: st.s1, status: "collecting" })).rejects.toThrow("何人まで休めるか");   // 上限を決めないと、受付は始められない
+    await svc.setDayLimits(db, id.mgr1, p.id, st.s1, daysOf(p.start, p.end), 3);
     await svc.setPeriodStatus(db, id.mgr1, { periodId: p.id, storeId: st.s1, status: "collecting" });
     await expect(svc.setPeriodStatus(db, id.mgr1, { periodId: p.id, storeId: st.s2, status: "collecting" })).rejects.toThrow(svc.ForbiddenError);
     await expect(svc.setPeriodStatus(db, id.staff1, { periodId: p.id, storeId: st.s1, status: "closed" })).rejects.toThrow(svc.ForbiddenError);
@@ -111,6 +114,7 @@ describe("シフト担当（Lv2）の操作", () => {
   });
   it("自店のシフトを進められるが、他店は動かせない・確認済みにはできない", async () => {
     const p = (await svc.listPeriods(d, u.office))[0];
+    await svc.setDayLimits(d, u.maker, p.id, s2.a, daysOf(p.start, p.end), 3);
     await svc.setPeriodStatus(d, u.maker, { periodId: p.id, storeId: s2.a, status: "collecting" });
     await expect(svc.setPeriodStatus(d, u.maker, { periodId: p.id, storeId: s2.b, status: "collecting" })).rejects.toThrow(svc.ForbiddenError);
     for (const st of ["closed", "drafting", "confirmed", "published", "submitted"] as const) await svc.setPeriodStatus(d, u.maker, { periodId: p.id, storeId: s2.a, status: st });   // 公開もオフィスへの提出も、シフト担当が押せる

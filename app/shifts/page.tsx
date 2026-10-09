@@ -36,7 +36,7 @@ function Page() {
   const [detail, setDetail] = useState<string | null>(null);
   const [editTarget, setEditTarget] = useState<{ id: string; name: string } | null>(null);
 
-  const isPub = (p: PeriodRow, sid: string) => { const st = p.stores.find((s) => s.storeId === sid); return !!st && STATUS_ORDER.indexOf(st.status) >= STATUS_ORDER.indexOf("published"); };
+  const isPub = (p: PeriodRow, sid: string) => { const st = p.stores.find((s) => s.storeId === sid); return !!st && STATUS_ORDER.indexOf(st.status) >= STATUS_ORDER.indexOf("collecting"); };
 
   useEffect(() => {
     Promise.all([api<StoreRow[]>("/api/stores"), api<PeriodRow[]>("/api/periods")]).then(([s, p]) => {
@@ -53,17 +53,21 @@ function Page() {
     if (!view) return;
     setRoster(await api<Person[]>(`/api/roster?storeId=${storeId}`));
     if (!db) { setShifts([]); setMyReq(new Set()); setEditable(false); return; }
-    if (!me.displayOnly) {
-      const rq = await api<{ membershipId: string; day: string }[]>(`/api/requests?periodId=${db.id}`).catch(() => []);
-      setMyReq(new Set(rq.filter((r) => r.membershipId === me.id).map((r) => r.day)));
-    }
+    const rq = me.displayOnly ? [] : await api<{ id: string; membershipId: string; storeId: string; day: string; kind: string }[]>(`/api/requests?periodId=${db.id}`).catch(() => []);
+    if (!me.displayOnly) setMyReq(new Set(rq.filter((r) => r.membershipId === me.id).map((r) => r.day)));
     const sh = await api<{ shifts: ShiftRow[]; editable: boolean }>(`/api/shifts?periodId=${db.id}&storeId=${storeId}`);
-    setShifts(sh.shifts); setEditable(!!sh.editable && !me.displayOnly);
-    if (me.level >= 2 && !me.displayOnly) {
+    // 希望休〜シフトづくりの間は、出された希望休も「みんなの休み」に出す（シフトに入っている人は、シフトを優先）
+    const stt = db.stores.find((x) => x.storeId === storeId)?.status;
+    const early = !!stt && STATUS_ORDER.indexOf(stt) >= STATUS_ORDER.indexOf("collecting") && STATUS_ORDER.indexOf(stt) <= STATUS_ORDER.indexOf("drafting");
+    const have = new Set(sh.shifts.map((x) => `${x.membershipId}|${x.day}`));
+    const fromReq: ShiftRow[] = early ? rq.filter((r) => r.storeId === storeId && !have.has(`${r.membershipId}|${r.day}`))
+      .map((r) => ({ id: `req-${r.id}`, membershipId: r.membershipId, storeId, periodId: db.id, day: r.day, kind: r.kind === "paid" ? "paid" as const : "holiday" as const, start: null, end: null })) : [];
+    setShifts([...sh.shifts, ...fromReq]); setEditable(!!sh.editable && !me.displayOnly);
+    if (!me.displayOnly) {
       const dl = await api<{ limits: { day: string; maxOff: number }[]; conflicts: { day: string; maxOff: number; count: number }[] }>(`/api/day-limits?periodId=${db.id}&storeId=${storeId}`).catch(() => null);
       if (dl) { setLimits(new Map(dl.limits.map((l) => [l.day, l.maxOff]))); setConflicts(new Map(dl.conflicts.map((c) => [c.day, c]))); }
     }
-  }, [db, storeId, view, me.id, me.displayOnly, me.level]);
+  }, [db, storeId, view, me.id, me.displayOnly]);
   useEffect(() => { load().catch(() => {}); }, [load]);
   useAutoRefresh(() => { load().catch(() => {}); });
 
@@ -76,6 +80,7 @@ function Page() {
   const todayOff = (byDay.get(today) ?? []).filter((s) => s.kind !== "work");
   const published = !!db && isPub(db, storeId);
   const myOff = new Set<string>(published ? shifts.filter((s) => s.membershipId === me.id && s.kind !== "work").map((s) => s.day) : myReq);
+  const shiftOut = !!db && (() => { const st = db.stores.find((x) => x.storeId === storeId)?.status; return !!st && STATUS_ORDER.indexOf(st) >= STATUS_ORDER.indexOf("confirmed"); })();
   const inView = view.start <= today && today <= view.end;
 
   return (
@@ -90,7 +95,7 @@ function Page() {
           {stores.filter((s) => me.level === 4 || s.id === me.storeId).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
       )}
-      {inView && published && (
+      {inView && shiftOut && (
         <div className="card">
           <b style={{ fontSize: 18 }}>今日（{md(today)}）の出勤</b>
           {todays.length === 0 ? <p className="sub">出勤の人はいません。</p> : (
@@ -105,7 +110,8 @@ function Page() {
       <div className="seg"><button className={show === "work" ? "on" : ""} onClick={() => setShow("work")}>出勤する人</button><button className={show === "off" ? "on" : ""} onClick={() => setShow("off")}>みんなの休み</button></div>
       {(
         <div className="tintbox" style={tintStyle(view.start)}>
-          {!published && <p className="sub" style={{ margin: "4px 4px 8px" }}>{me.level < 2 ? "この期間のシフトは、まだ公開されていません。いまは、出した希望休だけ赤丸で表示されます。" : "公開前（作成中）のシフトです。スタッフには見えません。"}</p>}
+          {!published && <p className="sub" style={{ margin: "4px 4px 8px" }}>この期間は、まだ始まっていません（準備中）。希望休の受付が始まると、みんなの休みが見られます。</p>}
+          {published && !!db && (() => { const stt = db.stores.find((x) => x.storeId === storeId)?.status; return stt === "collecting" || stt === "closed" ? <p className="sub" style={{ margin: "4px 4px 8px" }}>希望休を集めている段階です。みんなの休みが見られます（見るだけ）。日付の「休◯/◯」は、休みを出している人数／休める人数の目安です。目安をこえても希望休は出せます。{me.level >= 2 ? "日にちを押して、人ごとに直せます。" : ""}</p> : null; })()}
           <div className="mcal">
             {WEEKDAYS.map((w, i) => <div key={w} className={`h ${i === 0 ? "su" : i === 6 ? "sa" : ""}`}>{w}</div>)}
             {Array.from({ length: dow(days[0]) }).map((_, i) => <div key={`b${i}`} />)}
@@ -114,7 +120,7 @@ function Page() {
                             return (
                 <div key={d} role="button" tabIndex={0} aria-label={`${md(d)}の詳細`} onClick={() => { setLimitInput(""); setLimitMsg(""); setDetail(d); }} onKeyDown={(e) => { if (e.key === "Enter") setDetail(d); }}
                   className={`mday ${d === today ? "today" : ""} ${myOff.has(d) ? "myoff" : ""} ${holidayName(d) ? "hol" : ""} ${dow(d) === 0 ? "sun" : dow(d) === 6 ? "sat" : ""}`} style={{ cursor: "pointer" }}>
-                  <div className="num"><span>{md(d)}</span>{holidayName(d) && <small className="holname"> {holidayName(d)}</small>}{myOff.has(d) && <small className="myoff-tag"> 休み</small>}{conflicts.has(d) && <small style={{ color: "#d70015", fontWeight: 800 }}> ⚠{conflicts.get(d)!.count}/{conflicts.get(d)!.maxOff}</small>}</div>
+                  <div className="num"><span>{md(d)}</span>{holidayName(d) && <small className="holname"> {holidayName(d)}</small>}{myOff.has(d) && <small className="myoff-tag"> 休み</small>}{limits.has(d) && (() => { const n = (byDay.get(d) ?? []).filter((x) => x.kind !== "work").length, m = limits.get(d)!; return <small style={{ color: n > m ? "#d70015" : "var(--sub)", fontWeight: n > m ? 800 : 500 }}> {n > m ? "⚠" : ""}休{n}/{m}</small>; })()}</div>
                   {(byDay.get(d) ?? []).length > 0 && <span className="wcount" title="この日の出勤人数">{(byDay.get(d) ?? []).filter((s) => s.kind === "work").length}人</span>}
                   {list.length === 0 && show === "off" ? <small className="sub">なし</small> : (
                     <div className="names">
@@ -150,6 +156,7 @@ function Page() {
                   この日の出勤簿を開く（全員一括・ひとりずつ直せます）
                 </Link>
               )}
+              {me.level < 2 && limits.has(detail) && <p className="sub" style={{ margin: "6px 0" }}>この日に休める人数の目安：{limits.get(detail)}人（いま{off.length}人が休み）。目安をこえても希望休は出せます。</p>}
               {me.level >= 2 && db && (
                 <div className="card" style={{ margin: "8px 0", padding: 10 }}>
                   <div className="sub">この日に休める人数の上限（出勤簿をつける人が決めます）</div>
@@ -169,7 +176,7 @@ function Page() {
                   {limitMsg && <div className="sub">{limitMsg}</div>}
                 </div>
               )}
-              {!published && me.level < 2 ? <p className="hint">この期間のシフトは、まだ公開されていません。</p> : (
+              {!published ? <p className="hint">この期間は、まだ始まっていません。</p> : (
                 <>
                   <h3 style={{ margin: "12px 0 4px" }}>出勤（{work.length}人）</h3>
                   {work.length === 0 ? <p className="sub">出勤の記載はありません。</p> : <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>{work.map((r) => row(r.membershipId, longText(r)))}</ul>}
