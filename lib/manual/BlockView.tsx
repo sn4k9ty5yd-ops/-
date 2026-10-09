@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { Fragment, type ReactNode, useState } from "react";
 import { assetUrl, type Block } from "./blocks";
+import { isExternal } from "./links";
 
 const COLORS: Record<string, string> = {
   red: "#d70015", blue: "#0a64c8", green: "#1a7f37", yellow: "#a16207", orange: "#c2410c", purple: "#7e3fb0", pink: "#c2306e", brown: "#7a4b2a", gray: "#6e6e73", default: "inherit",
@@ -45,7 +46,9 @@ function inline(s: string, refs: Refs, depth: number): ReactNode[] {
       const hit = refs[notionKey(url)];
       out.push(hit && /notion\.(so|com|site)/.test(url)
         ? <Link key={k++} href={`/manual/${hit.id}`}>{m[1] || hit.title}</Link>
-        : <a key={k++} href={url} target="_blank" rel="noopener noreferrer">{inline(m[1], refs, depth + 1)}</a>);
+        : isExternal(url, new Set(Object.keys(refs)))
+          ? <span key={k++} className="mn-ext" title="外部リンクは、マニュアルの「外部リンク」にまとめてあります">{inline(m[1] || "外部リンク", refs, depth + 1)} 🔗</span>
+          : <a key={k++} href={url} target="_blank" rel="noopener noreferrer">{inline(m[1], refs, depth + 1)}</a>);
       i += m[0].length; continue;
     }
     if ((m = /^<[^>]+>/.exec(rest))) { i += m[0].length; continue; }   // 知らない印は表示しない
@@ -140,12 +143,14 @@ function BlockItem({ b, ctx }: { b: Block; ctx: ViewCtx }) {
       const e = youtubeEmbed(b.url);
       return e
         ? <div className="mn-video"><iframe src={e} title="動画" loading="lazy" referrerPolicy="strict-origin-when-cross-origin" allow="accelerometer; encrypted-media; picture-in-picture; fullscreen" allowFullScreen /></div>
-        : <p className="mn-p"><a href={b.url} target="_blank" rel="noopener noreferrer">▶ 動画を開く：{b.url}</a></p>;
+        : <p className="mn-p sub">▶ 動画（外部のサイト）は、マニュアルの「外部リンク」にまとめてあります。</p>;
     }
-    case "file": return live(b.src)
+    case "file": return /^https?:\/\//i.test(b.src) ? <p className="mn-p sub">📎 {b.name}（外部のファイルは、マニュアルの「外部リンク」にまとめてあります）</p> : live(b.src)
       ? <p className="mn-p"><a className="mn-file" href={assetUrl(b.src)} target="_blank" rel="noopener noreferrer">📎 {b.name}</a></p>
       : <p className="mn-p sub">📎 {b.name}（取り込み待ち）</p>;
-    case "link": return <p className="mn-p"><a href={b.url} target="_blank" rel="noopener noreferrer">{b.x || b.url}</a></p>;
+    case "link": return isExternal(b.url, new Set(Object.keys(ctx.refs)))
+      ? <p className="mn-p"><span className="mn-ext" title="外部リンクは、マニュアルの「外部リンク」にまとめてあります">🔗 {b.x || b.url}</span> <span className="sub">（外部リンクにあります）</span></p>
+      : <p className="mn-p"><a href={b.url} target="_blank" rel="noopener noreferrer">{b.x || b.url}</a></p>;
     case "child": case "db": {
       const hit = ctx.refs[notionKey(b.ref)];
       return hit

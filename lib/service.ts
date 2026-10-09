@@ -1257,6 +1257,23 @@ export async function listManualPages(db: Database, userId: string, q?: string):
       : c.query<ManualPageRow>(`select ${MANUAL_COLS} from manual_pages order by sort_order, title`))).rows;
 }
 
+/** マニュアルの中の外部リンク（YouTube以外）を、ページごとにまとめる（見られるページだけ） */
+export interface ManualExternal { pageId: string; title: string; icon: string; links: import("./manual/links").ExtLink[] }
+export async function listManualExternal(db: Database, userId: string): Promise<ManualExternal[]> {
+  const { collectExternal } = await import("./manual/links");
+  return asUser(db, userId, async (c) => {
+    const rows = (await c.query<{ id: string; title: string; icon: string; body: Block[]; source_id: string | null }>("select id, title, icon, body, source_id from manual_pages order by sort_order, title")).rows;
+    const keys = new Set(rows.map((r) => (r.source_id ?? "").replace(/-/g, "")).filter(Boolean));
+    const out: ManualExternal[] = [];
+    for (const r of rows) {
+      if (/メンター/.test(r.title)) continue;
+      const links = collectExternal(Array.isArray(r.body) ? r.body : [], keys);
+      if (links.length) out.push({ pageId: r.id, title: r.title, icon: r.icon, links });
+    }
+    return out;
+  });
+}
+
 export async function getManualPage(db: Database, userId: string, id: string): Promise<ManualPage> {
   if (!/^[0-9a-f-]{36}$/.test(id)) throw new ForbiddenError("ページが見つかりません");
   return asUser(db, userId, async (c) => {
