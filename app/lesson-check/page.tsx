@@ -35,7 +35,7 @@ function Page() {
     const sheet = data.sheets.find((x) => x.id === open);
     if (sheet && data.trainee) return (
       <>
-        <Checklist key={sheet.id + data.trainee.id} sheet={sheet} attempts={attOf(sheet.id)} traineeId={data.trainee.id} traineeName={data.trainee.name}
+        <Checklist key={sheet.id + data.trainee.id} sheet={sheet} attempts={attOf(sheet.id)} traineeId={data.trainee.id} traineeName={data.trainee.name} assessors={data.assessors} myId={me.id}
           canScore={canScore} canEditSheets={data.canEditSheets} onBack={() => { setOpen(null); load(); }} onEdit={() => { setEdit(sheet); }} onSaved={load} />
         {edit && <SheetEditor sheet={edit === "new" ? null : edit} grade={grade} onClose={() => setEdit(null)} onDone={() => { setEdit(null); load(); }} />}
       </>
@@ -79,8 +79,8 @@ function Page() {
 }
 
 /** 1つの表のチェックリスト: 回をえらび、項目ごとに 1〜5 のボタンを押す。合計は、押すたびに出る */
-function Checklist({ sheet, attempts, traineeId, traineeName, canScore, canEditSheets, onBack, onEdit, onSaved }:
-  { sheet: CheckSheet; attempts: CheckAttempt[]; traineeId: string; traineeName: string; canScore: boolean; canEditSheets: boolean; onBack: () => void; onEdit: () => void; onSaved: () => void }) {
+function Checklist({ sheet, attempts, assessors, myId, traineeId, traineeName, canScore, canEditSheets, onBack, onEdit, onSaved }:
+  { sheet: CheckSheet; attempts: CheckAttempt[]; assessors: { id: string; name: string }[]; myId: string; traineeId: string; traineeName: string; canScore: boolean; canEditSheets: boolean; onBack: () => void; onEdit: () => void; onSaved: () => void }) {
   const items = sheet.items.filter((i) => i.active);
   const ids = items.map((i) => i.id);
   const firstNo = nextAttemptNo(sheet, attempts) ?? 1;
@@ -89,8 +89,10 @@ function Checklist({ sheet, attempts, traineeId, traineeName, canScore, canEditS
   const [sc, setSc] = useState<Record<string, number>>(existing?.scores ?? {});
   const [time, setTime] = useState(existing?.time ?? "");
   const [comment, setComment] = useState(existing?.comment ?? "");
+  const defAsr = (e?: CheckAttempt) => e?.assessorId ?? (assessors.some((a) => a.id === myId) ? myId : "");
+  const [asr, setAsr] = useState(defAsr(existing));
   const [msg, setMsg] = useState(""); const [busy, setBusy] = useState(false); const [ok, setOk] = useState("");
-  const pick = (n: number) => { const e = attempts.find((a) => a.attemptNo === n); setNo(n); setSc(e?.scores ?? {}); setTime(e?.time ?? ""); setComment(e?.comment ?? ""); setMsg(""); setOk(""); };
+  const pick = (n: number) => { const e = attempts.find((a) => a.attemptNo === n); setNo(n); setSc(e?.scores ?? {}); setTime(e?.time ?? ""); setComment(e?.comment ?? ""); setAsr(defAsr(e)); setMsg(""); setOk(""); };
   const total = totalOfScores(sc, ids);
   const filled = ids.every((id) => sc[id] !== undefined && sc[id] >= 1);
   const answered = ids.filter((id) => sc[id] !== undefined).length;
@@ -132,6 +134,14 @@ function Checklist({ sheet, attempts, traineeId, traineeName, canScore, canEditS
         <>
           <input placeholder="タイム（例 4:30）" value={time} onChange={(e) => setTime(e.target.value)} style={{ marginBottom: 6 }} />
           <textarea placeholder="コメント（任意）" value={comment} onChange={(e) => setComment(e.target.value)} rows={3} />
+          {assessors.length > 0 && (
+            <label className="sub" style={{ display: "block", marginTop: 6 }}>採点者（このお店のスタイリストから選ぶ）
+              <select value={asr} onChange={(e) => setAsr(e.target.value)}>
+                <option value="">（自分）</option>
+                {assessors.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+              </select>
+            </label>
+          )}
         </>
       )}
       {!editable && existing && (existing.time || existing.comment) && <p className="sub">{existing.time && <>タイム {existing.time}　</>}{existing.comment}{existing.assessorName && <>　（査定：{existing.assessorName}）</>}</p>}
@@ -144,7 +154,7 @@ function Checklist({ sheet, attempts, traineeId, traineeName, canScore, canEditS
         {msg && <p className="err">{msg}</p>}{ok && <p className="sub">{ok}</p>}
         {editable && (
           <div className="toolbar">
-            <button disabled={busy || !filled} onClick={() => run({ action: "attempt", sheetId: sheet.id, traineeId, attemptNo: no, time, comment, scores: items.map((i) => ({ itemId: i.id, score: sc[i.id] })) }, "保存しました")}>{existing ? "直して保存" : "この回を保存"}</button>
+            <button disabled={busy || !filled} onClick={() => run({ action: "attempt", sheetId: sheet.id, traineeId, attemptNo: no, time, comment, assessorId: asr || null, scores: items.map((i) => ({ itemId: i.id, score: sc[i.id] })) }, "保存しました")}>{existing ? "直して保存" : "この回を保存"}</button>
             {existing && <button className="ghost" disabled={busy} onClick={() => confirm("この回の採点を取り消しますか？") && run({ action: "delete", attemptId: existing.id }, "取り消しました").then(() => { setSc({}); setTime(""); setComment(""); })}>取り消す</button>}
           </div>
         )}

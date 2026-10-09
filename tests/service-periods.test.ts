@@ -242,6 +242,11 @@ describe("レッスンチェック表（採点）", () => {
     const lst = await svc.getCheckData(d, u.styA);
     expect(lst.trainees.map((t) => t.id)).toEqual([u.traineeA]);                                                       // 一覧は、自店のアシスタントだけ
     await svc.saveCheckAttempt(d, u.edu, { ...base, attemptNo: 3, scores: sc(3, 3, 3) });
+    await svc.saveCheckAttempt(d, u.mgrA, { ...base, attemptNo: 3, assessorId: u.styA, scores: sc(3, 3, 3) });   // 採点者を、自店のスタイリストから選べる
+    const got = await svc.getCheckData(d, u.mgrA, u.traineeA);
+    expect(got.assessors.map((x) => x.id)).toEqual([u.styA]);
+    expect(got.attempts.find((a) => a.attemptNo === 3)?.assessorId).toBe(u.styA);
+    await expect(svc.saveCheckAttempt(d, u.mgrA, { ...base, attemptNo: 3, assessorId: u.plainA, scores: sc(3, 3, 3) })).rejects.toThrow("スタイリスト");   // スタイリスト以外は選べない
     await expect(svc.saveCheckAttempt(d, u.mgrA, { ...base, scores: sc(6, 0, 0) })).rejects.toThrow();   // 点数は0〜5
     await expect(svc.saveCheckAttempt(d, u.mgrA, { ...base, attemptNo: 11 })).rejects.toThrow();         // 回数オーバー
   });

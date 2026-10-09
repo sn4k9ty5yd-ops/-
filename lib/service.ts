@@ -2655,9 +2655,9 @@ export async function updateFeedback(db: Database, userId: string, id: string, i
 // ---------------------------------------------------------------- レッスンチェック表（採点）
 export interface CheckItem { id: string; name: string; sortOrder: number; active: boolean }
 export interface CheckSheet { id: string; grade: string; name: string; memo: string; maxPoints: number; passPoints: number; maxAttempts: number; sortOrder: number; active: boolean; items: CheckItem[] }
-export interface CheckAttempt { id: string; sheetId: string; attemptNo: number; assessorName: string | null; time: string; comment: string; total: number; updatedAt: string; scores: Record<string, number> }
+export interface CheckAttempt { id: string; sheetId: string; attemptNo: number; assessorId: string | null; assessorName: string | null; time: string; comment: string; total: number; updatedAt: string; scores: Record<string, number> }
 export interface CheckTrainee { id: string; name: string; rank: string | null; storeId: string; storeName: string }
-export interface CheckData { sheets: CheckSheet[]; attempts: CheckAttempt[]; trainee: CheckTrainee | null; trainees: CheckTrainee[]; canAssess: boolean; canEditSheets: boolean }
+export interface CheckData { sheets: CheckSheet[]; attempts: CheckAttempt[]; trainee: CheckTrainee | null; trainees: CheckTrainee[]; assessors: { id: string; name: string }[]; canAssess: boolean; canEditSheets: boolean }
 
 /** 表と、受ける人の採点。受ける人を指定しなければ、自分（採点できる人は、お店の人の一覧つき） */
 export async function getCheckData(db: Database, userId: string, traineeId?: string): Promise<CheckData> {
@@ -2679,27 +2679,28 @@ export async function getCheckData(db: Database, userId: string, traineeId?: str
     const selfRow = staff.find((x) => x.id === userId);
     const targetId = traineeId ?? (selfRow?.rank === "assistant" ? userId : "");   // 自分がアシスタントでなければ、えらぶまで空
     const t = staff.find((x) => x.id === targetId) ?? null;
-    if (!t || (t.id !== userId && !(t.canAssess && t.rank === "assistant" && t.storeId === me.storeId))) return { sheets, attempts: [], trainee: null, trainees, canAssess: false, canEditSheets };
+    if (!t || (t.id !== userId && !(t.canAssess && t.rank === "assistant" && t.storeId === me.storeId))) return { sheets, attempts: [], trainee: null, trainees, assessors: [], canAssess: false, canEditSheets };
     const attempts = (await q.query<Omit<CheckAttempt, "scores">>(
-      `select a.id, a.sheet_id as "sheetId", a.attempt_no as "attemptNo", m.name as "assessorName", a.time_text as time, a.comment, a.total, a.updated_at::text as "updatedAt"
+      `select a.id, a.sheet_id as "sheetId", a.attempt_no as "attemptNo", a.assessor_id as "assessorId", m.name as "assessorName", a.time_text as time, a.comment, a.total, a.updated_at::text as "updatedAt"
          from check_attempts a left join memberships m on m.id = a.assessor_id where a.trainee_id = $1 order by a.sheet_id, a.attempt_no`, [t.id])).rows;
     const sc = (await q.query<{ attemptId: string; itemId: string; score: number }>(
       `select s.attempt_id as "attemptId", s.item_id as "itemId", s.score from check_scores s join check_attempts a on a.id = s.attempt_id where a.trainee_id = $1`, [t.id])).rows;
     const { canAssess: ca, ...trainee } = t;
-    return { sheets, attempts: attempts.map((a) => ({ ...a, scores: Object.fromEntries(sc.filter((x) => x.attemptId === a.id).map((x) => [x.itemId, x.score])) })), trainee, trainees, canAssess: ca, canEditSheets };
+    return { sheets, attempts: attempts.map((a) => ({ ...a, scores: Object.fromEntries(sc.filter((x) => x.attemptId === a.id).map((x) => [x.itemId, x.score])) })), trainee, trainees, assessors: ca ? staff.filter((x) => x.rank === "stylist" && x.storeId === t.storeId).map((x) => ({ id: x.id, name: x.name })) : [], canAssess: ca, canEditSheets };
   });
 }
 
-export async function saveCheckAttempt(db: Database, userId: string, input: { sheetId: string; traineeId: string; attemptNo: number; time?: string; comment?: string; scores: { itemId: string; score: number }[] }): Promise<{ total: number; passed: boolean }> {
+export async function saveCheckAttempt(db: Database, userId: string, input: { sheetId: string; traineeId: string; attemptNo: number; time?: string; comment?: string; assessorId?: string | null; scores: { itemId: string; score: number }[] }): Promise<{ total: number; passed: boolean }> {
   const me = await getMe(db, userId);
   if (!me || me.displayOnly) throw new ForbiddenError();
   let r: { id: string; total: number; passed: boolean; store: string };
   try {
-    r = (await asUser(db, userId, (q) => q.query<{ r: typeof r }>("select public.check_attempt_save($1,$2,$3,$4,$5,$6::jsonb) as r",
-      [input.sheetId, input.traineeId, input.attemptNo, input.time ?? "", input.comment ?? "", JSON.stringify(input.scores)]))).rows[0].r;
+    r = (await asUser(db, userId, (q) => q.query<{ r: typeof r }>("select public.check_attempt_save($1,$2,$3,$4,$5,$6::jsonb,$7) as r",
+      [input.sheetId, input.traineeId, input.attemptNo, input.time ?? "", input.comment ?? "", JSON.stringify(input.scores), input.assessorId || null]))).rows[0].r;
   } catch (e) {
     const m = (e as Error).message ?? "";
     if (m.includes("self")) throw new Error("自分の採点は、自分ではつけられません");
+    if (m.includes("bad assessor")) throw new Error("採点者は、このお店のスタイリストから選んでください");
     if (m.includes("bad")) throw new Error("点数が正しくありません（0〜5）");
     throw new ForbiddenError();
   }
