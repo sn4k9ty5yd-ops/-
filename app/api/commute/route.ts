@@ -1,6 +1,6 @@
 import { getDb } from "@/lib/db";
 import { authed, json } from "@/lib/http";
-import { checkCommute, getCommute, getCommuteImage, getCommuteSummary, setCommuteDue, setCommuteRoster, submitCommute } from "@/lib/service";
+import { addCommuteRosterBulk, checkCommute, matchCommuteNames, getCommute, getCommuteImage, getCommuteSummary, setCommuteDue, setCommuteRoster, submitCommute } from "@/lib/service";
 
 export const GET = authed(async (userId, req) => {
   const u = new URL(req.url); const db = await getDb();
@@ -17,6 +17,8 @@ export const POST = authed(async (userId, req) => {
     case "submit": await submitCommute(db, userId, String(b.month ?? ""), String(b.image ?? "")); break;
     case "roster": await setCommuteRoster(db, userId, String(b.memberId ?? ""), !!b.on); break;
     case "check": await checkCommute(db, userId, String(b.id ?? ""), b.status === "redo" ? "redo" : "checked", String(b.note ?? "")); break;
+    case "match": return json({ matches: await matchCommuteNames(db, userId, String(b.text ?? "")) });
+    case "roster-bulk": return json({ count: await addCommuteRosterBulk(db, userId, Array.isArray(b.ids) ? b.ids.map(String) : []) });
     case "due": await setCommuteDue(db, userId, Number(b.day)); break;
     default: throw new Error("操作が正しくありません");
   }

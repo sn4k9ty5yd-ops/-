@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Stepper } from "@/app/Stepper";
 import { api, MeProvider, useAutoRefresh, useMe } from "@/lib/client";
-import type { CommuteData } from "@/lib/service";
+import type { CommuteData, CommuteMatch } from "@/lib/service";
 
 const ST: Record<string, string> = { none: "⚪ まだ", submitted: "🟡 提出ずみ（確認まち）", checked: "✅ 確認ずみ", redo: "🔴 出し直し" };
 const shiftMonth = (ym: string, d: number) => { const [y, m] = ym.split("-").map(Number); const t = new Date(Date.UTC(y, m - 1 + d, 1)); return `${t.getUTCFullYear()}-${String(t.getUTCMonth() + 1).padStart(2, "0")}`; };
@@ -27,6 +27,7 @@ function Page() {
   const [view, setView] = useState<string | null>(null); const [viewImg, setViewImg] = useState("");
   const [note, setNote] = useState("");
   const [due, setDue] = useState("");
+  const [paste, setPaste] = useState(""); const [ms, setMs] = useState<CommuteMatch[] | null>(null); const [pick, setPick] = useState<Record<number, string>>({});
   const load = useCallback(async () => {
     try { const r = await api<CommuteData>(`/api/commute?${month ? `month=${month}&` : ""}${storeId ? `storeId=${storeId}` : ""}`); setD(r); setDue((v) => v || String(r.dueDay)); if (!month) setMonth(r.month); if (!storeId) setStoreId(r.storeId); setMsg(""); }
     catch (e) { setMsg((e as Error).message); }
@@ -93,6 +94,30 @@ function Page() {
               </li>
             ))}
           </ul>
+          <details style={{ marginTop: 8 }}>
+            <summary>📋 名前をまとめて貼って、名簿に入れる</summary>
+            <p className="sub">名前を1行ずつ貼ります（お店の名前の行があれば、そのお店の人から探します）。照合してから、確認して入れます。</p>
+            <textarea rows={6} value={paste} onChange={(e) => { setPaste(e.target.value); setMs(null); }} placeholder={"天神店\n中嶋\n金子直樹\n六本松店\n本山"} />
+            <button disabled={busy || !paste.trim()} onClick={async () => { setBusy(true); try { const r = await api<{ matches: CommuteMatch[] }>("/api/commute", { action: "match", text: paste }); setMs(r.matches); setPick(Object.fromEntries(r.matches.map((m, i) => [i, m.matches.length === 1 ? m.matches[0].id : ""]))); } catch (e) { setMsg((e as Error).message); } setBusy(false); }}>照合する</button>
+            {ms && (
+              <>
+                <ul className="list">
+                  {ms.map((m, i) => (
+                    <li key={i} style={{ display: "block" }}>
+                      <b>{m.token}</b>{m.storeHint ? <span className="sub">（{m.storeHint}）</span> : null}
+                      {m.matches.length === 0 ? <span className="err"> → 見つかりません</span> : (
+                        <select value={pick[i] ?? ""} onChange={(e) => setPick({ ...pick, [i]: e.target.value })} style={{ marginTop: 4 }}>
+                          <option value="">（入れない）</option>
+                          {m.matches.map((x) => <option key={x.id} value={x.id}>{x.name}（{x.storeName}）{x.already ? " ・もう名簿にいます" : ""}</option>)}
+                        </select>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+                <button disabled={busy || !Object.values(pick).some(Boolean)} onClick={async () => { setBusy(true); try { const r = await api<{ count: number }>("/api/commute", { action: "roster-bulk", ids: Object.values(pick).filter(Boolean) }); setMsg(`${r.count}人を名簿に入れました`); setMs(null); setPaste(""); await load(); } catch (e) { setMsg((e as Error).message); } setBusy(false); }}>選んだ{Object.values(pick).filter(Boolean).length}人を、名簿に入れる</button>
+              </>
+            )}
+          </details>
           {d.candidates.length > 0 && (
             <details style={{ marginTop: 8 }}>
               <summary>＋ 名簿に入れる（新しく買った人・新入社員）</summary>

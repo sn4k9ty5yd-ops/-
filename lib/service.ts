@@ -3513,3 +3513,34 @@ export async function runCommuteReminders(db: Database, force = false, at?: stri
   }
   return { sent };
 }
+
+// ---- 定期券の名簿を、名前の貼りつけでまとめて入れる（照合 → 確認 → 入れる）
+export interface CommuteMatch { token: string; storeHint: string | null; matches: { id: string; name: string; storeName: string; already: boolean }[] }
+const VARIANT: Record<string, string> = { 廣: "広", 嵩: "崇", 邊: "辺", 邉: "辺", 齋: "斉", 斎: "斉", 齊: "斉", 﨑: "崎", 髙: "高", 德: "徳", 澤: "沢", 櫻: "桜", 龍: "竜", 國: "国", 濱: "浜", 賴: "頼" };
+const normName = (s: string) => s.normalize("NFKC").replace(/[\s　]/g, "").split("").map((c) => VARIANT[c] ?? c).join("").toLowerCase();
+const STORE_WORDS: [string, string][] = [["天神", "天神"], ["オルガン", "organ"], ["organ", "organ"], ["六本松", "六本松"], ["福津", "福津"], ["サクラマチ", "sakuramachi"], ["桜町", "sakuramachi"], ["aveda", "sakuramachi"]];
+
+export async function matchCommuteNames(db: Database, userId: string, text: string): Promise<CommuteMatch[]> {
+  const me = await getMe(db, userId);
+  if (!me || me.displayOnly || me.level < 3) throw new ForbiddenError();
+  const staff = await asUser(db, userId, async (q) => (await q.query<{ id: string; name: string; storeName: string; already: boolean }>(
+    `select m.id, m.name, s.name as "storeName", exists (select 1 from commute_roster r where r.membership_id = m.id) as already
+       from memberships m join stores s on s.id = m.store_id where m.status = 'active' and not m.display_only`)).rows);
+  const out: CommuteMatch[] = []; let hint: string | null = null;
+  for (const raw of text.split(/\r?\n|、|,|，|\t/)) {
+    const t = raw.trim(); if (!t) continue;
+    const n = normName(t);
+    const sw = STORE_WORDS.find(([w]) => n.includes(normName(w)));
+    if (sw && (n.endsWith("店") || n.length <= 12 && !staff.some((p) => normName(p.name).includes(n)))) { hint = sw[1]; continue; }
+    let hits = staff.filter((p) => normName(p.name).includes(n) || (n.length >= 3 && normName(p.name).startsWith(n.slice(0, 2)) && normName(p.name).includes(n.slice(2, 3)) ));
+    if (hint) { const inStore = hits.filter((p) => normName(p.storeName).includes(hint!)); if (inStore.length > 0) hits = inStore; }
+    out.push({ token: t, storeHint: hint, matches: hits.slice(0, 6) });
+  }
+  return out;
+}
+
+export async function addCommuteRosterBulk(db: Database, userId: string, ids: string[]): Promise<number> {
+  let n = 0;
+  for (const id of [...new Set(ids)].slice(0, 100)) { await setCommuteRoster(db, userId, id, true); n++; }
+  return n;
+}

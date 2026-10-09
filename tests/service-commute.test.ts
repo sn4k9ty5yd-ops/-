@@ -44,6 +44,18 @@ describe("定期券の提出", () => {
     await svc.checkCommute(d, u.office, row.subId!, "checked");
     await expect(svc.submitCommute(d, u.s1, ym, IMG)).rejects.toThrow("確認ずみ");
   });
+  it("名前を貼って照合できる（お店の見出し・漢字のゆれ）。店長は自店の人だけ入れられる", async () => {
+    await d.query("update memberships set name = '金子 崇史' where id = $1", [u.s2]);
+    await d.query("update memberships set name = '廣 茉紀' where id = $1", [u.t1]);
+    const m = await svc.matchCommuteNames(d, u.office, "a店\nb\n金子嵩\n広\n見つからない人");
+    expect(m.find((x) => x.token === "金子嵩")?.matches.map((x) => x.id)).toEqual([u.s2]);
+    expect(m.find((x) => x.token === "広")?.matches.map((x) => x.id)).toEqual([u.t1]);
+    expect(m.find((x) => x.token === "見つからない人")?.matches).toHaveLength(0);
+    await expect(svc.matchCommuteNames(d, u.s1, "x")).rejects.toThrow(svc.ForbiddenError);
+    await expect(svc.addCommuteRosterBulk(d, u.mgrA, [u.t1])).rejects.toThrow(svc.ForbiddenError);   // 他店の人
+    expect(await svc.addCommuteRosterBulk(d, u.mgrA, [u.s2])).toBe(1);
+    await svc.setCommuteRoster(d, u.mgrA, u.s2, false);
+  });
   it("外すと、名簿から消える。期限日は事務員さんだけが決められる。通知は期限の3日前から、出していない人へ毎日1回", async () => {
     await expect(svc.setCommuteDue(d, u.mgrA, 20)).rejects.toThrow(svc.ForbiddenError);
     await svc.setCommuteDue(d, u.office, 20);
