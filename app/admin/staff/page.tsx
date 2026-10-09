@@ -101,7 +101,7 @@ export default function StaffPage() {
               {s.status === "active" && s.rank && <div className="sub" style={{ marginTop: 2 }}>ランク：{s.rank === "stylist" ? "スタイリスト" : "アシスタント"}</div>}
               {s.status === "active" && s.canEvaluate && <div className="sub" style={{ marginTop: 2 }}>✔ 技術評価をつけられる人</div>}
               {s.status === "active" && s.eduLead && <div className="sub" style={{ marginTop: 2 }}>✔ 教育担当（レッスンを記録できる）</div>}
-              {s.status === "active" && s.materialManager && <div className="sub" style={{ marginTop: 2 }}>✔ 材料担当（全店の材料費を見られる・書ける）</div>}
+              {s.status === "active" && s.materialManager && <div className="sub" style={{ marginTop: 2 }}>✔ 材料担当（自分のお店の材料費を、まとめて見られる・書ける）</div>}
               {s.status === "active" && s.retireOn && <div className="sub" style={{ marginTop: 2, color: "#b45309" }}>退職予定日：{reiwa(s.retireOn)}（この日になると自動で退職になります）</div>}
               {s.status === "active" && <PresenceBadge s={s} />}
             </div>

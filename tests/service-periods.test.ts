@@ -181,7 +181,7 @@ describe("商品の追加・このお店で使わない・全体から消す", (
     expect(await svc.createProducts(d, u.mgrB, "retail", [{ maker: "ミルボン", name: "シャンプー", spec: "500ml", costPrice: 1200 }], [sid.a])).toEqual({ created: 0, skipped: 1 });
     const list = await svc.listProducts(d, u.mgrB, "retail");
     expect(list).toHaveLength(2);
-    expect(list.every((p) => p.storeIds.length === 2)).toBe(true);
+    expect(list.every((p) => p.storeIds.includes(sid.b))).toBe(true);   // 店長が見えるのは自分のお店の分だけ
     await expect(svc.createProducts(d, u.mgrA, "retail", [{ name: "x", costPrice: 1 }], [])).rejects.toThrow();
   });
   it("このお店で使わない: 店長は自店だけ。正美さんは全店。商品は消えない。また使うで戻せる", async () => {

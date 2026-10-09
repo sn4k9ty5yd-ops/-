@@ -21,8 +21,9 @@ describe("can()", () => {
     expect(can(mgr, "staff.manage", "s1")).toBe(true);
     expect(can(mgr, "staff.manage", "s2")).toBe(false);
   });
-  it("店長は全店を見られるがレベルは変えられない", () => {
-    expect(can(mgr, "staff.view", "s2")).toBe(true);
+  it("店長は自分のお店のスタッフだけ見られる（他店は見えない）。レベルは変えられない", () => {
+    expect(can(mgr, "staff.view", "s1")).toBe(true);
+    expect(can(mgr, "staff.view", "s2")).toBe(false);
     expect(can(mgr, "level.assign", "s1")).toBe(false);
   });
   it("オフィスは全部できる", () => {

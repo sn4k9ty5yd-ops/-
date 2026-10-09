@@ -11,7 +11,7 @@ export const LEVEL_NAMES: Record<Level, string> = {
 };
 
 export const LEVEL_PERMISSIONS: ReadonlyArray<readonly [Level, string, Scope]> = [
-  [1, "staff.view", "own"], [2, "staff.view", "own"], [3, "staff.view", "all"], [4, "staff.view", "all"],
+  [1, "staff.view", "own"], [2, "staff.view", "own"], [3, "staff.view", "own"], [4, "staff.view", "all"],
   [1, "store.view", "own"], [2, "store.view", "own"], [3, "store.view", "all"], [4, "store.view", "all"],
   [3, "staff.manage", "own"], [4, "staff.manage", "all"],
   [4, "store.manage", "all"],
@@ -29,16 +29,16 @@ export const LEVEL_PERMISSIONS: ReadonlyArray<readonly [Level, string, Scope]> =
   [2, "attendance.edit", "own"], [3, "attendance.edit", "own"], [4, "attendance.edit", "all"],
   [3, "leave.view", "own"], [4, "leave.view", "all"],
   [3, "leave.manage", "own"], [4, "leave.manage", "all"],
-  [1, "product.view", "own"], [2, "product.view", "own"], [3, "product.view", "all"], [4, "product.view", "all"],
+  [1, "product.view", "own"], [2, "product.view", "own"], [3, "product.view", "own"], [4, "product.view", "all"],
   [4, "product.manage", "all"],
-  [1, "stocktake.view", "own"], [1, "stocktake.edit", "own"], [2, "stocktake.view", "own"], [3, "stocktake.view", "all"], [4, "stocktake.view", "all"],
+  [1, "stocktake.view", "own"], [1, "stocktake.edit", "own"], [2, "stocktake.view", "own"], [3, "stocktake.view", "own"], [4, "stocktake.view", "all"],
   [2, "stocktake.edit", "own"], [3, "stocktake.edit", "own"], [4, "stocktake.edit", "all"],
   [1, "stocktake.manage", "own"], [2, "stocktake.manage", "own"], [3, "stocktake.manage", "own"], [4, "stocktake.manage", "all"],
   [1, "stock.view", "own"], [2, "stock.view", "own"], [3, "stock.view", "own"], [4, "stock.view", "all"],
   [2, "stock.edit", "own"], [3, "stock.edit", "own"], [4, "stock.edit", "all"],
   [3, "stock.settings", "own"], [4, "stock.settings", "all"],
   [4, "manual.manage", "all"],
-  [1, "material.view", "own"], [2, "material.view", "own"], [3, "material.view", "all"], [4, "material.view", "all"],
+  [1, "material.view", "own"], [2, "material.view", "own"], [3, "material.view", "own"], [4, "material.view", "all"],
   [1, "material.edit", "own"], [2, "material.edit", "own"], [3, "material.edit", "own"], [4, "material.edit", "all"],
   [3, "material.budget", "own"], [4, "material.budget", "all"],
 ];

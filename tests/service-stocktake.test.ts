@@ -122,8 +122,8 @@ describe("棚卸し", () => {
     await expect(svc.saveQuantities(db, id.office, stId, [{ lineId: d.items[0].id, quantity: 5 }])).rejects.toThrow(svc.ForbiddenError);
     expect((await svc.listStocktakes(db, id.mgr1, st.s1, "retail"))[0]).toMatchObject({ status: "acknowledged", lines: 3, counted: 3 });
   });
-  it("他店の店長は、見られるが直せない。店販と業務の棚卸しは別", async () => {
-    expect((await svc.getStocktake(db, id.mgr2, stId))).toMatchObject({ editable: false, canManage: false });
+  it("他店の店長は、見えない（自分のお店だけ）。店販と業務の棚卸しは別", async () => {
+    expect(await svc.getStocktake(db, id.mgr2, stId)).toBeNull();
     expect(await svc.listStocktakes(db, id.mgr1, st.s1, "supply")).toEqual([]);
     const sup = await svc.startStocktake(db, id.mgr1, st.s1, "supply", "2026-10-31");
     expect((await svc.getStocktake(db, id.mgr1, sup))!.items.map((i) => i.name)).toEqual(["ｶﾗｰ剤"]);
@@ -153,7 +153,8 @@ describe("棚卸しの合算（店販・業務・店舗・全店）", () => {
     expect(sum.stores).toHaveLength(2);
   });
   it("見える範囲だけ合算される: 店長は他店も、シフト担当は自店だけ。日が違えば別", async () => {
-    expect((await svc.stocktakeSummary(db, id.mgr1, "2026-10-31")).stores).toHaveLength(2);
+    expect((await svc.stocktakeSummary(db, id.mgr1, "2026-10-31")).stores).toHaveLength(1);   // 店長は自分のお店だけ。全店は事務員さん・鬼塚さん・制作者だけ
+    expect((await svc.stocktakeSummary(db, id.office, "2026-10-31")).stores).toHaveLength(2);
     const own = await svc.stocktakeSummary(db, id.shift1, "2026-10-31");
     expect(own.stores.map((x) => x.storeId)).toEqual([st.s1]);
     expect(own.grandTotal).toBe(own.stores[0].total);

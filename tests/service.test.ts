@@ -17,7 +17,7 @@ async function person(co: string, code: string, name: string, level: number, st:
 
 beforeAll(async () => {
   db = await newDb();
-  expect(await migrate(db)).toEqual(["0001_tenant_core.sql", "0002_periods_requests.sql", "0003_store_changes.sql", "0004_shifts.sql", "0005_break_rule.sql", "0006_attendance.sql", "0007_products_stocktake.sql", "0008_stock.sql", "0009_display_accounts.sql", "0010_presence.sql", "0011_saturday_hours.sql", "0012_scheduled_retirement.sql", "0013_manual.sql", "0014_ranks.sql", "0015_short_name.sql", "0016_day_limits.sql", "0017_material_orders.sql", "0018_material_tax.sql", "0019_material_manager.sql", "0020_push.sql", "0021_lessons.sql", "0022_lesson_subcategories.sql", "0023_paid_leave.sql", "0024_sales.sql", "0025_sales_flow.sql", "0026_sales_commission.sql", "0027_security.sql", "0028_shift_maker_perms.sql", "0029_app_owner.sql", "0030_feedback.sql", "0031_undo_step.sql", "0032_acknowledge_owner.sql", "0033_register_sales.sql", "0034_product_add_store_use.sql", "0035_register_staff_hidden.sql", "0036_stocktake_everyone.sql", "0037_stocktake_everyone_manage.sql", "0038_lesson_checks.sql", "0039_check_max_from_items.sql", "0040_drop_register_sales.sql", "0041_wipe_sales.sql", "0042_sales_own_only.sql", "0043_manager_own_store_shifts.sql", "0044_tester_staffbuy.sql", "0045_rename_tester.sql", "0046_check_stylists.sql", "0047_exec_tiers.sql", "0048_meetings.sql", "0049_activity_log.sql", "0050_mentor.sql", "0052_interview_edit.sql", "0053_mbti_directory.sql", "0054_remove_empty_interview_pages.sql", "0055_shift_break.sql", "0056_app_secrets.sql", "0057_shift_edit_after_publish.sql", "0058_product_add_everyone.sql", "0059_mbti_own_store.sql", "0060_mbti_all_for_exec.sql", "0061_view_as.sql", "0062_leave_anytime.sql", "0063_office_inbox.sql", "0064_stocktake_line_edit.sql", "0065_close_time_reminder.sql", "0066_request_stage_visible.sql", "0067_check_assessor_pick.sql", "0068_commute_pass.sql", "0069_limits_by_rank.sql", "0070_commute_months.sql"]);
+  expect(await migrate(db)).toEqual(["0001_tenant_core.sql", "0002_periods_requests.sql", "0003_store_changes.sql", "0004_shifts.sql", "0005_break_rule.sql", "0006_attendance.sql", "0007_products_stocktake.sql", "0008_stock.sql", "0009_display_accounts.sql", "0010_presence.sql", "0011_saturday_hours.sql", "0012_scheduled_retirement.sql", "0013_manual.sql", "0014_ranks.sql", "0015_short_name.sql", "0016_day_limits.sql", "0017_material_orders.sql", "0018_material_tax.sql", "0019_material_manager.sql", "0020_push.sql", "0021_lessons.sql", "0022_lesson_subcategories.sql", "0023_paid_leave.sql", "0024_sales.sql", "0025_sales_flow.sql", "0026_sales_commission.sql", "0027_security.sql", "0028_shift_maker_perms.sql", "0029_app_owner.sql", "0030_feedback.sql", "0031_undo_step.sql", "0032_acknowledge_owner.sql", "0033_register_sales.sql", "0034_product_add_store_use.sql", "0035_register_staff_hidden.sql", "0036_stocktake_everyone.sql", "0037_stocktake_everyone_manage.sql", "0038_lesson_checks.sql", "0039_check_max_from_items.sql", "0040_drop_register_sales.sql", "0041_wipe_sales.sql", "0042_sales_own_only.sql", "0043_manager_own_store_shifts.sql", "0044_tester_staffbuy.sql", "0045_rename_tester.sql", "0046_check_stylists.sql", "0047_exec_tiers.sql", "0048_meetings.sql", "0049_activity_log.sql", "0050_mentor.sql", "0052_interview_edit.sql", "0053_mbti_directory.sql", "0054_remove_empty_interview_pages.sql", "0055_shift_break.sql", "0056_app_secrets.sql", "0057_shift_edit_after_publish.sql", "0058_product_add_everyone.sql", "0059_mbti_own_store.sql", "0060_mbti_all_for_exec.sql", "0061_view_as.sql", "0062_leave_anytime.sql", "0063_office_inbox.sql", "0064_stocktake_line_edit.sql", "0065_close_time_reminder.sql", "0066_request_stage_visible.sql", "0067_check_assessor_pick.sql", "0068_commute_pass.sql", "0069_limits_by_rank.sql", "0070_commute_months.sql", "0071_material_manager_own_store.sql"]);
   expect(await migrate(db)).toEqual([]); // 2回目は何もしない
   const a = (await db.query<{ id: string }>("insert into companies (code, name) values ('co-a','A社') returning id")).rows[0].id;
   const b = (await db.query<{ id: string }>("insert into companies (code, name) values ('co-b','B社') returning id")).rows[0].id;
@@ -204,13 +204,13 @@ describe("材料費（発注額）", () => {
     await svc.updateMaterialOrder(db, id.mgr, oid, { ...inp, amount: 13000 });
     expect((await svc.listMaterialOrders(db, id.staff, store.a1, "2026-10-01", "2026-10-31"))[0]).toMatchObject({ amount: 13000, edited: true });
   });
-  it("他のお店のスタッフは見られず・書けない。店長は他店を見るだけ。オフィスは全店", async () => {
+  it("他のお店のスタッフは見られず・書けない。店長も他店は見えない。オフィスは全店", async () => {
     expect(await svc.listMaterialOrders(db, id.staff2, store.a1, "2026-10-01", "2026-10-31")).toHaveLength(0);
     await expect(svc.addMaterialOrder(db, id.staff2, store.a1, inp)).rejects.toThrow(svc.ForbiddenError);
     expect(await svc.listMaterialOrders(db, id.mgr, store.a2, "2026-10-01", "2026-10-31")).toHaveLength(0);
     await expect(svc.addMaterialOrder(db, id.mgr, store.a2, inp)).rejects.toThrow(svc.ForbiddenError);
     await expect(svc.addMaterialOrder(db, id.office, store.a2, inp)).resolves.toBeTruthy();
-    expect(await svc.listMaterialOrders(db, id.mgr, store.a2, "2026-10-01", "2026-10-31")).toHaveLength(1);
+    expect(await svc.listMaterialOrders(db, id.mgr, store.a2, "2026-10-01", "2026-10-31")).toHaveLength(0);   // 店長も、他店は見えない
   });
   it("金額の入力チェック", async () => {
     await expect(svc.addMaterialOrder(db, id.staff, store.a1, { ...inp, amount: -1 })).rejects.toThrow("金額");
@@ -269,24 +269,28 @@ describe("材料費（発注額）", () => {
     expect(mem.frequent).toContainEqual({ name: "シャンプー", supplier: "学習商事", unit: 5000, count: 1 });
     expect((await svc.getMaterialMemory(db, id.staff2, store.a1)).items).toEqual([]);   // 他店の人には見えない
   });
-  it("材料担当: 管理者が決めると、他店でも全店の材料費を見て書ける。統括は管理者と材料担当だけ", async () => {
+  it("材料担当: 自分の登録店舗の材料費だけ、統括・記録まで見られる。他店は見えない（全店は正美さん以上だけ）", async () => {
     await expect(svc.materialSummaryData(db, id.staff, "2026-01-01", "2026-12-31")).rejects.toThrow(svc.ForbiddenError);
     await expect(svc.materialSummaryData(db, id.mgr, "2026-01-01", "2026-12-31")).rejects.toThrow(svc.ForbiddenError);
     await expect(svc.setMaterialManager(db, id.mgr, id.staff2, true)).rejects.toThrow(svc.ForbiddenError);   // 管理者だけが決められる
     const before = await svc.materialSummaryData(db, id.office, "2026-01-01", "2026-12-31");
-    expect(before.orders.length).toBeGreaterThan(0);
     expect(before.orders.some((o) => o.storeId === store.a1) && before.orders.some((o) => o.storeId === store.a2)).toBe(true);
-    await svc.setMaterialManager(db, id.office, id.staff2, true);
+    await svc.setMaterialManager(db, id.office, id.staff2, true);   // staff2 は他店の人
     try {
       expect((await svc.getMe(db, id.staff2))?.materialManager).toBe(true);
-      const seen = await svc.listMaterialOrders(db, id.staff2, store.a1, "2026-10-01", "2026-10-31");
-      expect(seen.length).toBeGreaterThan(0);
-      await expect(svc.addMaterialOrder(db, id.staff2, store.a1, inp)).resolves.toBeTruthy();
-      const all = await svc.materialSummaryData(db, id.staff2, "2026-01-01", "2026-12-31");
-      expect(all.orders.some((o) => o.storeId === store.a1)).toBe(true);
-      expect((await svc.listMaterialLog(db, id.staff2, store.a1)).length).toBeGreaterThan(0);
+      expect(await svc.listMaterialOrders(db, id.staff2, store.a1, "2026-10-01", "2026-10-31")).toHaveLength(0);   // 他店は見えない
+      await expect(svc.addMaterialOrder(db, id.staff2, store.a1, inp)).rejects.toThrow(svc.ForbiddenError);
+      const mine = await svc.materialSummaryData(db, id.staff2, "2026-01-01", "2026-12-31");
+      expect(mine.orders.some((o) => o.storeId === store.a1)).toBe(false);   // 自分のお店（a2）の分だけ
     } finally { await svc.setMaterialManager(db, id.office, id.staff2, false); }
-    expect(await svc.listMaterialOrders(db, id.staff2, store.a1, "2026-10-01", "2026-10-31")).toHaveLength(0);
+    await svc.setMaterialManager(db, id.office, id.staff, true);   // staff は a1 の人
+    try {
+      expect((await svc.listMaterialOrders(db, id.staff, store.a1, "2026-10-01", "2026-10-31")).length).toBeGreaterThan(0);
+      const all = await svc.materialSummaryData(db, id.staff, "2026-01-01", "2026-12-31");
+      expect(all.orders.some((o) => o.storeId === store.a1)).toBe(true);
+      expect(all.orders.some((o) => o.storeId === store.a2)).toBe(false);   // 他店は入らない
+      expect((await svc.listMaterialLog(db, id.staff, store.a1)).length).toBeGreaterThan(0);
+    } finally { await svc.setMaterialManager(db, id.office, id.staff, false); }
     await expect(svc.materialSummaryData(db, id.staff2, "2026-01-01", "2026-12-31")).rejects.toThrow(svc.ForbiddenError);
   });
   it("画像は今月と先月の2か月分だけ残り、それより前は消える。金額や明細の数字は残る", async () => {

@@ -105,12 +105,12 @@ describe("棚卸しを始める・数量を入れる", () => {
     });
     await as(U.office, async () => expect(await fails(`update products set cost_price = 1000, name = 'シャンプー' where id='${P1}'`)).toBe(false));
   });
-  it("見られる範囲: 店長は他店も見られるが入力できない。他社は見えない", async () => {
+  it("見られる範囲: 店長は自分のお店だけ。他店は見えず入力もできない。他社は見えない", async () => {
     await admin();
     await db.exec(`insert into stocktakes (id, company_id, store_id, kind, taken_on) values ('${ST2}','${CO_A}','${S2}','supply','2026-10-31') on conflict do nothing`);
     await db.exec(line(ST2, S2, P3, "カラー剤", 800, 2));
     await as(U.mgr1, async () => {
-      expect((await rows("select distinct store_id from stocktake_lines")).length).toBe(2);
+      expect((await rows("select distinct store_id from stocktake_lines")).length).toBe(1);   // 店長は自分のお店だけ
       expect(await fails(`update stocktake_lines set quantity = 5 where stocktake_id='${ST2}'`)).toBe(true);
     });
     await as(U.officeB, async () => expect(await rows("select 1 from stocktake_lines")).toHaveLength(0));

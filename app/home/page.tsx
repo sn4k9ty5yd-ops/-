@@ -37,7 +37,7 @@ function Cards() {
     { big: true, href: "/mentor", title: "メンター", sub: "悩みを相談できるチャット・面談シート（店長に提出）", show: !me.displayOnly },
     { big: true, href: "/meetings", title: "ミーティング", sub: "会議のボイスメモ → 文字起こし・議事録・要約・マインドマップ・AI会議（自分のお店の分）", show: !me.displayOnly },
     { big: true, href: "/material", title: "材料費・在庫", sub: "発注額・在庫・業務に回した分・スタッフ購入", show: true },
-    { href: "/material/summary", title: "材料費統括", sub: "月ごと・お店ごと・商品ごとの割合（管理者・材料担当）", show: me.level === 4 || !!me.materialManager },
+    { href: "/material/summary", title: "材料費統括", sub: "月ごと・商品ごとの割合（正美さん以上は全店・材料担当は自分のお店だけ）", show: me.level === 4 || !!me.materialManager },
     { big: true, href: "/my-lessons", title: "自分のレッスン", sub: "何をしたか・何人目か・かかった時間をカレンダーで見る", show: me.rank === "assistant" },
     { href: "/lessons", title: "レッスン記録", sub: "アシスタントが今日何をしたかを、ボタンで記録・報告", show: (me.level >= 3 || !!me.eduLead) && !isOfficeOnly(me) },
     { big: true, href: "/commute", title: commute.toCheck ? `定期券の提出（確認まち${commute.toCheck}件）` : commute.pending ? "定期券の提出（まだです）" : "定期券の提出", sub: "毎月1回、定期券の写真を出す（名簿の人だけ・正美さんが確認）", show: commute.show },
