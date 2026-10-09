@@ -585,6 +585,13 @@ export async function applyRequests(db: Database, userId: string, periodId: stri
               case r.kind when 'paid' then 'paid' when 'other' then 'other' else 'holiday' end
          from time_off_requests r join memberships m on m.id = r.membership_id
         where r.period_id = $1 and r.store_id = $2 and m.status = 'active' and m.on_shift
+       on conflict (membership_id, day) do nothing returning id`, [periodId, storeId])).rows.length
+    + (await q.query(
+      `insert into shifts (company_id, store_id, period_id, membership_id, day, kind)
+       select p.company_id, p.store_id, $1, p.membership_id, p.day, 'paid'
+         from leave_plans p join leave_windows w on w.id = p.window_id and w.standing join memberships m on m.id = p.membership_id
+        where p.store_id = $2 and m.status = 'active' and m.on_shift
+          and p.day between (select start_date from shift_periods where id = $1) and (select end_date from shift_periods where id = $1)
        on conflict (membership_id, day) do nothing returning id`, [periodId, storeId])).rows.length);
 }
 
@@ -2081,11 +2088,30 @@ export async function decideLeaveChange(db: Database, userId: string, id: string
     if (st === "rejected" && me.level === 3) await leaveNotify(db, c.company_id, [c.membership_id], "有給の変更が、店長の確認で却下されました", `${what}${comment ? `　コメント：${comment.slice(0, 80)}` : ""}`, "/leave");
     else if (st === "pending_office") await leaveNotify(db, c.company_id, await officeIds(db, c.company_id), `有給の変更：店長が確認しました（${c.name} さん）`, `${what}。許可してください。`, "/leave/review");
     else if (st === "approved" || st === "rejected") {
+      if (st === "approved") await reflectApprovedLeave(db, c.company_id, c.membership_id, c.store_id, c.from_day, c.to_day).catch(() => undefined);
       await leaveNotify(db, c.company_id, [c.membership_id], st === "approved" ? "有給の変更が許可されました" : "有給の変更が却下されました", `${what}${comment ? `　コメント：${comment.slice(0, 80)}` : ""}`, "/leave");
       await leaveNotify(db, c.company_id, (await managersOf(db, c.store_id, c.company_id)).filter((x) => x !== c.membership_id), `有給の変更が${st === "approved" ? "許可" : "却下"}されました（${c.name} さん）`, what, "/leave/review");
     }
   }
   return st;
+}
+/** 許可された有給を、シフトカレンダー（出勤簿予定）と出勤簿確定に反映する。やめる日は、有給のときだけ消す */
+export async function reflectApprovedLeave(db: Database, companyId: string, memberId: string, storeId: string, fromDay: string | null, toDay: string | null): Promise<void> {
+  const periodOf = async (day: string) => (await db.query<{ id: string }>("select id from shift_periods where company_id = $1 and $2::date between start_date and end_date", [companyId, day])).rows[0]?.id;
+  if (fromDay) {
+    await db.query("delete from shifts where membership_id = $1 and day = $2::date and kind = 'paid'", [memberId, fromDay]);
+    await db.query("delete from attendance_records where membership_id = $1 and day = $2::date and kind = 'paid'", [memberId, fromDay]);
+  }
+  if (toDay) {
+    const pid = await periodOf(toDay);
+    if (!pid) return;            // その日の期間がまだない → 期間ができたとき、シフトに自動で入る（applyRequests）
+    await db.query(
+      `insert into shifts (company_id, store_id, period_id, membership_id, day, kind, updated_by) values ($1,$2,$3,$4,$5::date,'paid',$4)
+       on conflict (membership_id, day) do update set kind = 'paid', start_time = null, end_time = null, break_min = null, store_id = excluded.store_id, period_id = excluded.period_id, updated_at = now()`,
+      [companyId, storeId, pid, memberId, toDay]);
+    await db.query(
+      `update attendance_records set kind = 'paid', clock_in = null, clock_out = null, break_minutes = 0, source = 'shift', updated_at = now() where membership_id = $1 and day = $2::date`, [memberId, toDay]);
+  }
 }
 export async function cancelLeaveChange(db: Database, userId: string, id: string): Promise<void> {
   const ok = (await asUser(db, userId, (q) => q.query<{ ok: boolean }>("select public.leave_cancel($1) as ok", [id]))).rows[0].ok;
@@ -2842,6 +2868,13 @@ export async function logActivity(db: Database, userId: string, path: string, bo
   const level = tierOf({ level: u.level, appOwner: u.app_owner, execView: u.exec_view });
   await db.query("insert into activity_log (company_id, user_id, user_name, user_level, store_name, area, what, path) values ($1,$2,$3,$4,$5,$6,$7,$8)", [u.company_id, userId, u.name, `レベル${level}`, storeName, area, what, path]);
   if (Date.now() - lastActivityPurge > 3600000) { lastActivityPurge = Date.now(); await db.query("delete from activity_log where at < now() - interval '1100 days'"); }
+  if (isOfficeReport(path, body) && u.level < 4 && !(area === "有給" && body?.action === "decide")) {
+    const m = path.match(/^\/api\/stocktakes\/([0-9a-f-]{36})/);
+    const link = area === "シフト" ? "/admin/periods" : area === "出勤簿" ? "/admin/attendance" : area === "棚卸し" ? (m ? `/admin/stocktake?id=${m[1]}` : "/admin/stocktake") : area === "売上" ? "/sales" : area === "有給" ? "/leave/review" : area === "材料費" ? "/material" : "/home";
+    await db.query("insert into office_inbox (company_id, from_id, from_name, store_name, area, title, link) values ($1,$2,$3,$4,$5,$6,$7)",
+      [u.company_id, userId, u.name, storeName, area, `${u.name}さん（${storeName ?? ""}）が「${area}」を${what}しました`, link]);
+    await db.query("delete from office_inbox where at < now() - interval '400 days'");
+  }
   if (isOfficeReport(path, body)) {
     const owners = (await db.query<{ id: string }>("select id from memberships where company_id = $1 and app_owner and status = 'active'", [u.company_id])).rows.map((r) => r.id);
     const title = `${u.name}さん（${storeName ?? ""}）が「${area}」を${what}しました`;
@@ -3108,4 +3141,21 @@ export async function askAssistant(db: Database, userId: string, input: { questi
     // AIが混んでいる・回数がいっぱいのときも、近い説明は出せる
     return { answer: `（いま、AIがつかれています。近い説明を出します）\n\n${localAnswer(q, topics)}`, ai: false };
   }
+}
+
+// ------------------------------------------------------------------ スタッフからの通知（事務員さん以上）
+export interface OfficeInboxRow { id: number; fromName: string; storeName: string | null; area: string; title: string; link: string; at: string; done: boolean; doneBy: string | null }
+export async function listOfficeInbox(db: Database, userId: string): Promise<{ items: OfficeInboxRow[]; open: number }> {
+  const me = await getMe(db, userId);
+  if (!me || me.level < 4) throw new ForbiddenError();
+  const items = (await db.query<OfficeInboxRow>(
+    `select id, from_name as "fromName", store_name as "storeName", area, title, link, to_char(at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as at, (done_at is not null) as done, done_by as "doneBy"
+       from office_inbox where company_id = $1 order by id desc limit 150`, [me.companyId])).rows;
+  return { items, open: items.filter((i) => !i.done).length };
+}
+export async function markOfficeInboxDone(db: Database, userId: string, ids?: number[]): Promise<void> {
+  const me = await getMe(db, userId);
+  if (!me || me.level < 4) throw new ForbiddenError();
+  if (ids?.length) await db.query("update office_inbox set done_at = now(), done_by = $3 where company_id = $1 and done_at is null and id = any($2::bigint[])", [me.companyId, ids, me.name]);
+  else await db.query("update office_inbox set done_at = now(), done_by = $2 where company_id = $1 and done_at is null", [me.companyId, me.name]);
 }

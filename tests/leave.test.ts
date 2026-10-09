@@ -105,9 +105,20 @@ describe("有給の提出と変更の申請", () => {
     const standing = (await svc.listLeaveWindows(db, id.b)).find((w) => w.standing)!;
     expect(standing.label).toBe("有給申請");
     expect((await svc.listLeaveWindows(db, id.a)).filter((w) => w.standing)).toHaveLength(1);           // 二重に作らない
+    const co = (await db.query<{ company_id: string }>("select company_id from memberships where id = $1", [id.b])).rows[0].company_id;
+    await db.query("insert into shift_periods (company_id, start_date, end_date, label) values ($1,'2031-05-01','2031-05-31','テスト')", [co]);
     const c = await svc.requestLeaveChange(db, id.b, standing.id, null, "2031-05-10", "家族の予定");
     expect(await svc.decideLeaveChange(db, id.mgrB, c, true, "")).toBe("pending_office");
     expect(await svc.decideLeaveChange(db, id.office, c, true, "")).toBe("approved");
     expect((await svc.getMyLeavePlan(db, id.b, standing.id)).days).toEqual(["2031-05-10"]);
+    // 許可すると、シフトカレンダー（出勤簿予定）に「有給」で入る
+    expect((await db.query<{ kind: string }>("select kind from shifts where membership_id = $1 and day = '2031-05-10'", [id.b])).rows).toEqual([{ kind: "paid" }]);
+    // 事務員さん宛ての提出・報告は「スタッフからの通知」に集まる（事務員さん以上だけが見える）
+    await svc.logActivity(db, id.a, "/api/paid-leave", { action: "request" });
+    const box = await svc.listOfficeInbox(db, id.office);
+    expect(box.items[0]).toMatchObject({ fromName: "山田", area: "有給", link: "/leave/review", done: false });
+    await expect(svc.listOfficeInbox(db, id.mgr)).rejects.toThrow(svc.ForbiddenError);
+    await svc.markOfficeInboxDone(db, id.office, [box.items[0].id]);
+    expect((await svc.listOfficeInbox(db, id.office)).open).toBe(0);
   });
 });

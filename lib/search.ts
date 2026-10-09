@@ -7,6 +7,7 @@ export interface SearchItem { title: string; sub: string; href: string; icon: st
 
 
 export const SEARCH_ITEMS: SearchItem[] = [
+  { icon: "📨", title: "スタッフからの通知", sub: "スタッフからの提出・報告が集まる画面（押すとその画面へ）", href: "/staff-notices", keys: "スタッフからの通知 通知 提出 報告 申請 有給 事務員 まとめ", show: (me) => me.level >= 4 },
   { icon: "📅", title: "シフトを見る", sub: "今日だれが出勤か・月のシフト・みんなの休み", href: "/shifts", keys: "シフト 出勤 今日 カレンダー 誰 だれ 休み みんなの休み 見る" },
   { icon: "🌴", title: "希望休を出す", sub: "休みたい日を出す（公休・有給）", href: "/requests", keys: "希望休 休みたい 休み 公休 有給 申請 出す", show: (me) => !me.displayOnly },
   { icon: "🏝️", title: "有給申請", sub: "有給を取りたい日を、いつでも申請（店長が確認 → 事務員さんが許可）", href: "/leave", keys: "有給 ゆうきゅう 提出 変更 申請 休暇", show: (me) => !me.displayOnly },

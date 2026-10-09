@@ -12,7 +12,14 @@ self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const url = (event.notification.data && event.notification.data.url) || "/home";
   event.waitUntil(self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
-    for (const c of list) { if ("focus" in c) { c.navigate(url).catch(() => {}); return c.focus(); } }
+    for (const c of list) {
+      if ("focus" in c) {
+        // 開いている画面を、通知の先へ移す（iPhoneは navigate が効かないことがあるので、画面に頼んで移ってもらう）
+        const full = new URL(url, self.location.origin).href;
+        c.postMessage({ type: "go", url: full });
+        return c.focus().then((f) => (f && f.navigate ? f.navigate(full).catch(() => {}) : undefined)).catch(() => {});
+      }
+    }
     return self.clients.openWindow(url);
   }));
 });

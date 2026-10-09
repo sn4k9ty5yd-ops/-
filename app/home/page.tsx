@@ -15,6 +15,7 @@ function Cards() {
   const router = useRouter();
   useEffect(() => { if (me.displayOnly) router.replace("/shifts"); }, [me.displayOnly, router]);   // お店のiPadは、すぐシフトの画面へ
   const [unread, setUnread] = useState(0);
+  const [staffN, setStaffN] = useState(0);
   const [leaveTodo, setLeaveTodo] = useState(0);
   useEffect(() => { if (me.level >= 3) api<{ todo: unknown[] }>("/api/paid-leave?review=1").then((r) => setLeaveTodo(r.todo.length)).catch(() => {}); }, [me.level]);
   const [push, setPush] = useState<PushState | null>(null);
@@ -22,11 +23,13 @@ function Cards() {
   useEffect(() => { api<{ id: string; name: string }[]>("/api/stores").then((l) => setMyStore(l.find((x) => x.id === me.storeId)?.name ?? "")).catch(() => {}); }, [me.storeId]);
   useEffect(() => { pushState().then(setPush).catch(() => {}); }, []);
   useEffect(() => { if (!me.displayOnly) api<{ unread: number }>("/api/notifications").then((r) => setUnread(r.unread)).catch(() => {}); }, [me.displayOnly]);
+  useEffect(() => { if (me.level >= 4) api<{ open: number }>("/api/office-inbox").then((r) => setStaffN(r.open)).catch(() => {}); }, [me.level]);
   const [q, setQ] = useState("");
   if (me.displayOnly) return null;
   const hits = q.trim() ? searchAll(q, me) : [];
   const cards = [
     { big: true, href: "/inbox", title: unread ? `お知らせ（${unread}件）` : "お知らせ", sub: unread ? "新しいお知らせがあります（休みのかぶりなど）" : "休みのかぶりや、話し合いの書き込み", show: true },
+    { big: true, href: "/staff-notices", title: staffN ? `スタッフからの通知（${staffN}件）` : "スタッフからの通知", sub: "シフト・出勤簿・棚卸し・売上・有給などの提出・報告が集まります（押すと、その画面へ）", show: me.level >= 4 },
     { big: true, href: "/manual", title: "マニュアル", sub: "教育・営業マニュアル、技術動画、技術評価", show: true },
     { big: true, href: "/shifts", title: leaveTodo ? `シフト（有給の確認待ち${leaveTodo}件）` : "シフト", sub: me.level >= 2 ? "見る・希望休・有給・次のシフトを作る・出勤簿" : "シフトを見る・希望休を出す・有給の提出と変更", show: true },
     { big: true, href: "/mentor", title: "メンター", sub: "悩みを相談できるチャット・面談シート（店長に提出）", show: !me.displayOnly },
@@ -51,7 +54,7 @@ function Cards() {
     { href: "/admin/stores", title: "店舗の編集", sub: "新店舗の追加・名前の変更・閉店（管理者のみ）", show: me.level >= 4 },
   ].filter((c) => c.show);
   const ICON: Record<string, [string, number, string]> = {
-    "/inbox": ["🔔", 8, ""], "/meetings": ["🎙️", 300, ""], "/mentor": ["💬", 330, ""], "/manual": ["📖", 265, ""], "/shifts": ["📅", 212, ""], "/requests": ["🌴", 168, ""], "/material": ["🧴", 28, ""],
+    "/inbox": ["🔔", 8, ""], "/staff-notices": ["📨", 20, ""], "/meetings": ["🎙️", 300, ""], "/mentor": ["💬", 330, ""], "/manual": ["📖", 265, ""], "/shifts": ["📅", 212, ""], "/requests": ["🌴", 168, ""], "/material": ["🧴", 28, ""],
     "/material/summary": ["📊", 28, "材料・在庫"], "/my-lessons": ["🎓", 262, ""], "/leave": ["🏝️", 172, ""], "/my-sales": ["📈", 140, ""], "/sales": ["💴", 140, "シフト・勤怠"], "/lessons": ["🎓", 262, "スタッフ・設定"], "/lesson-check": ["📝", 262, "スタッフ・設定"], "/admin/stock": ["📦", 150, "材料・在庫"], "/admin/stocktake": ["📋", 190, "材料・在庫"], "/admin/products": ["🏷️", 320, "材料・在庫"],
     "/admin/periods": ["🗂️", 212, "シフト・勤怠"], "/admin/shifts": ["✏️", 212, "シフト・勤怠"], "/admin/requests": ["👥", 168, "シフト・勤怠"], 
     "/admin/staff": ["🧑‍🤝‍🧑", 340, "スタッフ・設定"], "/admin/settings": ["⚙️", 220, "スタッフ・設定"], "/admin/activity": ["🕵️", 20, "スタッフ・設定"], "/security": ["🔐", 8, "スタッフ・設定"], "/admin/records": ["🧾", 45, "スタッフ・設定"], "/admin/guide": ["📘", 205, "スタッフ・設定"], "/help": ["❓", 200, ""], "/admin/feedback": ["💌", 330, "スタッフ・設定"], "/admin/stores": ["🏬", 280, "スタッフ・設定"],

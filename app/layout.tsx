@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { Assistant } from "./Assistant";
 import { ViewAs } from "./ViewAs";
+import { NotifyGo } from "./NotifyGo";
 
 export const metadata: Metadata = {
   title: "ALBUM",
@@ -14,7 +15,7 @@ export const viewport: Viewport = { width: "device-width", initialScale: 1, them
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="ja">
-      <body>{children}<Assistant /><ViewAs /></body>
+      <body>{children}<Assistant /><ViewAs /><NotifyGo /></body>
     </html>
   );
 }

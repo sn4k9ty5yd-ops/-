@@ -30,7 +30,7 @@ const STATUS: Record<string, string> = { collecting: "希望休の受付", close
 const STAFF_SUB: Record<string, string> = { disable: "退職にした", level: "レベルを変えた", passcode: "パスコードを再発行", profile: "名前・番号を変えた", release: "番号を空けた", "retire-on": "退職予定日を決めた", rank: "ランクを変えた", move: "所属店舗を変えた", onshift: "シフトに入る/外す", "edu-lead": "教育担当を変えた", evaluate: "技術評価の担当を変えた", "material-manager": "材料担当を変えた", bulk: "まとめて登録", disabled: "退職にした" };
 
 /** 記録しない操作（自分のパスコード・通知・ログアウトなど） */
-export const NOT_LOGGED = /^\/api\/(security|notifications|push\/|logout|me$|mentor|interviews)/;   // メンターと面談は、使ったことも記録しない
+export const NOT_LOGGED = /^\/api\/(security|notifications|office-inbox|push\/|logout|me$|mentor|interviews)/;   // メンターと面談は、使ったことも記録しない
 
 export function describeActivity(path: string, body: Record<string, unknown> | null): { area: string; what: string } {
   const area = AREAS.find(([re]) => re.test(path))?.[1] ?? path.replace(/^\/api\//, "");

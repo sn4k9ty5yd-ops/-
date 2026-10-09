@@ -118,7 +118,7 @@ function Page() {
                   {list.length === 0 && show === "off" ? <small className="sub">なし</small> : (
                     <div className="names">
                       {list.map((s, i) => (
-                        <span key={s.id} className={s.membershipId === me.id ? "me" : ""}>{i > 0 && "・"}{short.get(s.membershipId) ?? ""}{show === "off" && s.kind === "paid" ? "(有)" : ""}</span>
+                        <span key={s.id} className={s.membershipId === me.id ? "me" : ""}>{i > 0 && "・"}{short.get(s.membershipId) ?? ""}{show === "off" && s.kind === "paid" ? "🈶" : ""}</span>
                       ))}
                     </div>
                   )}
