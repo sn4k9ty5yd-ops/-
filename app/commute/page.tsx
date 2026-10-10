@@ -59,7 +59,21 @@ function Page() {
         <div className="card">
           <b style={{ fontSize: 18 }}>あなたの提出（{ml(cur)}ぶん）</b>
           <p style={{ margin: "6px 0" }}>{d.mine ? ST[d.mine.status] : d.coveredUntil ? `🟦 今月は出さなくて大丈夫です（${ymj(d.coveredUntil)}まで、前に出した定期券の期間です）` : d.overdue ? "🔴 期限（" + d.dueDate.slice(5).replace("-", "/") + "）をすぎています。早めに出してください" : "⚪ まだ出していません（" + d.dueDate.slice(5).replace("-", "/") + " まで）"}</p>
-          {d.myPaid?.until && <p className="sub" style={{ margin: "4px 0" }}>📅 <b>{reiwa(d.myPaid.until)}分まで</b>、もらっています{d.myPaid.note ? `（${d.myPaid.note}）` : ""}</p>}
+          {d.myPaid?.until && null}
+          {d.onRoster && (
+            paidEdit?.id === "me" ? (
+              <div style={{ margin: "6px 0" }}>
+                <div className="sub">定期券は、何月何日までですか？</div>
+                <DateStepper label="定期券の期限" value={paidEdit.until} onChange={(v) => setPaidEdit({ ...paidEdit, until: v })} />
+                <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+                  <button style={{ width: "auto", margin: 0 }} disabled={busy} onClick={async () => { await act({ action: "paid", memberId: me.id, until: paidEdit.until, note: "" }, "定期券の期限を書きました"); setPaidEdit(null); }}>保存</button>
+                  <button className="ghost" style={{ width: "auto", margin: 0 }} onClick={() => setPaidEdit(null)}>やめる</button>
+                </div>
+              </div>
+            ) : (
+              <p className="sub" style={{ margin: "4px 0" }}>📅 定期券の期限：{d.myPaid?.until ? <b>{reiwa(d.myPaid.until)}まで</b> : "未記入"}　<button className="ghost" style={{ width: "auto", margin: 0, padding: "2px 10px" }} onClick={() => setPaidEdit({ id: "me", until: d.myPaid?.until ?? todayJst(), note: "" })}>{d.myPaid?.until ? "直す" : "書く"}</button>{d.myPaid?.until ? "（期限の1週間前から、毎日お知らせします）" : ""}</p>
+            )
+          )}
           {d.mine?.status === "redo" && <p className="err">{d.mine.note || "写真が見づらいなど、出し直しをお願いします。"}</p>}
           {d.mine?.status === "checked" ? <p className="sub">確認ずみです。ありがとうございました。</p> : (
             <>
@@ -107,17 +121,17 @@ function Page() {
                 <div style={{ marginTop: 4 }}>
                   {paidEdit?.id === r.membershipId ? (
                     <div className="card" style={{ margin: "6px 0" }}>
-                      <div className="sub">何日分まで、もらっていますか？</div>
-                      <DateStepper label="何日分まで" value={paidEdit.until} onChange={(v) => setPaidEdit({ ...paidEdit, until: v })} />
-                      <input placeholder="ひとこと（任意。例：10月分の定期代まで）" value={paidEdit.note} onChange={(e) => setPaidEdit({ ...paidEdit, note: e.target.value })} style={{ margin: "6px 0" }} />
+                      <div className="sub">定期券は、何月何日までですか？（期限）</div>
+                      <DateStepper label="定期券の期限" value={paidEdit.until} onChange={(v) => setPaidEdit({ ...paidEdit, until: v })} />
+                      <input placeholder="ひとこと（任意）" value={paidEdit.note} onChange={(e) => setPaidEdit({ ...paidEdit, note: e.target.value })} style={{ margin: "6px 0" }} />
                       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                        <button style={{ width: "auto", margin: 0 }} disabled={busy} onClick={async () => { await act({ action: "paid", memberId: r.membershipId, until: paidEdit.until, note: paidEdit.note }, "もらっている日を書きました"); setPaidEdit(null); }}>保存</button>
-                        {r.paidUntil && <button className="ghost" style={{ width: "auto", margin: 0, color: "#d70015" }} disabled={busy} onClick={async () => { await act({ action: "paid", memberId: r.membershipId, until: null }, "もらっている日を消しました"); setPaidEdit(null); }}>消す</button>}
+                        <button style={{ width: "auto", margin: 0 }} disabled={busy} onClick={async () => { await act({ action: "paid", memberId: r.membershipId, until: paidEdit.until, note: paidEdit.note }, "定期券の期限を書きました"); setPaidEdit(null); }}>保存</button>
+                        {r.paidUntil && <button className="ghost" style={{ width: "auto", margin: 0, color: "#d70015" }} disabled={busy} onClick={async () => { await act({ action: "paid", memberId: r.membershipId, until: null }, "定期券の期限を消しました"); setPaidEdit(null); }}>消す</button>}
                         <button className="ghost" style={{ width: "auto", margin: 0 }} onClick={() => setPaidEdit(null)}>やめる</button>
                       </div>
                     </div>
                   ) : (
-                    <span className="sub">📅 {r.paidUntil ? <><b>{reiwa(r.paidUntil)}分まで</b>、もらっています{r.paidNote ? `（${r.paidNote}）` : ""}</> : "何日分まで、もらっているか：未記入"}　
+                    <span className="sub">📅 定期券の期限：{r.paidUntil ? <><b>{reiwa(r.paidUntil)}まで</b>{r.paidNote ? `（${r.paidNote}）` : ""}</> : "未記入"}　
                       <button className="ghost" style={{ width: "auto", margin: 0, padding: "2px 10px" }} onClick={() => setPaidEdit({ id: r.membershipId, until: r.paidUntil ?? todayJst(), note: r.paidNote })}>{r.paidUntil ? "直す" : "書く"}</button></span>
                   )}
                 </div>

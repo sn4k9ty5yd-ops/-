@@ -3890,6 +3890,20 @@ export async function runCommuteReminders(db: Database, force = false, at?: stri
     for (const uid of todo) await db.query("insert into notifications (company_id, user_id, kind, title, body, link) values ($1,$2,'commute',$3,$4,'/commute')", [co.company_id, uid, title, body]);
     sent += await pushToUsers(db, todo, { title, body, url: "/commute", tag: "commute-remind" });
   }
+  // 定期券の期限（何月何日まで）の1週間前から、期限の日まで、毎日1回
+  const near = (await db.query<{ id: string; company_id: string; until: string; left: number }>(
+    `select m.id, r.company_id, to_char(r.paid_until, 'YYYY-MM-DD') as until, (r.paid_until - $1::date)::int as left
+       from commute_roster r join memberships m on m.id = r.membership_id
+      where m.status = 'active' and not m.display_only and r.paid_until is not null and r.paid_until >= $1::date and r.paid_until <= $1::date + 7
+        and not exists (select 1 from commute_expiry_log l where l.day = $1::date and l.membership_id = m.id)`, [today])).rows;
+  for (const n of near) {
+    await db.query("insert into commute_expiry_log (day, membership_id) values ($1::date, $2) on conflict do nothing", [today, n.id]);
+    const md_ = `${Number(n.until.slice(5, 7))}月${Number(n.until.slice(8, 10))}日`;
+    const title = n.left === 0 ? `定期券の期限は、今日（${md_}）までです` : `定期券の期限まで、あと${n.left}日（${md_}まで）`;
+    const body = "新しい定期券を買ったら、アプリの「定期券の提出」で、写真を出して、期限の日を直してください。";
+    await db.query("insert into notifications (company_id, user_id, kind, title, body, link) values ($1,$2,'commute',$3,$4,'/commute')", [n.company_id, n.id, title, body]);
+    sent += await pushToUsers(db, [n.id], { title, body, url: "/commute", tag: "commute-expiry" });
+  }
   return { sent };
 }
 

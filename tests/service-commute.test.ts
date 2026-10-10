@@ -33,12 +33,12 @@ describe("定期券の提出", () => {
     expect((await svc.getCommute(d, u.s1)).mine).toMatchObject({ months: 3 });
     expect((await svc.getCommute(d, u.s1)).mine?.status).toBe("submitted");
   });
-  it("「何日分まで、もらっている」: 店長(自店)と正美さんが書ける。本人は自分のを見られる。他店の店長・本人は書けない", async () => {
+  it("定期券の期限（何月何日まで）: 本人・店長(自店)・正美さんが書ける。ほかのスタッフ・他店の店長は書けない", async () => {
     await svc.setCommutePaid(d, u.mgrA, u.s1, "2026-12-31", "12月分まで");
     expect((await svc.getCommute(d, u.mgrA)).rows[0]).toMatchObject({ paidUntil: "2026-12-31", paidNote: "12月分まで" });
     expect((await svc.getCommute(d, u.s1)).myPaid).toEqual({ until: "2026-12-31", note: "12月分まで" });
     await expect(svc.setCommutePaid(d, u.mgrB, u.s1, "2027-01-31")).rejects.toThrow(svc.ForbiddenError);
-    await expect(svc.setCommutePaid(d, u.s1, u.s1, "2027-01-31")).rejects.toThrow(svc.ForbiddenError);
+    await expect(svc.setCommutePaid(d, u.s2, u.s1, "2027-01-31")).rejects.toThrow(svc.ForbiddenError);      // ほかのスタッフは書けない
     await expect(svc.setCommutePaid(d, u.mgrA, u.s2, "2027-01-31")).rejects.toThrow("名簿");
     await svc.setCommutePaid(d, u.office, u.s1, "2027-03-15");
     expect((await svc.getCommute(d, u.s1)).myPaid?.until).toBe("2027-03-15");
@@ -102,5 +102,24 @@ describe("定期券の提出", () => {
     expect((await d.query("select 1 from notifications where kind='commute' and user_id = $1 and title like '%すぎて%'", [u.s1])).rows).toHaveLength(0);   // s1は確認ずみ
     await svc.setCommuteRoster(d, u.mgrA, u.s1, false);
     expect((await svc.getCommute(d, u.mgrA)).rows).toHaveLength(0);
+  });
+
+  it("定期券の期限の1週間前から、期限の日まで、毎日1回通知が届く（1日1回だけ。期限をすぎたら止まる）", async () => {
+    const day = (n: number) => new Date(Date.UTC(2030, 5, 15 + n)).toISOString().slice(0, 10);       // 6/15を期限にする
+    await svc.setCommuteRoster(d, u.mgrA, u.s1, true);
+    await svc.setCommutePaid(d, u.s1, u.s1, "2030-06-15");
+    const cnt = async () => (await d.query<{ n: number }>("select count(*)::int as n from notifications where kind = 'commute' and user_id = $1 and title like '%期限%'", [u.s1])).rows[0].n;
+    const base = await cnt();
+    await svc.runCommuteReminders(d, true, `${day(-8)}T10:00:00Z`.replace("Z", ""));                 // 8日前: まだ
+    expect(await cnt()).toBe(base);
+    await svc.runCommuteReminders(d, true, `${day(-7)}T10:00:00`);                                   // 7日前: 1回目
+    await svc.runCommuteReminders(d, true, `${day(-7)}T11:00:00`);                                   // 同じ日: 増えない
+    expect(await cnt()).toBe(base + 1);
+    await svc.runCommuteReminders(d, true, `${day(-1)}T10:00:00`);
+    await svc.runCommuteReminders(d, true, `${day(0)}T10:00:00`);
+    expect(await cnt()).toBe(base + 3);
+    expect((await d.query<{ title: string }>("select title from notifications where user_id = $1 and title like '%今日%' limit 1", [u.s1])).rows).toHaveLength(1);
+    await svc.runCommuteReminders(d, true, `${day(1)}T10:00:00`);                                    // 期限のあと: 止まる
+    expect(await cnt()).toBe(base + 3);
   });
 });
