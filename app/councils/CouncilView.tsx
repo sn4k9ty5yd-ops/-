@@ -45,7 +45,7 @@ function View({ priv }: { priv: boolean }) {
   return (
     <main className="wide">
       <Link href="/home" className="back">← ホーム</Link>
-      <h1>{priv ? "🔒 AI会議（僕専用）" : "🤖 AI会議"}</h1>
+      <h1>{priv ? "🔒 AI会議（僕専用）" : "🤖 ミーティング"}</h1>
       <SubTabs items={meetingTabs(!!me.appOwner)} />
       <p className="sub">{priv ? "あなただけが読める、AI会議です。ほかの人（鬼塚さん・正美さん・店長）には、見えません。" : "課題（テーマ）を入れると、3人の人格が5回会話して、論点・結論・行動計画をまとめます。自分のお店の人は、記録を読めます。"}</p>
       {!priv && me.level === 4 && <select aria-label="お店" value={storeId} onChange={(e) => setStoreId(e.target.value)} style={{ marginBottom: 10 }}>{stores.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select>}
@@ -66,8 +66,8 @@ function View({ priv }: { priv: boolean }) {
           )}
           <p className="hint" style={{ margin: "6px 0 0" }}>AIを使うと、テーマの文章が外部のAIのサービス（Google等）に送られます。個人の名前や、お金の細かい数字は、なるべく入れないでください。</p>
         </div>
-      ) : <p className="hint">{priv ? "" : "AI会議をひらけるのは、店長と正美さんです。ここでは記録を読めます。"}</p>}
-      {items && items.length === 0 && <p className="hint">まだAI会議の記録がありません。</p>}
+      ) : <p className="hint">{priv ? "" : "ミーティングをひらけるのは、店長と正美さんです。ここでは記録を読めます。"}</p>}
+      {items && items.length === 0 && <p className="hint">まだ記録がありません。</p>}
       {(items ?? []).map((x) => (
         <div key={x.id} className="card" style={{ marginTop: 10 }}>
           <b>テーマ：{x.theme}</b> <span className="sub">{x.createdAt.slice(0, 16)}　{x.byName ?? ""}{x.fromMeeting ? "　（議事録の中でひらいた分）" : ""}</span>

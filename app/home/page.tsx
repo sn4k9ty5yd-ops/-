@@ -36,7 +36,7 @@ function Cards() {
     { big: true, href: "/shifts", title: leaveTodo ? `シフト（有給の確認待ち${leaveTodo}件）` : "シフト", sub: me.level >= 2 ? "見る・希望休・有給・次のシフトを作る・出勤簿" : "シフトを見る・希望休を出す・有給の提出と変更", show: true },
     { big: true, href: "/mentor", title: "メンター", sub: "悩みを相談できるチャット・面談シート（店長に提出）", show: !me.displayOnly },
     { big: true, href: "/meetings", title: "議事録", sub: "会議のボイスメモ → 文字起こし・議事録・要約・マインドマップ（自分のお店の分）", show: !me.displayOnly },
-    { big: true, href: "/councils", title: "AI会議", sub: "課題（テーマ）を入れると、AIが会議して、結論と行動計画をまとめます", show: !me.displayOnly },
+    { big: true, href: "/councils", title: "ミーティング", sub: "課題（テーマ）を入れると、AIが会議して、結論と行動計画をまとめます", show: !me.displayOnly },
     { big: true, href: "/councils/private", title: "AI会議（僕専用）", sub: "あなただけが読める、AI会議", show: !!me.appOwner },
     { big: true, href: "/material", title: "材料費・在庫", sub: "発注額・在庫・業務に回した分・スタッフ購入", show: true },
     { href: "/material/summary", title: "材料費統括", sub: "月ごと・商品ごとの割合（正美さん以上は全店・材料担当は自分のお店だけ）", show: me.level === 4 || !!me.materialManager },

@@ -15,7 +15,7 @@ const AREAS: [RegExp, string][] = [
   [/^\/api\/lesson-check/, "レッスンチェック"],
   [/^\/api\/manual/, "マニュアル"],
   [/^\/api\/meetings/, "ミーティング"],
-  [/^\/api\/councils/, "AI会議"],
+  [/^\/api\/councils/, "ミーティング"],
   [/^\/api\/staff/, "スタッフ管理"],
   [/^\/api\/stores/, "店舗"],
   [/^\/api\/(settings|notice-settings)/, "設定"],

@@ -3111,7 +3111,7 @@ export async function runCouncil(db: Database, userId: string, input: { storeId?
   } else {
     if (!priv) {
       const ok = await asUser(db, userId, async (q) => (await q.query<{ v: boolean }>("select app.meeting_edit($1) as v", [input.storeId])).rows[0].v);
-      if (!ok) throw new ForbiddenError("AI会議をひらけるのは、店長と正美さんです");
+      if (!ok) throw new ForbiddenError("ミーティングをひらけるのは、店長と正美さんです");
     }
     aiThrottle(userId);
     text = await aiFn(discussionPrompt(theme));
@@ -3120,7 +3120,7 @@ export async function runCouncil(db: Database, userId: string, input: { storeId?
     const r = await asUser(db, userId, (q) => q.query<{ id: string }>(
       "insert into ai_councils (company_id, store_id, private, theme, result, created_by) values ($1,$2,$3,$4,$5,$6) returning id", [me.companyId, priv ? null : input.storeId, priv, theme, text, userId]));
     return { id: r.rows[0].id, text };
-  } catch (e) { if ((e as { code?: string }).code === "42501") throw new ForbiddenError("AI会議をひらけるのは、店長と正美さんです"); throw e; }
+  } catch (e) { if ((e as { code?: string }).code === "42501") throw new ForbiddenError("ミーティングをひらけるのは、店長と正美さんです"); throw e; }
 }
 
 /** 自分がひらいたAI会議の記録を消す */

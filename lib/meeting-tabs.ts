@@ -2,7 +2,7 @@
 export function meetingTabs(appOwner = false): { href: string; label: string; show?: boolean }[] {
   return [
     { href: "/meetings", label: "🎙 議事録" },
-    { href: "/councils", label: "🤖 AI会議" },
+    { href: "/councils", label: "🤖 ミーティング" },
     { href: "/councils/private", label: "🔒 AI会議（僕専用）", show: appOwner },
   ];
 }
