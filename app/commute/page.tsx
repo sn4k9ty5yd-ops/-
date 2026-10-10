@@ -2,7 +2,10 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import { DateStepper } from "@/app/DateStepper";
 import { Stepper } from "@/app/Stepper";
+import { todayJst } from "@/lib/period-nav";
+import { reiwa } from "@/lib/era";
 import { api, MeProvider, useAutoRefresh, useMe } from "@/lib/client";
 import type { CommuteData, CommuteMatch } from "@/lib/service";
 
@@ -29,6 +32,7 @@ function Page() {
   const [note, setNote] = useState("");
   const [months, setMonths] = useState(0);
   const [due, setDue] = useState("");
+  const [paidEdit, setPaidEdit] = useState<{ id: string; until: string; note: string } | null>(null);
   const [paste, setPaste] = useState(""); const [ms, setMs] = useState<CommuteMatch[] | null>(null); const [pick, setPick] = useState<Record<number, string>>({});
   const load = useCallback(async () => {
     try { const r = await api<CommuteData>(`/api/commute?${month ? `month=${month}&` : ""}${storeId ? `storeId=${storeId}` : ""}`); setD(r); setDue((v) => v || String(r.dueDay)); if (!month) setMonth(r.month); if (!storeId) setStoreId(r.storeId); setMsg(""); }
@@ -55,6 +59,7 @@ function Page() {
         <div className="card">
           <b style={{ fontSize: 18 }}>あなたの提出（{ml(cur)}ぶん）</b>
           <p style={{ margin: "6px 0" }}>{d.mine ? ST[d.mine.status] : d.coveredUntil ? `🟦 今月は出さなくて大丈夫です（${ymj(d.coveredUntil)}まで、前に出した定期券の期間です）` : d.overdue ? "🔴 期限（" + d.dueDate.slice(5).replace("-", "/") + "）をすぎています。早めに出してください" : "⚪ まだ出していません（" + d.dueDate.slice(5).replace("-", "/") + " まで）"}</p>
+          {d.myPaid?.until && <p className="sub" style={{ margin: "4px 0" }}>📅 <b>{reiwa(d.myPaid.until)}分まで</b>、もらっています{d.myPaid.note ? `（${d.myPaid.note}）` : ""}</p>}
           {d.mine?.status === "redo" && <p className="err">{d.mine.note || "写真が見づらいなど、出し直しをお願いします。"}</p>}
           {d.mine?.status === "checked" ? <p className="sub">確認ずみです。ありがとうございました。</p> : (
             <>
@@ -98,6 +103,23 @@ function Page() {
                     {d.canCheck && r.subId && <button className="ghost" style={{ width: "auto", margin: 0, color: "var(--blue)" }} onClick={() => open(r.subId!)}>写真を見る</button>}
                     <button className="ghost" style={{ width: "auto", margin: 0, color: "var(--sub)" }} disabled={busy} onClick={() => confirm(`${r.name}さんを名簿から外しますか？（退職・やめたとき）`) && act({ action: "roster", memberId: r.membershipId, on: false }, "名簿から外しました")}>外す</button>
                   </span>
+                </div>
+                <div style={{ marginTop: 4 }}>
+                  {paidEdit?.id === r.membershipId ? (
+                    <div className="card" style={{ margin: "6px 0" }}>
+                      <div className="sub">何日分まで、もらっていますか？</div>
+                      <DateStepper label="何日分まで" value={paidEdit.until} onChange={(v) => setPaidEdit({ ...paidEdit, until: v })} />
+                      <input placeholder="ひとこと（任意。例：10月分の定期代まで）" value={paidEdit.note} onChange={(e) => setPaidEdit({ ...paidEdit, note: e.target.value })} style={{ margin: "6px 0" }} />
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        <button style={{ width: "auto", margin: 0 }} disabled={busy} onClick={async () => { await act({ action: "paid", memberId: r.membershipId, until: paidEdit.until, note: paidEdit.note }, "もらっている日を書きました"); setPaidEdit(null); }}>保存</button>
+                        {r.paidUntil && <button className="ghost" style={{ width: "auto", margin: 0, color: "#d70015" }} disabled={busy} onClick={async () => { await act({ action: "paid", memberId: r.membershipId, until: null }, "もらっている日を消しました"); setPaidEdit(null); }}>消す</button>}
+                        <button className="ghost" style={{ width: "auto", margin: 0 }} onClick={() => setPaidEdit(null)}>やめる</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <span className="sub">📅 {r.paidUntil ? <><b>{reiwa(r.paidUntil)}分まで</b>、もらっています{r.paidNote ? `（${r.paidNote}）` : ""}</> : "何日分まで、もらっているか：未記入"}　
+                      <button className="ghost" style={{ width: "auto", margin: 0, padding: "2px 10px" }} onClick={() => setPaidEdit({ id: r.membershipId, until: r.paidUntil ?? todayJst(), note: r.paidNote })}>{r.paidUntil ? "直す" : "書く"}</button></span>
+                  )}
                 </div>
               </li>
             ))}

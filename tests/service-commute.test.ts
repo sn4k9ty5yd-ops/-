@@ -33,6 +33,18 @@ describe("定期券の提出", () => {
     expect((await svc.getCommute(d, u.s1)).mine).toMatchObject({ months: 3 });
     expect((await svc.getCommute(d, u.s1)).mine?.status).toBe("submitted");
   });
+  it("「何日分まで、もらっている」: 店長(自店)と正美さんが書ける。本人は自分のを見られる。他店の店長・本人は書けない", async () => {
+    await svc.setCommutePaid(d, u.mgrA, u.s1, "2026-12-31", "12月分まで");
+    expect((await svc.getCommute(d, u.mgrA)).rows[0]).toMatchObject({ paidUntil: "2026-12-31", paidNote: "12月分まで" });
+    expect((await svc.getCommute(d, u.s1)).myPaid).toEqual({ until: "2026-12-31", note: "12月分まで" });
+    await expect(svc.setCommutePaid(d, u.mgrB, u.s1, "2027-01-31")).rejects.toThrow(svc.ForbiddenError);
+    await expect(svc.setCommutePaid(d, u.s1, u.s1, "2027-01-31")).rejects.toThrow(svc.ForbiddenError);
+    await expect(svc.setCommutePaid(d, u.mgrA, u.s2, "2027-01-31")).rejects.toThrow("名簿");
+    await svc.setCommutePaid(d, u.office, u.s1, "2027-03-15");
+    expect((await svc.getCommute(d, u.s1)).myPaid?.until).toBe("2027-03-15");
+    await svc.setCommutePaid(d, u.office, u.s1, null);
+    expect((await svc.getCommute(d, u.s1)).myPaid?.until).toBeNull();
+  });
   it("写真を見られるのは、本人と正美さんだけ。確認すると本人に通知。確認ずみは出し直せない", async () => {
     const row = (await svc.getCommute(d, u.mgrA)).rows[0];
     await expect(svc.getCommuteImage(d, u.mgrA, row.subId!)).rejects.toThrow(svc.ForbiddenError);   // 店長は写真は見えない

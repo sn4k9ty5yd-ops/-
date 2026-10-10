@@ -3758,8 +3758,10 @@ export async function deleteStocktakeLine(db: Database, userId: string, lineId: 
 }
 
 // ---------------------------------------------------------------- 定期券の提出（毎月1回・写メ）
-export interface CommuteRow { membershipId: string; name: string; storeName: string; subId: string | null; status: "none" | "submitted" | "checked" | "redo"; note: string; submittedAt: string | null; months: number | null; coveredUntil: string | null }
+export interface CommuteRow { membershipId: string; name: string; storeName: string; subId: string | null; status: "none" | "submitted" | "checked" | "redo"; note: string; submittedAt: string | null; months: number | null; coveredUntil: string | null; paidUntil: string | null; paidNote: string }
 export interface CommuteData {
+  /** 自分について「何日分まで、もらっている」と書かれているとき */
+  myPaid: { until: string | null; note: string } | null;
   month: string; dueDay: number; dueDate: string; overdue: boolean;
   onRoster: boolean; coveredUntil: string | null; mine: { id: string; status: "submitted" | "checked" | "redo"; note: string; submittedAt: string; months: number | null } | null;
   canManage: boolean; canCheck: boolean; storeId: string; stores: { id: string; name: string }[];
@@ -3783,7 +3785,7 @@ export async function getCommute(db: Database, userId: string, month?: string, s
     let rows: CommuteRow[] = [], candidates: { id: string; name: string }[] = [];
     if (canManage) {
       rows = (await q.query<CommuteRow>(
-        `select m.id as "membershipId", m.name, s.name as "storeName", c.id as "subId", coalesce(c.status, 'none') as status, coalesce(c.note, '') as note, c.months,
+        `select m.id as "membershipId", m.name, s.name as "storeName", c.id as "subId", coalesce(c.status, 'none') as status, coalesce(c.note, '') as note, c.months, to_char(r.paid_until, 'YYYY-MM-DD') as "paidUntil", r.paid_note as "paidNote",
                 (select to_char(cv.month + make_interval(months => cv.months - 1), 'YYYY-MM') from commute_submissions cv where cv.membership_id = m.id and cv.status <> 'redo' and cv.months > 1 and cv.month < $2::date and (cv.month + make_interval(months => cv.months))::date > $2::date order by cv.month desc limit 1) as "coveredUntil",
                 to_char(c.submitted_at at time zone 'Asia/Tokyo','YYYY-MM-DD"T"HH24:MI:SS"Z"') as "submittedAt"
            from commute_roster r join memberships m on m.id = r.membership_id join stores s on s.id = m.store_id
@@ -3796,7 +3798,8 @@ export async function getCommute(db: Database, userId: string, month?: string, s
     const coveredUntil = (await q.query<{ u: string }>(
       `select to_char(cv.month + make_interval(months => cv.months - 1), 'YYYY-MM') as u from commute_submissions cv where cv.membership_id = $1 and cv.status <> 'redo' and cv.months > 1 and cv.month < $2::date and (cv.month + make_interval(months => cv.months))::date > $2::date order by cv.month desc limit 1`, [userId, first])).rows[0]?.u ?? null;
     const dueDate = `${ym}-${String(dueDay).padStart(2, "0")}`;
-    return { month: ym, dueDay, dueDate, overdue: jstToday() > dueDate && !mine && !coveredUntil, onRoster, coveredUntil, mine, canManage, canCheck, storeId: sid, stores, rows, candidates };
+    const myPaid = (await q.query<{ until: string | null; note: string }>("select to_char(paid_until, 'YYYY-MM-DD') as until, paid_note as note from commute_roster where membership_id = $1", [userId])).rows[0] ?? null;
+    return { month: ym, dueDay, dueDate, overdue: jstToday() > dueDate && !mine && !coveredUntil, onRoster, myPaid, coveredUntil, mine, canManage, canCheck, storeId: sid, stores, rows, candidates };
   });
 }
 
@@ -3834,6 +3837,13 @@ export async function submitCommute(db: Database, userId: string, month: string,
 
 export async function setCommuteRoster(db: Database, userId: string, memberId: string, on: boolean): Promise<void> {
   try { await asUser(db, userId, (q) => q.query("select public.commute_roster_set($1, $2)", [memberId, on])); } catch { throw new ForbiddenError(); }
+}
+
+/** 「何日分まで、もらっている」を書く（店長=自店・正美さんたち）。until=null で消す */
+export async function setCommutePaid(db: Database, userId: string, memberId: string, until: string | null, note = ""): Promise<void> {
+  if (until !== null && !/^\d{4}-\d{2}-\d{2}$/.test(until)) throw new Error("日付が正しくありません");
+  try { await asUser(db, userId, (q) => q.query("select public.commute_paid_set($1, $2::date, $3)", [memberId, until, note])); }
+  catch (e) { if (/not on roster/.test((e as Error).message)) throw new Error("定期券の名簿に入っている人だけに書けます"); throw new ForbiddenError(); }
 }
 
 export async function checkCommute(db: Database, userId: string, subId: string, status: "checked" | "redo", note = ""): Promise<void> {
