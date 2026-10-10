@@ -98,3 +98,44 @@ describe("マインドマップの並べ方", () => {
     expect(l.edges).toHaveLength(4);
   });
 });
+
+describe("スタイリストミーティング・アシスタントミーティング", () => {
+  let d: Database; const id: Record<string, string> = {}; let A: string; let B: string;
+  beforeAll(async () => {
+    d = await newDb(); await migrate(d);
+    const co = (await d.query<{ id: string }>("insert into companies (code, name) values ('k-co','K') returning id")).rows[0].id;
+    A = (await d.query<{ id: string }>("insert into stores (company_id, name) values ($1,'A店') returning id", [co])).rows[0].id;
+    B = (await d.query<{ id: string }>("insert into stores (company_id, name) values ($1,'B店') returning id", [co])).rows[0].id;
+    const mk = async (k: string, code: string, level: number, s: string, rank: string | null) =>
+      (id[k] = (await d.query<{ id: string }>("insert into memberships (company_id, store_id, employee_code, name, level, rank) values ($1,$2,$3,$4,$5,$6) returning id", [co, s, code, k, level, rank])).rows[0].id);
+    await mk("office", "1", 4, A, null); await mk("mgr", "2", 3, A, "stylist");
+    await mk("sty", "3", 1, A, "stylist"); await mk("asi", "4", 1, A, "assistant"); await mk("styB", "5", 1, B, "stylist");
+  });
+  it("スタイリストのミーティングは、スタイリスト・店長・正美さんだけが見られる。アシスタント・他店は見えない", async () => {
+    const mid = await svc.createMeeting(d, id.sty, { storeId: A, title: "スタイリスト会", heldOn: "2026-10-10", kind: "stylist", agenda: "売上の話" });
+    expect((await svc.listMeetings(d, id.sty, A, "stylist")).map((m) => m.title)).toEqual(["スタイリスト会"]);
+    expect((await svc.listMeetings(d, id.mgr, A, "stylist")).length).toBe(1);
+    expect((await svc.listMeetings(d, id.office, A, "stylist")).length).toBe(1);
+    expect(await svc.listMeetings(d, id.asi, A, "stylist")).toEqual([]);
+    expect(await svc.listMeetings(d, id.styB, A, "stylist")).toEqual([]);
+    expect(await svc.getMeeting(d, id.asi, mid)).toBeNull();
+    await expect(svc.createMeeting(d, id.asi, { storeId: A, title: "x", heldOn: "2026-10-10", kind: "stylist" })).rejects.toThrow(svc.ForbiddenError);
+  });
+  it("アシスタントのミーティング: スタイリストが議題を決める。アシスタントは見られて、記録は書けるが、議題は書けない", async () => {
+    const mid = await svc.createMeeting(d, id.sty, { storeId: A, title: "アシスタント会", heldOn: "2026-10-11", kind: "assistant", agenda: "シャンプーの練習" });
+    const g = (await svc.getMeeting(d, id.asi, mid))!;
+    expect(g.meeting.agenda).toBe("シャンプーの練習");
+    expect([g.canEdit, g.canAgenda]).toEqual([true, false]);
+    await svc.updateMeeting(d, id.asi, mid, { transcript: "話した内容" });                       // アシスタントも記録は書ける
+    await expect(svc.updateMeeting(d, id.asi, mid, { agenda: "書きかえ" })).rejects.toThrow();     // 議題は書けない
+    await svc.updateMeeting(d, id.sty, mid, { agenda: "シャンプーと接客" });
+    expect((await svc.getMeeting(d, id.asi, mid))!.meeting.agenda).toBe("シャンプーと接客");
+    await expect(svc.createMeeting(d, id.asi, { storeId: A, title: "x", heldOn: "2026-10-10", kind: "assistant" })).rejects.toThrow(svc.ForbiddenError);
+    expect(await svc.listMeetings(d, id.styB, A, "assistant")).toEqual([]);                      // 他店は見えない
+  });
+  it("ふつうの会議は、今までどおり（書けるのは店長・正美さんたち）", async () => {
+    await expect(svc.createMeeting(d, id.sty, { storeId: A, title: "x", heldOn: "2026-10-10" })).rejects.toThrow(svc.ForbiddenError);
+    await svc.createMeeting(d, id.mgr, { storeId: A, title: "ふつう", heldOn: "2026-10-10" });
+    expect((await svc.listMeetings(d, id.asi, A)).length).toBe(1);
+  });
+});

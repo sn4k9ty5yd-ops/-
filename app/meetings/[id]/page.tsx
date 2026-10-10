@@ -11,7 +11,7 @@ import { VoiceRecorder } from "../VoiceRecorder";
 
 type Tab = "transcript" | "minutes" | "summary" | "mindmap";
 type TextKey = "transcript" | "minutes" | "summary";
-interface Detail { meeting: MeetingRow; discussions: MeetingAiRow[]; canEdit: boolean; aiStatus: { available: boolean; provider: string | null } }
+interface Detail { meeting: MeetingRow; discussions: MeetingAiRow[]; canEdit: boolean; canAgenda: boolean; aiStatus: { available: boolean; provider: string | null } }
 async function copyText(text: string) {
   try { await navigator.clipboard.writeText(text); return true; } catch { const t = document.createElement("textarea"); t.value = text; document.body.appendChild(t); t.select(); const ok = document.execCommand("copy"); t.remove(); return ok; }
 }
@@ -28,6 +28,7 @@ function Page() {
   const [busy, setBusy] = useState("");
   const [msg, setMsg] = useState(""); const [ok, setOk] = useState("");
   const [theme, setTheme] = useState("");
+  const [agenda, setAgenda] = useState<string | null>(null);
   const [paste, setPaste] = useState(""); const [pasteMap, setPasteMap] = useState("");
   const timers = useRef<Partial<Record<string, ReturnType<typeof setTimeout>>>>({});
   const first = useRef(true);
@@ -89,6 +90,17 @@ function Page() {
       <h1 style={{ marginBottom: 2 }}>{m.title}</h1>
       <p className="sub" style={{ margin: 0 }}>{reiwa(m.heldOn)}{m.attendees ? `　参加：${m.attendees}` : ""}{canEdit ? "" : "　（見るだけ）"}　<span>{saved}</span></p>
       {msg && <p className="err">{msg}</p>}{ok && <p className="sub">{ok}</p>}
+      {(m.kind !== "general" || m.agenda) && (
+        <div className="card" style={{ margin: "10px 0" }}>
+          <b>{m.kind === "assistant" ? "🌱 話し合うこと（スタイリストが決めました）" : m.kind === "stylist" ? "👔 話し合うこと" : "話し合うこと"}</b>
+          {d.canAgenda ? (
+            <>
+              <textarea rows={6} value={agenda ?? m.agenda} onChange={(e) => setAgenda(e.target.value)} placeholder="この会議で話し合いたいことを書きます（アシスタントが、これを見ながら話します）" />
+              <div className="toolbar noprint"><button disabled={agenda === null || agenda === m.agenda} onClick={async () => { try { await api("/api/meetings", { action: "update", id, agenda: agenda ?? "" }); setAgenda(null); setOk("話し合うことを保存しました"); await load(); } catch (e) { setMsg((e as Error).message); } }}>話し合うことを保存</button></div>
+            </>
+          ) : m.agenda ? <div style={{ whiteSpace: "pre-wrap", marginTop: 6 }}>{m.agenda}</div> : <p className="hint">まだ、話し合うことは決まっていません。</p>}
+        </div>
+      )}
       {!aiOn && <p className="hint noprint">いまは、AIの自動作成はまだ使えません（管理者がカギを設定すると使えます）。ボイスメモの文字起こしは使えます。議事録・要約・マインドマップは、「指示文をコピー」して、ほかのAIに貼って作れます。</p>}
 
       <div className="seg noprint" style={{ flexWrap: "wrap" }}>{TABS.map(([t, l]) => <button key={t} className={tab === t ? "on" : ""} onClick={() => { setTab(t); setOk(""); }}>{l}</button>)}</div>

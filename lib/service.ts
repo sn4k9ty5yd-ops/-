@@ -3075,44 +3075,48 @@ export async function moveStaff(db: Database, userId: string, targetId: string, 
 }
 
 // ---------------------------------------------------------------- ミーティング（議事録・AI）
-export interface MeetingRow { id: string; storeId: string; title: string; heldOn: string; attendees: string; transcript: string; minutes: string; summary: string; mindmap: string; createdBy: string | null; byName: string | null; updatedAt: string }
+export type MeetingKind = "general" | "stylist" | "assistant";
+export interface MeetingRow { id: string; storeId: string; kind: MeetingKind; agenda: string; title: string; heldOn: string; attendees: string; transcript: string; minutes: string; summary: string; mindmap: string; createdBy: string | null; byName: string | null; updatedAt: string }
 export interface MeetingAiRow { id: string; meetingId: string | null; theme: string; result: string; byName: string | null; createdAt: string }
-const MEETING_COLS = `m.id, m.store_id as "storeId", m.title, m.held_on::text as "heldOn", m.attendees, m.transcript, m.minutes, m.summary, m.mindmap, m.created_by as "createdBy", u.name as "byName", m.updated_at::text as "updatedAt"`;
+const MEETING_COLS = `m.id, m.store_id as "storeId", m.kind, m.agenda, m.title, m.held_on::text as "heldOn", m.attendees, m.transcript, m.minutes, m.summary, m.mindmap, m.created_by as "createdBy", u.name as "byName", m.updated_at::text as "updatedAt"`;
 
-export async function listMeetings(db: Database, userId: string, storeId: string): Promise<Omit<MeetingRow, "transcript" | "minutes" | "mindmap">[]> {
+export async function listMeetings(db: Database, userId: string, storeId: string, kind: MeetingKind = "general"): Promise<Omit<MeetingRow, "transcript" | "minutes" | "mindmap">[]> {
+  if (!["general", "stylist", "assistant"].includes(kind)) throw new Error("ミーティングの種類が正しくありません");
   const me = await getMe(db, userId);
   if (!me || me.displayOnly) throw new ForbiddenError();
   return (await asUser(db, userId, (q) => q.query<MeetingRow>(
-    `select ${MEETING_COLS} from meetings m left join memberships u on u.id = m.created_by where m.store_id = $1 order by m.held_on desc, m.created_at desc limit 200`, [storeId]))).rows
+    `select ${MEETING_COLS} from meetings m left join memberships u on u.id = m.created_by where m.store_id = $1 and m.kind = $2 order by m.held_on desc, m.created_at desc limit 200`, [storeId, kind]))).rows
     .map(({ transcript: _t, minutes: _m, mindmap: _k, ...r }) => r);
 }
 
-export async function getMeeting(db: Database, userId: string, id: string): Promise<{ meeting: MeetingRow; ai: MeetingAiRow[]; canEdit: boolean } | null> {
+export async function getMeeting(db: Database, userId: string, id: string): Promise<{ meeting: MeetingRow; ai: MeetingAiRow[]; canEdit: boolean; canAgenda: boolean } | null> {
   const me = await getMe(db, userId);
   if (!me || me.displayOnly) throw new ForbiddenError();
   return asUser(db, userId, async (q) => {
     const m = (await q.query<MeetingRow>(`select ${MEETING_COLS} from meetings m left join memberships u on u.id = m.created_by where m.id = $1`, [id])).rows[0];
     if (!m) return null;
     const ai = (await q.query<MeetingAiRow>(`select a.id, a.meeting_id as "meetingId", a.theme, a.result, u.name as "byName", to_char(a.created_at at time zone 'Asia/Tokyo', 'YYYY-MM-DD HH24:MI') as "createdAt" from meeting_ai a left join memberships u on u.id = a.created_by where a.meeting_id = $1 order by a.created_at desc`, [id])).rows;
-    const canEdit = (await q.query<{ v: boolean }>("select app.meeting_edit($1) as v", [m.storeId])).rows[0].v;
-    return { meeting: m, ai, canEdit };
+    const can = (await q.query<{ e: boolean; a: boolean }>("select app.meeting_can($1, $2, 'edit') as e, app.meeting_can($1, $2, 'agenda') as a", [m.storeId, m.kind])).rows[0];
+    return { meeting: m, ai, canEdit: can.e, canAgenda: can.a };
   });
 }
 
-export async function createMeeting(db: Database, userId: string, input: { storeId: string; title: string; heldOn: string; attendees?: string }): Promise<string> {
+export async function createMeeting(db: Database, userId: string, input: { storeId: string; title: string; heldOn: string; attendees?: string; kind?: MeetingKind; agenda?: string }): Promise<string> {
   const me = await getMe(db, userId);
   if (!me) throw new ForbiddenError();
+  const kind = input.kind ?? "general";
+  if (!["general", "stylist", "assistant"].includes(kind)) throw new Error("ミーティングの種類が正しくありません");
   const title = input.title.trim();
   if (!title || title.length > 100) throw new Error("会議の名前を入れてください（100文字まで）");
   if (!/^\d{4}-\d{2}-\d{2}$/.test(input.heldOn)) throw new Error("日付が正しくありません");
   try {
     return (await asUser(db, userId, (q) => q.query<{ id: string }>(
-      "insert into meetings (company_id, store_id, title, held_on, attendees, created_by) values ($1,$2,$3,$4,$5,$6) returning id",
-      [me.companyId, input.storeId, title, input.heldOn, (input.attendees ?? "").trim().slice(0, 500), userId]))).rows[0].id;
+      "insert into meetings (company_id, store_id, title, held_on, attendees, created_by, kind, agenda) values ($1,$2,$3,$4,$5,$6,$7,$8) returning id",
+      [me.companyId, input.storeId, title, input.heldOn, (input.attendees ?? "").trim().slice(0, 500), userId, kind, (input.agenda ?? "").slice(0, 20000)]))).rows[0].id;
   } catch { throw new ForbiddenError(); }
 }
 
-const MEETING_FIELDS = { title: "title", heldOn: "held_on", attendees: "attendees", transcript: "transcript", minutes: "minutes", summary: "summary", mindmap: "mindmap" } as const;
+const MEETING_FIELDS = { agenda: "agenda", title: "title", heldOn: "held_on", attendees: "attendees", transcript: "transcript", minutes: "minutes", summary: "summary", mindmap: "mindmap" } as const;
 export async function updateMeeting(db: Database, userId: string, id: string, patch: Partial<Record<keyof typeof MEETING_FIELDS, string>>): Promise<void> {
   const sets: string[] = []; const vals: unknown[] = [id];
   for (const [k, col] of Object.entries(MEETING_FIELDS)) {

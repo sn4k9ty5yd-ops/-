@@ -35,6 +35,7 @@ export const SEARCH_ITEMS: SearchItem[] = [
   { icon: "🧠", title: "みんなのMBTI", sub: "自分のお店のみんなのMBTIの一覧（全店は鬼塚さん以上）", href: "/mentor/mbti", keys: "mbti みんな 一覧 性格 タイプ" },
   { icon: "🎙️", title: "ミーティング", sub: "ボイスメモ・文字起こし・議事録・要約・マインドマップ", href: "/meetings", keys: "ミーティング 会議 議事録 ボイスメモ 文字起こし 要約 マインドマップ 録音", show: (me) => !me.displayOnly },
   { icon: "🧹", title: "空のページの整理（マニュアル）", sub: "題名が「外部リンク」「題名なし」の空のページを調べて消す", href: "/manual/cleanup", keys: "マニュアル 空 ページ 題名なし 外部リンク 整理 削除 消す", show: (me) => me.level >= 4 },
+  { icon: "👔", title: "スタイリストミーティング・アシスタントミーティング", sub: "スタイリスト用・アシスタント用の会議（アシスタントは、スタイリストが決めた話し合うことを見ながら話す）", href: "/meetings", keys: "スタイリストミーティング アシスタントミーティング スタイリスト アシスタント 会議 話し合うこと 議題 ミーティング", show: (me) => !me.displayOnly },
   { icon: "🤖", title: "AI会議（ミーティング）", sub: "課題（テーマ）を入れると、AIが会議して結論と行動計画を出す（だれでも・いつでも）", href: "/councils", keys: "ミーティング ai 会議 課題 テーマ 人格 議論 行動計画 エーアイ", show: (me) => !me.displayOnly },
   { icon: "🔒", title: "AI会議（僕専用）", sub: "アプリ制作者だけが読める、AI会議", href: "/councils/private", keys: "ai 会議 僕専用 専用 課題 テーマ", show: (me) => !!me.appOwner },
   { icon: "🔔", title: "お知らせ", sub: "休みのかぶり・話し合い・有給などのお知らせ", href: "/inbox", keys: "お知らせ 通知 かぶり 話し合い 受信箱", show: (me) => !me.displayOnly },
