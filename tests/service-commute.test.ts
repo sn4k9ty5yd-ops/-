@@ -119,6 +119,7 @@ describe("定期券の提出", () => {
     await svc.runCommuteReminders(d, true, `${day(0)}T10:00:00`);
     expect(await cnt()).toBe(base + 3);
     expect((await d.query<{ title: string }>("select title from notifications where user_id = $1 and title like '%今日%' limit 1", [u.s1])).rows).toHaveLength(1);
+    expect((await d.query("select 1 from notifications where user_id = $1 and title like 's1さんの定期券%'", [u.mgrA])).rows.length).toBe(3);   // 店長にも同じ日に届く
     await svc.runCommuteReminders(d, true, `${day(1)}T10:00:00`);                                    // 期限のあと: 止まる
     expect(await cnt()).toBe(base + 3);
   });

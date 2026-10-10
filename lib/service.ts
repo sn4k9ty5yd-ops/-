@@ -3891,8 +3891,8 @@ export async function runCommuteReminders(db: Database, force = false, at?: stri
     sent += await pushToUsers(db, todo, { title, body, url: "/commute", tag: "commute-remind" });
   }
   // 定期券の期限（何月何日まで）の1週間前から、期限の日まで、毎日1回
-  const near = (await db.query<{ id: string; company_id: string; until: string; left: number }>(
-    `select m.id, r.company_id, to_char(r.paid_until, 'YYYY-MM-DD') as until, (r.paid_until - $1::date)::int as left
+  const near = (await db.query<{ id: string; name: string; store_id: string; company_id: string; until: string; left: number }>(
+    `select m.id, m.name, m.store_id, r.company_id, to_char(r.paid_until, 'YYYY-MM-DD') as until, (r.paid_until - $1::date)::int as left
        from commute_roster r join memberships m on m.id = r.membership_id
       where m.status = 'active' and not m.display_only and r.paid_until is not null and r.paid_until >= $1::date and r.paid_until <= $1::date + 7
         and not exists (select 1 from commute_expiry_log l where l.day = $1::date and l.membership_id = m.id)`, [today])).rows;
@@ -3903,6 +3903,13 @@ export async function runCommuteReminders(db: Database, force = false, at?: stri
     const body = "新しい定期券を買ったら、アプリの「定期券の提出」で、写真を出して、期限の日を直してください。";
     await db.query("insert into notifications (company_id, user_id, kind, title, body, link) values ($1,$2,'commute',$3,$4,'/commute')", [n.company_id, n.id, title, body]);
     sent += await pushToUsers(db, [n.id], { title, body, url: "/commute", tag: "commute-expiry" });
+    // そのお店の店長にも（本人と同じ日に）
+    const mgrs = (await managersOf(db, n.store_id, n.company_id)).filter((x) => x !== n.id);
+    if (mgrs.length) {
+      const t2 = n.left === 0 ? `${n.name}さんの定期券の期限は、今日（${md_}）までです` : `${n.name}さんの定期券の期限まで、あと${n.left}日（${md_}まで）`;
+      for (const uid of mgrs) await db.query("insert into notifications (company_id, user_id, kind, title, body, link) values ($1,$2,'commute',$3,$4,'/commute')", [n.company_id, uid, t2, "新しい定期券を買ったか、声をかけてあげてください。"]);
+      sent += await pushToUsers(db, mgrs, { title: t2, body: "新しい定期券を買ったか、声をかけてあげてください。", url: "/commute", tag: `commute-expiry-${n.id}` });
+    }
   }
   return { sent };
 }
