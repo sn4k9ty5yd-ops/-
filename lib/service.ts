@@ -1723,13 +1723,25 @@ export async function cancelMaterialOrder(db: Database, userId: string, id: stri
   if (!ok) throw new ForbiddenError();
 }
 
+/** 新しい業者に、はじめから入れておくカテゴリー（店長があとで、しまう・直す・足すができる） */
+export const DEFAULT_MATERIAL_CATEGORIES = ["カラー", "ストレート", "パーマ", "シャンプー・トリートメント", "その他"];
+async function addDefaultCategories(q: Queryable, companyId: string, userId: string, storeId: string, dealerId: string) {
+  for (let i = 0; i < DEFAULT_MATERIAL_CATEGORIES.length; i++)
+    await q.query(
+      "insert into material_categories (company_id, store_id, dealer_id, name, sort_order, created_by) select $1,$2,$3,$4,$5,$6 where not exists (select 1 from material_categories where dealer_id = $3 and name = $4)",
+      [companyId, storeId, dealerId, DEFAULT_MATERIAL_CATEGORIES[i], i + 1, userId]);
+}
+
 /** 使った業者・カテゴリーを、次から選べるように覚える（すでにあれば何もしない。しまってある業者は、そのまま） */
 async function learnDealer(q: Queryable, companyId: string, userId: string, storeId: string, supplier: string, category?: string) {
   const name = supplier.trim();
   if (!name) return;
   let d = (await q.query<{ id: string }>("select id from material_dealers where store_id = $1 and name = $2", [storeId, name])).rows[0];
-  if (!d) d = (await q.query<{ id: string }>(
-    "insert into material_dealers (company_id, store_id, name, sort_order, created_by) values ($1,$2,$3,(select coalesce(max(sort_order), 0) + 1 from material_dealers where store_id = $2),$4) returning id", [companyId, storeId, name, userId])).rows[0];
+  if (!d) {
+    d = (await q.query<{ id: string }>(
+      "insert into material_dealers (company_id, store_id, name, sort_order, created_by) values ($1,$2,$3,(select coalesce(max(sort_order), 0) + 1 from material_dealers where store_id = $2),$4) returning id", [companyId, storeId, name, userId])).rows[0];
+    await addDefaultCategories(q, companyId, userId, storeId, d.id);
+  }
   const cat = (category ?? "").trim();
   if (!cat) return;
   const has = (await q.query("select 1 from material_categories where store_id = $1 and dealer_id = $2 and name = $3", [storeId, d.id, cat])).rows.length > 0;
@@ -1764,7 +1776,10 @@ export async function saveMaterialDealer(db: Database, userId: string, storeId: 
       if (!(await q.query<{ v: boolean }>("select app.material_dealer_edit($1) as v", [storeId])).rows[0].v) throw new ForbiddenError("業者・カテゴリーを直せるのは、店長・正美さん・材料担当です");
       if (!a.id) {
         if (!name) throw new Error("名前を入れてください");
-        if (a.kind === "dealer") await q.query("insert into material_dealers (company_id, store_id, name, sort_order, created_by) values ($1,$2,$3,(select coalesce(max(sort_order), 0) + 1 from material_dealers where store_id = $2),$4)", [me.companyId, storeId, name, userId]);
+        if (a.kind === "dealer") {
+          const nd = (await q.query<{ id: string }>("insert into material_dealers (company_id, store_id, name, sort_order, created_by) values ($1,$2,$3,(select coalesce(max(sort_order), 0) + 1 from material_dealers where store_id = $2),$4) returning id", [me.companyId, storeId, name, userId])).rows[0];
+          await addDefaultCategories(q, me.companyId, userId, storeId, nd.id);
+        }
         else {
           if (!a.dealerId) throw new Error("どの業者の下か、えらんでください");
           await q.query("insert into material_categories (company_id, store_id, dealer_id, name, sort_order, created_by) values ($1,$2,$3,$4,(select coalesce(max(sort_order), 0) + 1 from material_categories where dealer_id = $3),$5)", [me.companyId, storeId, a.dealerId, name, userId]);
