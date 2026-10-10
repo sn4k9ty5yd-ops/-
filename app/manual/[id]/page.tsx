@@ -20,7 +20,7 @@ function Settings({ p, reload }: { p: ManualPage; reload: () => Promise<void> })
   const run = async (fn: () => Promise<unknown>, ok = "") => { try { await fn(); setMsg(ok); await reload(); } catch (e) { setMsg((e as Error).message); } };
   const save = (patch: object) => run(() => api(`/api/manual/${p.id}`, patch));
   return (
-    <details className="card" style={{ marginTop: 24 }}>
+    <details id="mn-settings" className="card" style={{ marginTop: 24 }}>
       <summary style={{ cursor: "pointer", fontWeight: 700 }}>⚙ このページの設定（管理者だけ）</summary>
       <label>題名<input defaultValue={p.title} onBlur={(e) => e.target.value.trim() && e.target.value !== p.title && save({ title: e.target.value })} /></label>
       <label>アイコン（絵文字）<input defaultValue={p.icon} maxLength={4} onBlur={(e) => e.target.value !== p.icon && save({ icon: e.target.value })} /></label>
@@ -110,6 +110,7 @@ function NewChecklist({ p, reload }: { p: ManualPage; reload: () => void }) {
 }
 
 function Page() {
+  const router = useRouter();
   const { me } = useMe();
   const { id } = useParams<{ id: string }>();
   const [p, setP] = useState<ManualPage | null>(null);
@@ -125,6 +126,12 @@ function Page() {
       <Link href="/manual" className="back">← マニュアル</Link>
       <p className="mn-crumbs">{p.trail.map((t) => <span key={t.id}><Link href={`/manual/${t.id}`}>{t.title}</Link> ／ </span>)}</p>
       <h1>{p.icon} {p.title}</h1>
+      {me.level >= 4 && !me.displayOnly && (
+        <div className="toolbar noprint" style={{ marginTop: -8 }}>
+          <button className="ghost" onClick={() => { const el = document.getElementById("mn-settings") as HTMLDetailsElement | null; if (el) { el.open = true; el.scrollIntoView({ behavior: "smooth" }); } }}>✏ 編集（設定・見られる人）</button>
+          <button className="ghost" style={{ color: "#c00" }} onClick={async () => { if (!confirm(`「${p.title}」と、その下のページを削除しますか？（元に戻せません）`)) return; try { await api(`/api/manual/${p.id}`, { action: "delete" }); router.push("/manual"); } catch (e) { alert((e as Error).message); } }}>🗑 このページを削除</button>
+        </div>
+      )}
       {p.canEdit && !me.displayOnly && hasEditable(p.body) && <p className="hint" style={{ marginTop: -12 }}>このページには書き込めます（チェックや表のマスは、そのまま入力できます。自動で保存されます）。</p>}
       {p.bundledMissing ? (
         <div className="card" style={{ margin: "0 0 14px" }}>

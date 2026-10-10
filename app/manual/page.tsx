@@ -46,7 +46,6 @@ function Page() {
           <div className="mngrid mnspecial">
             <Link href="/lesson-check" className="mncard special"><span className="mnic">📝</span><span className="mnt">レッスンチェック表</span><span className="mns">アシスタントの採点</span></Link>
             {extN > 0 && <Link href="/manual/external" className="mncard special"><span className="mnic">🔗</span><span className="mnt">外部リンク</span><span className="mns">YouTube以外の外のサイト</span></Link>}
-            {me.level >= 4 && <Link href="/manual/cleanup" className="mncard special"><span className="mnic">🧹</span><span className="mnt">空のページの整理</span><span className="mns">「題名なし」などを調べて消す</span></Link>}
           </div>
           {rows === null ? null : rows.length === 0 ? (
             <p className="hint">まだマニュアルがありません。{me.level >= 4 ? "取り込みが終わると、ここに並びます。" : ""}</p>
