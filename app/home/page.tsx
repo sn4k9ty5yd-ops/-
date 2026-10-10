@@ -35,8 +35,7 @@ function Cards() {
     { big: true, href: "/manual", title: "マニュアル", sub: "教育・営業マニュアル、技術動画、技術評価", show: true },
     { big: true, href: "/shifts", title: leaveTodo ? `シフト（有給の確認待ち${leaveTodo}件）` : "シフト", sub: me.level >= 2 ? "見る・希望休・有給・次のシフトを作る・出勤簿" : "シフトを見る・希望休を出す・有給の提出と変更", show: true },
     { big: true, href: "/mentor", title: "メンター", sub: "悩みを相談できるチャット・面談シート（店長に提出）", show: !me.displayOnly },
-    { big: true, href: "/meetings", title: "議事録", sub: "会議のボイスメモ → 文字起こし・議事録・要約・マインドマップ（自分のお店の分）", show: !me.displayOnly },
-    { big: true, href: "/councils", title: "ミーティング", sub: "課題（テーマ）を入れると、AIが会議して、結論と行動計画をまとめます", show: !me.displayOnly },
+    { big: true, href: "/meetings", title: "ミーティング", sub: "会議のボイスメモ → 文字起こし・議事録・要約・マインドマップ（自分のお店の分）", show: !me.displayOnly },
     { big: true, href: "/councils/private", title: "AI会議（僕専用）", sub: "あなただけが読める、AI会議", show: !!me.appOwner },
     { big: true, href: "/material", title: "材料費・在庫", sub: "発注額・在庫・業務に回した分・スタッフ購入", show: true },
     { href: "/material/summary", title: "材料費統括", sub: "月ごと・商品ごとの割合（正美さん以上は全店・材料担当は自分のお店だけ）", show: me.level === 4 || !!me.materialManager },
@@ -59,7 +58,7 @@ function Cards() {
     { href: "/admin/stores", title: "店舗の編集", sub: "新店舗の追加・名前の変更・閉店（管理者のみ）", show: me.level >= 4 },
   ].filter((c) => c.show);
   const ICON: Record<string, [string, number, string]> = {
-    "/inbox": ["🔔", 8, ""], "/staff-notices": ["📨", 20, ""], "/meetings": ["🎙️", 300, ""], "/councils": ["🤖", 250, ""], "/councils/private": ["🔒", 20, ""], "/mentor": ["💬", 330, ""], "/manual": ["📖", 265, ""], "/shifts": ["📅", 212, ""], "/requests": ["🌴", 168, ""], "/material": ["🧴", 28, ""], "/commute": ["🚃", 200, ""],
+    "/inbox": ["🔔", 8, ""], "/staff-notices": ["📨", 20, ""], "/meetings": ["🎙️", 300, ""], "/councils/private": ["🔒", 20, ""], "/mentor": ["💬", 330, ""], "/manual": ["📖", 265, ""], "/shifts": ["📅", 212, ""], "/requests": ["🌴", 168, ""], "/material": ["🧴", 28, ""], "/commute": ["🚃", 200, ""],
     "/material/summary": ["📊", 28, "材料・在庫"], "/my-lessons": ["🎓", 262, ""], "/leave": ["🏝️", 172, ""], "/my-sales": ["📈", 140, ""], "/sales": ["💴", 140, "シフト・勤怠"], "/lessons": ["🎓", 262, "スタッフ・設定"], "/lesson-check": ["📝", 262, "スタッフ・設定"], "/admin/stock": ["📦", 150, "材料・在庫"], "/admin/stocktake": ["📋", 190, "材料・在庫"], "/admin/products": ["🏷️", 320, "材料・在庫"],
     "/admin/periods": ["🗂️", 212, "シフト・勤怠"], "/admin/shifts": ["✏️", 212, "シフト・勤怠"], "/admin/requests": ["👥", 168, "シフト・勤怠"], 
     "/admin/staff": ["🧑‍🤝‍🧑", 340, "スタッフ・設定"], "/admin/settings": ["⚙️", 220, "スタッフ・設定"], "/admin/activity": ["🕵️", 20, "スタッフ・設定"], "/security": ["🔐", 8, "スタッフ・設定"], "/admin/records": ["🧾", 45, "スタッフ・設定"], "/admin/guide": ["📘", 205, "スタッフ・設定"], "/help": ["❓", 200, ""], "/admin/feedback": ["💌", 330, "スタッフ・設定"], "/admin/stores": ["🏬", 280, "スタッフ・設定"],
