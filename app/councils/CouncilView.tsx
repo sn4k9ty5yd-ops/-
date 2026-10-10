@@ -42,6 +42,7 @@ function View({ priv }: { priv: boolean }) {
     setBusy(false);
   };
 
+  if (priv && !me.appOwner) return <main className="wide"><Link href="/meetings" className="back">← ミーティング</Link><p className="err">この画面は使えません。</p></main>;
   return (
     <main className="wide">
       <Link href="/home" className="back">← ホーム</Link>

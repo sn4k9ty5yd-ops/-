@@ -4,7 +4,9 @@ import { createPortal } from "react-dom";
 import { api } from "@/lib/client";
 import type { MaterialDealerRow } from "@/lib/service";
 
-const chip = (on: boolean): React.CSSProperties => ({ width: "auto", padding: "8px 14px", borderRadius: 20, border: on ? "2px solid var(--blue, #0a84ff)" : "1px solid var(--line, #ddd)", background: on ? "var(--blue, #0a84ff)" : "#fff", color: on ? "#fff" : "var(--ink)", fontWeight: 700 });
+/** 選ばれているボタンは、アプリ共通の「青いボタン」。選ばれていないボタンは、白い「ghost」ボタン */
+const chipCls = (on: boolean) => (on ? "" : "ghost");
+const chip = (on: boolean, dashed = false): React.CSSProperties => ({ width: "auto", padding: "8px 14px", borderRadius: 20, fontWeight: 700, ...(on ? {} : { color: "var(--ink)", border: `1px ${dashed ? "dashed" : "solid"} var(--line, #bbb)`, background: "#fff", boxShadow: "none" }) });
 
 /** 業者（ディーラー）とカテゴリーを、ボタンで選ぶ。「＋」から、誰でもその場で足せる（足すとすぐ覚えて、次からボタンに出る） */
 export function DealerPicker({ dealers, supplier, category, onPick, onAdd }: { dealers: MaterialDealerRow[]; supplier: string; category: string; onPick: (supplier: string, category: string) => void; onAdd: (supplier: string, category: string) => Promise<void> }) {
@@ -23,8 +25,8 @@ export function DealerPicker({ dealers, supplier, category, onPick, onAdd }: { d
     <>
       <div style={{ margin: "10px 0 4px", fontWeight: 700 }}>業者（ディーラー）</div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-        {dealers.filter((d) => d.active).map((d) => <button key={d.id} type="button" style={chip(supplier === d.name)} onClick={() => { onPick(d.name, d.name === supplier ? category : ""); setAddDealer(false); }}>{d.name}</button>)}
-        <button type="button" style={{ ...chip(addDealer), borderStyle: "dashed" }} onClick={() => { setAddDealer(!addDealer); setMsg(""); }}>＋ 業者を足す</button>
+        {dealers.filter((d) => d.active).map((d) => <button key={d.id} type="button" className={chipCls(supplier === d.name)} style={chip(supplier === d.name)} onClick={() => { onPick(d.name, d.name === supplier ? category : ""); setAddDealer(false); }}>{d.name}</button>)}
+        <button type="button" className="ghost" style={chip(false, true)} onClick={() => { setAddDealer(!addDealer); setMsg(""); }}>＋ 業者を足す</button>
       </div>
       {addDealer && (
         <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
@@ -36,9 +38,9 @@ export function DealerPicker({ dealers, supplier, category, onPick, onAdd }: { d
         <>
           <div style={{ margin: "12px 0 4px", fontWeight: 700 }}>カテゴリー（{supplier.trim()}の中）</div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-            <button type="button" style={chip(category === "")} onClick={() => onPick(supplier, "")}>えらばない</button>
-            {cats.map((c) => <button key={c.id} type="button" style={chip(category === c.name)} onClick={() => { onPick(supplier, c.name); setAddCat(false); }}>{c.name}</button>)}
-            <button type="button" style={{ ...chip(addCat), borderStyle: "dashed" }} onClick={() => { setAddCat(!addCat); setMsg(""); }}>＋ カテゴリーを足す</button>
+            <button type="button" className={chipCls(category === "")} style={chip(category === "")} onClick={() => onPick(supplier, "")}>えらばない</button>
+            {cats.map((c) => <button key={c.id} type="button" className={chipCls(category === c.name)} style={chip(category === c.name)} onClick={() => { onPick(supplier, c.name); setAddCat(false); }}>{c.name}</button>)}
+            <button type="button" className="ghost" style={chip(false, true)} onClick={() => { setAddCat(!addCat); setMsg(""); }}>＋ カテゴリーを足す</button>
           </div>
           {addCat && (
             <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
