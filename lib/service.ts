@@ -2524,7 +2524,7 @@ export async function listSalesMonth(db: Database, userId: string, storeId: stri
 }> {
   const m = monthStart(month);
   return asUser(db, userId, async (q) => {
-    const people = (await q.query<{ id: string; name: string }>("select id, name from memberships where store_id = $1 and status = 'active' and not display_only and level < 4 order by employee_code", [storeId])).rows;
+    const people = (await q.query<{ id: string; name: string }>("select id, name from memberships where store_id = $1 and status = 'active' and not display_only and (on_shift or level >= 2) and level < 4 order by employee_code", [storeId])).rows;
     const cur = (await q.query<SalesValues & { mid: string; source: string; status: SalesStatus; rc: string | null; ca: number | null }>(`select x.membership_id as mid, x.source, x.status, x.return_comment as rc, x.commission_amount as ca, ${SALES_COLS} from sales_stats x where x.store_id = $1 and x.month = $2`, [storeId, m])).rows;
     const prev = (await q.query<SalesValues & { mid: string }>(`select x.membership_id as mid, ${SALES_COLS} from sales_stats x where x.store_id = $1 and x.month = $2`, [storeId, prevYear(m)])).rows;
     const tg = (await q.query<{ membership_id: string | null; target: number }>("select membership_id, target from sales_targets where store_id = $1 and month = $2", [storeId, m])).rows;

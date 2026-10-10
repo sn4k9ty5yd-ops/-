@@ -213,4 +213,11 @@ describe("指名売上", () => {
     await svc.submitSpaClaim(db, id.office, M);
     await expect(svc.reviewSpaClaim(db, id.office, id.office, M, "approve")).rejects.toThrow();
   });
+
+  it("シフトに入らないレベル1（お店のiPadなど）は、売上の表に出ない", async () => {
+    const ipad = (await db.query<{ id: string }>("insert into memberships (company_id, store_id, employee_code, name, level, on_shift) select company_id, $1, '57', 'A店 iPad', 1, false from stores where id = $1 returning id", [st["A店"]])).rows[0].id;
+    const rows = (await svc.listSalesMonth(db, id.mgr, st["A店"], "2026-10")).rows;
+    expect(rows.some((r) => r.membershipId === ipad)).toBe(false);
+    expect(rows.some((r) => r.membershipId === id.a)).toBe(true);
+  });
 });
