@@ -7,8 +7,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, MeProvider, useAutoRefresh, useMe } from "@/lib/client";
 import { md } from "@/lib/labels";
 import { achievement, calcCommission, newRate, pct1, signed, unitPrice, yen, yoy } from "@/lib/sales-calc";
+import { SpaMine, SpaReview } from "./SpaClaim";
 import { todayJst } from "@/lib/period-nav";
-import { SALES_STATUS_LABEL, type SalesRates, type SalesRow, type SalesStatus, type SalesValues, type StoreRow } from "@/lib/service";
+import { SALES_STATUS_LABEL, type SalesRates, type SalesRow, type SalesStatus, type SalesValues, type SpaClaim, type StoreRow } from "@/lib/service";
 
 const addMonth = (ym: string, n: number) => { const [y, m] = ym.split("-").map(Number); const t = new Date(Date.UTC(y, m - 1 + n, 1)); return `${t.getUTCFullYear()}-${String(t.getUTCMonth() + 1).padStart(2, "0")}`; };
 const toInt = (raw: string) => Number(raw.replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0)).replace(/[^\d]/g, "") || "0");
@@ -19,7 +20,7 @@ async function shrink(file: File): Promise<{ mime: string; base64: string }> {
   return { mime: "image/jpeg", base64: c.toDataURL("image/jpeg", 0.85).split(",")[1] };
 }
 type Data = { month: string; rows: SalesRow[]; prev: Record<string, SalesValues>; storeTarget: number | null; targets: Record<string, number>; board: boolean; images: { id: string; at: string; by: string | null }[]; rates: SalesRates; dueOn: string; dueIsDefault: boolean };
-const FIELDS: [keyof SalesValues, string][] = [["total", "総合売上"], ["free", "フリー売上"], ["nominated", "指名技術売上"], ["retail", "店販売上"], ["retailCount", "店販人数"], ["customers", "客数"], ["newCustomers", "新規"], ["repeatCustomers", "再来"], ["kitsukeCount", "着付け人数"], ["kitsukeSales", "着付け売上"], ["makeupCount", "メイク人数"], ["makeupSales", "メイク売上"], ["spaCount", "スパ人数"], ["spaSales", "スパ売上"]];
+const FIELDS: [keyof SalesValues, string][] = [["total", "総合売上"], ["free", "フリー売上"], ["nominated", "指名技術売上"], ["retail", "店販売上"], ["retailCount", "店販人数"], ["customers", "客数"], ["newCustomers", "新規"], ["repeatCustomers", "再来"], ["kitsukeCount", "着付け人数"], ["kitsukeSales", "着付け売上"], ["makeupCount", "メイク人数"], ["makeupSales", "メイク売上"]];
 
 function Page() {
   const { me } = useMe();
@@ -30,6 +31,9 @@ function Page() {
   const [edit, setEdit] = useState<Record<string, SalesValues>>({});
   const [tEdit, setTEdit] = useState<Record<string, string>>({});
   const [msg, setMsg] = useState(""); const [ok, setOk] = useState("");
+  const [spa, setSpa] = useState<SpaClaim[]>([]);
+  const loadSpa = useCallback(async () => { try { setSpa((await api<{ claims: SpaClaim[] }>(`/api/sales?spaStore=1&storeId=${storeId}&month=${ym}`)).claims); } catch { setSpa([]); } }, [storeId, ym]);
+  useEffect(() => { loadSpa(); }, [loadSpa]);
 
   useEffect(() => { api<StoreRow[]>("/api/stores").then((s) => setStores(s.filter((x) => x.status === "active"))).catch(() => {}); }, []);
   const load = useCallback(async () => { try { setData(await api<Data>(`/api/sales?storeId=${storeId}&month=${ym}`)); setMsg(""); } catch (e) { setMsg((e as Error).message); } }, [storeId, ym]);
@@ -41,6 +45,7 @@ function Page() {
   const prevSum = useMemo(() => Object.values(data?.prev ?? {}).reduce((a, v) => ({ total: a.total + v.total, customers: a.customers + v.customers }), { total: 0, customers: 0 }), [data]);
   const setField = (r: SalesRow, k: keyof SalesValues, raw: string) => setEdit((e) => ({ ...e, [r.membershipId]: { ...cur(r), [k]: toInt(raw) } }));
   const dirty = Object.keys(edit).length;
+  const spaOf = (id: string) => { const c = spa.find((x) => x.membershipId === id); return c && c.status === "approved" ? c : null; };
   const [cEdit, setCEdit] = useState<Record<string, string>>({});
   const setCommission = async (membershipId: string, amount: number | null) => {
     try { await api("/api/sales", { action: "commission", storeId, month: ym, membershipId, amount }); setCEdit((c) => { const n = { ...c }; delete n[membershipId]; return n; }); setOk(amount === null ? "歩合を取り消しました" : "歩合をつけました（本人に通知しました）"); await load(); } catch (e) { setMsg((e as Error).message); }
@@ -138,7 +143,7 @@ function Page() {
                 <td className="r">{canEdit ? <Stepper className="cellstp" label="個人目標" placeholder="－" step={10000} max={999999999} value={tEdit[r.membershipId] ?? (ptg === null ? "" : String(ptg))} onChange={(x) => setTEdit({ ...tEdit, [r.membershipId]: x })} onCommit={(x) => saveTarget(r.membershipId, x)} /> : ptg ?? "－"}</td>
                 <td className="r">{achievement(v.total, ptg) ?? "－"}</td>
                 <td className="r" style={{ whiteSpace: "nowrap" }}>{(() => {
-                  const sug = calcCommission({ retail: v.retail, kitsukeSales: v.kitsukeSales, makeupSales: v.makeupSales, spaSales: v.spaSales, spaCount: v.spaCount }, data!.rates).total;
+                  const sug = calcCommission({ retail: v.retail, kitsukeSales: v.kitsukeSales, makeupSales: v.makeupSales, spaSales: spaOf(r.membershipId)?.gross ?? 0, spaCount: spaOf(r.membershipId)?.people ?? 0 }, data!.rates).total;
                   const lock = !r.status || r.status === "draft" || r.status === "returned" || r.status === "office_ok" || r.membershipId === me.id || !canCommission;
                   return (<>
                     <span className="sub">目安 {yen(sug)}</span>{" "}
@@ -152,6 +157,10 @@ function Page() {
           })}</tbody>
         </table>
       </div>
+      {data && <>
+        {me.level < 4 && <SpaMine ym={ym} ratePercent={data.rates.spa} />}
+        <SpaReview claims={spa} ym={ym} canReview={canCommission} meId={me.id} rate={data.rates.spa} reload={() => { loadSpa(); }} />
+      </>}
       {data && (
         <div className="card">
           <b>歩合の割合</b>{" "}

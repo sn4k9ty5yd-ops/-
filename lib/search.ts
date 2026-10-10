@@ -27,7 +27,7 @@ export const SEARCH_ITEMS: SearchItem[] = [
   { icon: "📊", title: "材料費統括", sub: "月ごと・お店ごと・商品ごとの割合", href: "/material/summary", keys: "材料費 統括 割合 グラフ 年 月 お店別 商品別", show: (me) => me.level === 4 || !!me.materialManager },
   { icon: "📋", title: "棚卸し", sub: "店販・業務の棚卸し（数量を入れる・提出）", href: "/admin/stocktake", keys: "棚卸し 棚卸 数量 提出 金額 店販 業務", show: (me) => !me.displayOnly },
   { icon: "🏷️", title: "商品一覧", sub: "店販・業務の商品と仕入値・追加・写真から読み込み", href: "/admin/products", keys: "商品 一覧 追加 登録 仕入値 店販 業務 取扱い終了 髪にドラマ", show: (me) => me.level >= 3 },
-  { icon: "📈", title: "自分の売上", sub: "自分の売上を入れて店長に提出", href: "/my-sales", keys: "売上 自分 提出 歩合 着付け メイク ヘッドスパ 客数 客単価 目標", show: (me) => !me.displayOnly },
+  { icon: "📈", title: "自分の売上", sub: "自分の売上を入れて店長に提出", href: "/my-sales", keys: "売上 自分 提出 歩合 着付け メイク ヘッドスパ ヘッドスパ申請 スパ申請 客数 客単価 目標", show: (me) => !me.displayOnly },
   { icon: "💴", title: "お店の売上", sub: "自店・全店の売上の確認・確定", href: "/sales", keys: "売上 確認 確定 差し戻し ランキング 歩合 お店 全店 目標", show: (me) => me.level >= 3 },
   { icon: "💬", title: "メンター（チャット）", sub: "悩みを相談できるチャット", href: "/mentor", keys: "メンター 相談 チャット 悩み mbti monday", show: (me) => !me.displayOnly },
   { icon: "📄", title: "面談シート", sub: "面談の記録を書いて店長に提出", href: "/interviews", keys: "面談 シート 4月 6月 10月 2月 提出 メンター 振り返り", show: (me) => !me.displayOnly },

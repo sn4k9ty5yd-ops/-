@@ -3,6 +3,7 @@ import { newDb } from "./helpers";
 import { migrate } from "../lib/db/migrate";
 import type { Database } from "../lib/db/types";
 import * as svc from "../lib/service";
+import { calcCommission } from "../lib/sales-calc";
 
 let db: Database;
 const id: Record<string, string> = {};
@@ -187,5 +188,27 @@ describe("指名売上", () => {
     await svc.runSalesReminders(db, true, "2027-02-26T09:00:00Z");                                               // 翌日: 期限切れ
     expect((await svc.listNotifications(db, id.mgr)).items.some((n) => n.title.includes("未提出です"))).toBe(true);
     expect((await svc.listNotifications(db, id.a2)).items.some((n) => n.title.includes("期限") && n.title.includes("過ぎています"))).toBe(true);
+  });
+
+  it("ヘッドスパの申請: 本人が単価×人数で申請 → 店長が確認。他の人は見られず、提出後は直せない。人数×1,000円を引く", async () => {
+    const M = "2026-12";
+    await svc.saveSpaClaim(db, id.a, M, [{ price: 1800, count: 2 }, { price: 4500, count: 3 }]);
+    const c = (await svc.getMySpa(db, id.a, M))!;
+    expect([c.people, c.gross, c.status]).toEqual([5, 17100, "draft"]);
+    await expect(svc.saveSpaClaim(db, id.a, M, [{ price: 100, count: 0 }])).rejects.toThrow();
+    await expect(svc.listSpaClaims(db, id.a2, st["A店"], M)).resolves.toEqual([]);          // 他のスタッフには見えない
+    await expect(svc.listSpaClaims(db, id.mgrB, st["A店"], M)).resolves.toEqual([]);        // 他店の店長にも見えない
+    await svc.submitSpaClaim(db, id.a, M);
+    await expect(svc.saveSpaClaim(db, id.a, M, [{ price: 1, count: 1 }])).rejects.toThrow("直せません");
+    expect((await svc.listNotifications(db, id.mgr)).items.some((n) => n.title.includes("ヘッドスパの申請"))).toBe(true);
+    expect((await svc.listSpaClaims(db, id.mgr, st["A店"], M)).length).toBe(1);
+    await expect(svc.reviewSpaClaim(db, id.a, id.a, M, "approve")).rejects.toThrow();       // 自分では確認できない
+    await expect(svc.reviewSpaClaim(db, id.mgrB, id.a, M, "approve")).rejects.toThrow();
+    expect(await svc.reviewSpaClaim(db, id.mgr, id.a, M, "return", "単価を見直して")).toBe("returned");
+    await svc.saveSpaClaim(db, id.a, M, [{ price: 4500, count: 3 }]);
+    await svc.submitSpaClaim(db, id.a, M);
+    expect(await svc.reviewSpaClaim(db, id.mgr, id.a, M, "approve")).toBe("approved");
+    expect(calcCommission({ retail: 0, kitsukeSales: 0, makeupSales: 0, spaSales: 13500, spaCount: 3 }, svc.DEFAULT_SALES_RATES).total).toBe(2100);
+    await expect(svc.saveSpaClaim(db, id.office, M, [{ price: 1, count: 1 }])).rejects.toThrow(svc.ForbiddenError);
   });
 });

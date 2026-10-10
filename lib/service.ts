@@ -3909,3 +3909,55 @@ export async function addCommuteRosterBulk(db: Database, userId: string, ids: st
   for (const id of [...new Set(ids)].slice(0, 100)) { await setCommuteRoster(db, userId, id, true); n++; }
   return n;
 }
+
+// ---- ヘッドスパの申請（売上の表とは別。本人が「単価×人数」を入れて申請 → 店長が確認） ----
+export interface SpaLine { price: number; count: number }
+export type SpaStatus = "draft" | "submitted" | "approved" | "returned";
+export interface SpaClaim { membershipId: string; name: string; storeId: string; month: string; lines: SpaLine[]; people: number; gross: number; status: SpaStatus; returnComment: string | null }
+const SPA_SELECT = "select c.membership_id, m.name, c.store_id, to_char(c.month,'YYYY-MM-DD') as month, c.lines, c.people, c.gross, c.status, c.return_comment from spa_claims c join memberships m on m.id = c.membership_id";
+type SpaRow = { membership_id: string; name: string; store_id: string; month: string; lines: SpaLine[]; people: number; gross: number; status: SpaStatus; return_comment: string | null };
+const toSpaClaim = (r: SpaRow): SpaClaim => ({ membershipId: r.membership_id, name: r.name, storeId: r.store_id, month: r.month, lines: r.lines, people: r.people, gross: r.gross, status: r.status, returnComment: r.return_comment });
+
+export async function getMySpa(db: Database, userId: string, month: string): Promise<SpaClaim | null> {
+  const m = monthStart(month);
+  const r = (await asUser(db, userId, (q) => q.query<SpaRow>(`${SPA_SELECT} where c.membership_id = $1 and c.month = $2`, [userId, m]))).rows[0];
+  return r ? toSpaClaim(r) : null;
+}
+export async function listSpaClaims(db: Database, userId: string, storeId: string, month: string): Promise<SpaClaim[]> {
+  const m = monthStart(month);
+  return (await asUser(db, userId, (q) => q.query<SpaRow>(`${SPA_SELECT} where c.store_id = $1 and c.month = $2 order by m.name`, [storeId, m]))).rows.map(toSpaClaim);
+}
+export async function saveSpaClaim(db: Database, userId: string, month: string, lines: SpaLine[]): Promise<void> {
+  const m = monthStart(month);
+  if (!Array.isArray(lines) || lines.length > 30 || lines.some((l) => !Number.isInteger(l.price) || l.price < 0 || l.price > 9_999_999 || !Number.isInteger(l.count) || l.count < 1 || l.count > 9999))
+    throw new Error("単価は0円以上、人数は1人以上の整数で入れてください");
+  try { await asUser(db, userId, (q) => q.query("select public.spa_claim_save($1::date, $2::jsonb)", [m, JSON.stringify(lines.map((l) => ({ price: l.price, count: l.count })))])); }
+  catch (e) { if (/locked/.test((e as Error).message)) throw new Error("申請したあとは直せません（直したいときは、店長に差し戻してもらってください）"); throw new ForbiddenError(); }
+}
+export async function submitSpaClaim(db: Database, userId: string, month: string): Promise<void> {
+  const m = monthStart(month);
+  const me = await getMe(db, userId);
+  if (!me) throw new ForbiddenError();
+  try { await asUser(db, userId, (q) => q.query("select public.spa_claim_submit($1::date)", [m])); }
+  catch (e) {
+    if (/no data/.test((e as Error).message)) throw new Error("先に、単価と人数を入れて保存してください");
+    if (/locked/.test((e as Error).message)) throw new Error("すでに申請しています");
+    throw new ForbiddenError();
+  }
+  const to = me.level >= 3 ? await officeIds(db, me.companyId) : await managersOf(db, me.storeId, me.companyId);
+  await leaveNotify(db, me.companyId, to.filter((x) => x !== userId), `${jpMonth(m)}のヘッドスパの申請（${me.name} さん）`, "確認をお願いします。", "/sales");
+}
+export async function reviewSpaClaim(db: Database, userId: string, memberId: string, month: string, action: "approve" | "return", comment = ""): Promise<SpaStatus> {
+  const m = monthStart(month);
+  let st: SpaStatus;
+  try { st = (await asUser(db, userId, (q) => q.query<{ s: SpaStatus }>("select public.spa_claim_review($1, $2::date, $3, $4) as s", [memberId, m, action, comment.slice(0, 300)]))).rows[0].s; }
+  catch (e) {
+    const msg = (e as Error).message ?? "";
+    if (/wrong status/.test(msg)) throw new Error("このヘッドスパの申請は、いまの状態では、この操作ができません");
+    if (/own/.test(msg)) throw new Error("自分の申請は、自分では確認できません");
+    throw new ForbiddenError();
+  }
+  const who = (await db.query<{ company_id: string }>("select company_id from memberships where id = $1", [memberId])).rows[0];
+  if (who) await leaveNotify(db, who.company_id, [memberId], st === "approved" ? `${jpMonth(m)}のヘッドスパの申請が確認されました` : `${jpMonth(m)}のヘッドスパの申請が差し戻されました`, st === "approved" ? "ありがとうございました。" : comment ? `コメント：${comment.slice(0, 80)}` : "直して、もう一度申請してください。", "/my-sales");
+  return st;
+}

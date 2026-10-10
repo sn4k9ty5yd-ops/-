@@ -5,10 +5,11 @@ import { salesTabs } from "@/lib/sales-tabs";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { api, MeProvider, useAutoRefresh, useMe } from "@/lib/client";
-import { SPA_DEDUCT_PER_PERSON, achievement, calcCommission, newRate, pct1, repeatRate, signed, unitPrice, yen, yoy } from "@/lib/sales-calc";
+import { achievement, calcCommission, newRate, pct1, repeatRate, signed, unitPrice, yen, yoy } from "@/lib/sales-calc";
 import { md } from "@/lib/labels";
+import { SpaMine } from "@/app/sales/SpaClaim";
 import { todayJst } from "@/lib/period-nav";
-import { EMPTY_SALES, SALES_STATUS_LABEL, type MySales, type SalesValues } from "@/lib/service";
+import { EMPTY_SALES, SALES_STATUS_LABEL, type MySales, type SalesValues, type SpaClaim } from "@/lib/service";
 
 const addMonth = (ym: string, n: number) => { const [y, m] = ym.split("-").map(Number); const t = new Date(Date.UTC(y, m - 1 + n, 1)); return `${t.getUTCFullYear()}-${String(t.getUTCMonth() + 1).padStart(2, "0")}`; };
 
@@ -43,6 +44,7 @@ function Page() {
   useAutoRefresh(load);
 
   const [form, setForm] = useState<SalesValues | null>(null);
+  const [spa, setSpa] = useState<SpaClaim | null>(null);
   const [ok, setOk] = useState("");
   const EMPTY: SalesValues = EMPTY_SALES;
   const editable = !!d && (d.status === null || d.status === "draft" || d.status === "returned");
@@ -84,7 +86,6 @@ function Page() {
             [`店販（歩合 ${d.rates.retail}%）`, [["retail", "店販売上（円）"], ["retailCount", "店販の人数（人）"]]],
             [`着付け（歩合 ${d.rates.kitsuke}%）`, [["kitsukeCount", "着付けの人数（人）"], ["kitsukeSales", "着付けの売上（円）"]]],
             [`メイク（歩合 ${d.rates.makeup}%）`, [["makeupCount", "メイクの人数（人）"], ["makeupSales", "メイクの売上（円）"]]],
-            [`ヘッドスパ（歩合 ${d.rates.spa}%・人数×${SPA_DEDUCT_PER_PERSON.toLocaleString("ja-JP")}円を引いた金額に歩合）`, [["spaCount", "ヘッドスパの人数（人）"], ["spaSales", "ヘッドスパの売上の合計（円）"]]],
           ] as [string, [keyof SalesValues, string][]][]).map(([title, fields]) => (
             <div key={title}>
               <b className="formsec">{title}</b>
@@ -98,7 +99,8 @@ function Page() {
           {!editable && <p className="hint">提出したあとは、直せません。直したいときは、店長に「差し戻し」をお願いしてください。</p>}
         </div>
       )}
-      {d && (() => { const c = calcCommission({ retail: cur.retail, kitsukeSales: cur.kitsukeSales, makeupSales: cur.makeupSales, spaSales: cur.spaSales, spaCount: cur.spaCount }, d.rates); return c.total > 0 || d.commission !== null ? (
+      {d && <SpaMine ym={ym} ratePercent={d.rates.spa} onChange={setSpa} />}
+      {d && (() => { const c = calcCommission({ retail: cur.retail, kitsukeSales: cur.kitsukeSales, makeupSales: cur.makeupSales, spaSales: spa?.status === "approved" ? spa.gross : 0, spaCount: spa?.status === "approved" ? spa.people : 0 }, d.rates); return c.total > 0 || d.commission !== null ? (
         <div className="card"><b>歩合</b>
           {d.commission !== null ? <p style={{ margin: "6px 0" }}>確定した歩合：<b style={{ fontSize: 24 }}>{yen(d.commission)}</b><span className="sub">　（店長・シフト担当がつけました）</span></p>
             : <p className="sub" style={{ margin: "6px 0" }}>まだ、つけられていません。下は、入れた数字からの目安です。</p>}
