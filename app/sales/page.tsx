@@ -160,10 +160,7 @@ function Page() {
         </table>
       </div>
       {data && <>
-        {me.level < 4 ? <SpaMine ym={ym} ratePercent={data.rates.spa} /> : (
-          <div className="card"><b style={{ fontSize: 18 }}>ヘッドスパを申請する</b>
-            <p className="sub" style={{ margin: "6px 0 0" }}>申請のボタンは、<b>アシスタント・シフト担当・店長</b>の画面に出ます（ホームの「売上」→「自分の売上（提出）」と、このお店の売上の画面の下）。レベル4のアカウントは、自分の売上を持たないので出ません。画面を確かめたいときは、左下の「👁 見え方」を「アシスタント」にしてください。申請が出ると、下の一覧に出ます。</p>
-          </div>)}
+        {!me.displayOnly && <SpaMine ym={ym} ratePercent={data.rates.spa} />}
         <SpaReview claims={spa} ym={ym} canReview={canCommission} meId={me.id} rate={data.rates.spa} reload={() => { loadSpa(); }} />
       </>}
       {data && (

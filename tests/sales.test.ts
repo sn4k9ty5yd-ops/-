@@ -209,6 +209,8 @@ describe("指名売上", () => {
     await svc.submitSpaClaim(db, id.a, M);
     expect(await svc.reviewSpaClaim(db, id.mgr, id.a, M, "approve")).toBe("approved");
     expect(calcCommission({ retail: 0, kitsukeSales: 0, makeupSales: 0, spaSales: 13500, spaCount: 3 }, svc.DEFAULT_SALES_RATES).total).toBe(2100);
-    await expect(svc.saveSpaClaim(db, id.office, M, [{ price: 1, count: 1 }])).rejects.toThrow(svc.ForbiddenError);
+    await svc.saveSpaClaim(db, id.office, M, [{ price: 3000, count: 1 }]);                   // レベル4も申請できる
+    await svc.submitSpaClaim(db, id.office, M);
+    await expect(svc.reviewSpaClaim(db, id.office, id.office, M, "approve")).rejects.toThrow();
   });
 });
