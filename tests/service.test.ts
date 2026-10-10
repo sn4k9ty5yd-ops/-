@@ -348,3 +348,19 @@ describe("材料費: 業者とカテゴリーを選ぶ・覚える・店長が�
     await expect(svc.saveMaterialDealer(db, id.mgr, store.a1, { kind: "dealer", name: "髪どら" })).rejects.toThrow("同じ名前");
   });
 });
+
+describe("材料費: その場で業者・カテゴリーを足す（誰でも）", () => {
+  it("スタッフも足せる。すぐ覚えて、ほかの人にも出る。しまってあるものは足せない", async () => {
+    await svc.addMaterialChoice(db, id.staff, store.a1, { supplier: "新ディーラー" });
+    await svc.addMaterialChoice(db, id.staff, store.a1, { supplier: "新ディーラー", category: "トリートメント" });
+    await svc.addMaterialChoice(db, id.staff, store.a1, { supplier: "新ディーラー", category: "トリートメント" });   // 2回目は増えない
+    const d = (await svc.listMaterialDealers(db, id.mgr, store.a1)).dealers.find((x) => x.name === "新ディーラー")!;
+    expect(d.categories.map((c) => c.name)).toEqual(["カラー", "ストレート", "パーマ", "その他", "トリートメント"]);
+    await svc.saveMaterialDealer(db, id.mgr, store.a1, { kind: "category", id: d.categories[4].id, active: false });
+    await expect(svc.addMaterialChoice(db, id.staff, store.a1, { supplier: "新ディーラー", category: "トリートメント" })).rejects.toThrow("しまってあります");
+    await svc.saveMaterialDealer(db, id.mgr, store.a1, { kind: "dealer", id: d.id, active: false });
+    await expect(svc.addMaterialChoice(db, id.staff, store.a1, { supplier: "新ディーラー" })).rejects.toThrow("しまってあります");
+    await expect(svc.addMaterialChoice(db, id.staff, store.a1, { supplier: " " })).rejects.toThrow();
+    await expect(svc.addMaterialChoice(db, id.staff2, store.a1, { supplier: "他店から" })).rejects.toThrow();
+  });
+});

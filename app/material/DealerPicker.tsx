@@ -6,39 +6,49 @@ import type { MaterialDealerRow } from "@/lib/service";
 
 const chip = (on: boolean): React.CSSProperties => ({ width: "auto", padding: "8px 14px", borderRadius: 20, border: on ? "2px solid var(--blue, #0a84ff)" : "1px solid var(--line, #ddd)", background: on ? "var(--blue, #0a84ff)" : "#fff", color: on ? "#fff" : "var(--ink)", fontWeight: 700 });
 
-/** 業者（ディーラー）とカテゴリーを、ボタンで選ぶ。新しい名前は入力すると、保存したときに自動で覚える */
-export function DealerPicker({ dealers, supplier, category, onPick }: { dealers: MaterialDealerRow[]; supplier: string; category: string; onPick: (supplier: string, category: string) => void }) {
-  const [newDealer, setNewDealer] = useState(false);
-  const [newCat, setNewCat] = useState(false);
+/** 業者（ディーラー）とカテゴリーを、ボタンで選ぶ。「＋」から、誰でもその場で足せる（足すとすぐ覚えて、次からボタンに出る） */
+export function DealerPicker({ dealers, supplier, category, onPick, onAdd }: { dealers: MaterialDealerRow[]; supplier: string; category: string; onPick: (supplier: string, category: string) => void; onAdd: (supplier: string, category: string) => Promise<void> }) {
+  const [addDealer, setAddDealer] = useState(false);
+  const [dName, setDName] = useState("");
+  const [addCat, setAddCat] = useState(false);
+  const [cName, setCName] = useState("");
+  const [msg, setMsg] = useState("");
   const cur = dealers.find((d) => d.name === supplier);
-  const known = !!cur;
   const cats = (cur?.categories ?? []).filter((c) => c.active);
+  const add = async (sup: string, cat: string, done: () => void) => {
+    setMsg("");
+    try { await onAdd(sup, cat); onPick(sup, cat); done(); } catch (e) { setMsg((e as Error).message); }
+  };
   return (
     <>
       <div style={{ margin: "10px 0 4px", fontWeight: 700 }}>業者（ディーラー）</div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-        {dealers.filter((d) => d.active).map((d) => <button key={d.id} type="button" style={chip(supplier === d.name)} onClick={() => { onPick(d.name, d.name === supplier ? category : ""); setNewDealer(false); }}>{d.name}</button>)}
-        <button type="button" style={chip(newDealer || (!!supplier && !known))} onClick={() => { setNewDealer(true); if (known) onPick("", ""); }}>＋ ほかの業者</button>
+        {dealers.filter((d) => d.active).map((d) => <button key={d.id} type="button" style={chip(supplier === d.name)} onClick={() => { onPick(d.name, d.name === supplier ? category : ""); setAddDealer(false); }}>{d.name}</button>)}
+        <button type="button" style={{ ...chip(addDealer), borderStyle: "dashed" }} onClick={() => { setAddDealer(!addDealer); setMsg(""); }}>＋ 業者を足す</button>
       </div>
-      {(newDealer || (!!supplier && !known)) && (
-        <>
-          <input autoFocus value={supplier} onChange={(e) => onPick(e.target.value, "")} placeholder="業者の名前（保存すると、次から選べます）" style={{ marginTop: 8 }} />
-          <p className="hint" style={{ margin: "2px 0 0" }}>新しい業者です。保存すると自動で覚えて、次からボタンで選べます。</p>
-        </>
+      {addDealer && (
+        <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+          <input autoFocus value={dName} onChange={(e) => setDName(e.target.value)} placeholder="業者の名前（足すと、次からボタンに出ます）" maxLength={80} style={{ flex: 1 }} />
+          <button type="button" style={{ width: "auto" }} disabled={!dName.trim()} onClick={() => add(dName.trim(), "", () => { setDName(""); setAddDealer(false); })}>追加</button>
+        </div>
       )}
       {supplier.trim() && (
         <>
           <div style={{ margin: "12px 0 4px", fontWeight: 700 }}>カテゴリー（{supplier.trim()}の中）</div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-            <button type="button" style={chip(category === "" && !newCat)} onClick={() => { onPick(supplier, ""); setNewCat(false); }}>えらばない</button>
-            {cats.map((c) => <button key={c.id} type="button" style={chip(category === c.name)} onClick={() => { onPick(supplier, c.name); setNewCat(false); }}>{c.name}</button>)}
-            <button type="button" style={chip(newCat || (!!category && !cats.some((c) => c.name === category)))} onClick={() => { setNewCat(true); onPick(supplier, ""); }}>＋ 新しいカテゴリー</button>
+            <button type="button" style={chip(category === "")} onClick={() => onPick(supplier, "")}>えらばない</button>
+            {cats.map((c) => <button key={c.id} type="button" style={chip(category === c.name)} onClick={() => { onPick(supplier, c.name); setAddCat(false); }}>{c.name}</button>)}
+            <button type="button" style={{ ...chip(addCat), borderStyle: "dashed" }} onClick={() => { setAddCat(!addCat); setMsg(""); }}>＋ カテゴリーを足す</button>
           </div>
-          {(newCat || (!!category && !cats.some((c) => c.name === category))) && (
-            <input autoFocus value={category} onChange={(e) => onPick(supplier, e.target.value)} placeholder="例：カラー・ストレート（保存すると、次から選べます）" style={{ marginTop: 8 }} maxLength={40} />
+          {addCat && (
+            <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+              <input autoFocus value={cName} onChange={(e) => setCName(e.target.value)} placeholder="例：カラー・ストレート（足すと、次からボタンに出ます）" maxLength={40} style={{ flex: 1 }} />
+              <button type="button" style={{ width: "auto" }} disabled={!cName.trim()} onClick={() => add(supplier.trim(), cName.trim(), () => { setCName(""); setAddCat(false); })}>追加</button>
+            </div>
           )}
         </>
       )}
+      {msg && <p className="err" style={{ margin: "6px 0 0" }}>{msg}</p>}
     </>
   );
 }

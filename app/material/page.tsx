@@ -220,7 +220,7 @@ function Page() {
           <div className="sheet" onClick={(e) => e.stopPropagation()} role="dialog" aria-label="発注の記録">
             <h3>{form.id ? "発注を直す" : "発注を記録する"}</h3>
             <label>発注した日<input type="date" value={form.orderedOn} onChange={(e) => setForm({ ...form, orderedOn: e.target.value })} /></label>
-            <DealerPicker dealers={dealers.dealers} supplier={form.supplier} category={form.category} onPick={(sup, cat) => setForm((cur) => cur ? { ...cur, supplier: sup, category: cat, tax: memory.supplierTax[sup] ?? cur.tax } : cur)} />
+            <DealerPicker dealers={dealers.dealers} supplier={form.supplier} category={form.category} onPick={(sup, cat) => setForm((cur) => cur ? { ...cur, supplier: sup, category: cat, tax: memory.supplierTax[sup] ?? cur.tax } : cur)} onAdd={async (sup, cat) => { await api("/api/material", { action: "choice", storeId, choice: { supplier: sup, category: cat } }); await loadDealers(); }} />
             {dealers.canManage && <p style={{ margin: "6px 0 0" }}><button type="button" className="ghost" style={{ width: "auto", color: "var(--blue)" }} onClick={() => setEditDealers(true)}>✏ 業者・カテゴリーを直す</button></p>}
             <datalist id="itemnames">{memory.items.map((s) => <option key={s} value={s} />)}</datalist>
             <label>種類

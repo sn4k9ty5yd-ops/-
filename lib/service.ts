@@ -1749,6 +1749,29 @@ async function learnDealer(q: Queryable, companyId: string, userId: string, stor
     "insert into material_categories (company_id, store_id, dealer_id, name, sort_order, created_by) values ($1,$2,$3,$4,(select coalesce(max(sort_order), 0) + 1 from material_categories where dealer_id = $3),$5)", [companyId, storeId, d.id, cat, userId]);
 }
 
+/** 業者・カテゴリーを、その場で足す（書き込める人なら誰でも）。すでにあれば、そのまま選べる。しまってあるものは、店長が「もどす」 */
+export async function addMaterialChoice(db: Database, userId: string, storeId: string, a: { supplier: string; category?: string }): Promise<void> {
+  const me = await getMe(db, userId);
+  if (!me || me.displayOnly) throw new ForbiddenError();
+  const sup = a.supplier.trim(), cat = (a.category ?? "").trim();
+  if (!sup || sup.length > 80) throw new Error("業者の名前は、1〜80文字で入れてください");
+  if (cat.length > 40) throw new Error("カテゴリーの名前は、40文字までです");
+  try {
+    await asUser(db, userId, async (q) => {
+      const d = (await q.query<{ id: string; active: boolean }>("select id, active from material_dealers where store_id = $1 and name = $2", [storeId, sup])).rows[0];
+      if (d && !d.active) throw new Error("その業者は、しまってあります。店長に「もどす」をお願いしてください");
+      if (d && cat) {
+        const c = (await q.query<{ active: boolean }>("select active from material_categories where dealer_id = $1 and name = $2", [d.id, cat])).rows[0];
+        if (c && !c.active) throw new Error("そのカテゴリーは、しまってあります。店長に「もどす」をお願いしてください");
+      }
+      await learnDealer(q, me.companyId, userId, storeId, sup, cat);
+    });
+  } catch (e) {
+    if (e instanceof Error && !(e as { code?: string }).code) throw e;
+    throw new ForbiddenError();
+  }
+}
+
 export interface MaterialCategoryRow { id: string; name: string; active: boolean }
 export interface MaterialDealerRow { id: string; name: string; active: boolean; categories: MaterialCategoryRow[] }
 /** 業者とそのカテゴリーの一覧。しまってあるもの(active=false)は、編集できる人にだけ見える */
