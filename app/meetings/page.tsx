@@ -55,6 +55,7 @@ function Page() {
               <b>{m.title}</b>　<span className="sub">{reiwa(m.heldOn)}</span>
               {m.summary && <div className="sub" style={{ whiteSpace: "pre-wrap", maxHeight: 60, overflow: "hidden" }}>{m.summary.slice(0, 120)}</div>}
             </Link>
+            {canEdit && <button className="ghost noprint" style={{ color: "#c00", marginTop: 6 }} onClick={async () => { if (!confirm(`「${m.title}」の会議の記録を消しますか？（一覧から見えなくなります）`)) return; try { await api("/api/meetings", { action: "delete", id: m.id }); await load(); } catch (e) { setMsg((e as Error).message); } }}>この会議を消す</button>}
           </li>
         ))}
       </ul>
