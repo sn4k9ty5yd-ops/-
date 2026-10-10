@@ -1724,7 +1724,7 @@ export async function cancelMaterialOrder(db: Database, userId: string, id: stri
 }
 
 /** 新しい業者に、はじめから入れておくカテゴリー（店長があとで、しまう・直す・足すができる） */
-export const DEFAULT_MATERIAL_CATEGORIES = ["カラー", "ストレート", "パーマ", "シャンプー・トリートメント", "その他"];
+export const DEFAULT_MATERIAL_CATEGORIES = ["カラー", "ストレート", "パーマ", "その他"];
 async function addDefaultCategories(q: Queryable, companyId: string, userId: string, storeId: string, dealerId: string) {
   for (let i = 0; i < DEFAULT_MATERIAL_CATEGORIES.length; i++)
     await q.query(
