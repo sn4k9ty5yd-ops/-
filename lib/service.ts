@@ -3213,10 +3213,10 @@ export async function listCouncils(db: Database, userId: string, input: { storeI
   if (!/^[0-9a-f-]{36}$/i.test(storeId)) throw new Error("お店をえらんでください");
   return asUser(db, userId, async (q) => {
     const a = (await q.query<CouncilRow>(
-      `select c.id, c.theme, c.result, u.name as "byName", to_char(c.created_at at time zone 'Asia/Tokyo', 'YYYY-MM-DD HH24:MI') as "createdAt", (c.created_by = app.uid()) as mine
+      `select c.id, c.theme, c.result, u.name as "byName", to_char(c.created_at at time zone 'Asia/Tokyo', 'YYYY-MM-DD HH24:MI') as "createdAt", (c.created_by = app.uid() or app.meeting_edit(c.store_id)) as mine
          from ai_councils c left join memberships u on u.id = c.created_by where not c.private and c.store_id = $1 order by c.created_at desc limit 100`, [storeId])).rows;
     const b = (await q.query<CouncilRow>(
-      `select a.id, a.theme, a.result, u.name as "byName", to_char(a.created_at at time zone 'Asia/Tokyo', 'YYYY-MM-DD HH24:MI') as "createdAt", false as mine, true as "fromMeeting"
+      `select a.id, a.theme, a.result, u.name as "byName", to_char(a.created_at at time zone 'Asia/Tokyo', 'YYYY-MM-DD HH24:MI') as "createdAt", (a.created_by = app.uid() or app.meeting_edit(a.store_id)) as mine, true as "fromMeeting"
          from meeting_ai a left join memberships u on u.id = a.created_by where a.store_id = $1 order by a.created_at desc limit 100`, [storeId])).rows;
     return [...a, ...b].sort((x, y) => (x.createdAt < y.createdAt ? 1 : -1));
   });
@@ -3255,8 +3255,8 @@ export async function runCouncil(db: Database, userId: string, input: { storeId?
 /** 自分がひらいたAI会議の記録を消す */
 export async function deleteCouncil(db: Database, userId: string, id: string): Promise<void> {
   if (!/^[0-9a-f-]{36}$/i.test(id)) throw new ForbiddenError();
-  const n = (await asUser(db, userId, (q) => q.query("delete from ai_councils where id = $1 returning id", [id]))).rows.length;
-  if (n === 0) throw new ForbiddenError("消せるのは、自分がひらいた記録だけです");
+  const n = await asUser(db, userId, async (q) => (await q.query("delete from ai_councils where id = $1 returning id", [id])).rows.length + (await q.query("delete from meeting_ai where id = $1 returning id", [id])).rows.length);
+  if (n === 0) throw new ForbiddenError("消せるのは、自分がひらいた記録か、店長・正美さんです");
 }
 
 // ---------------------------------------------------------------- 変更の記録（アプリ制作者だけが見られる）

@@ -32,6 +32,8 @@ function Page() {
   const [tEdit, setTEdit] = useState<Record<string, string>>({});
   const [msg, setMsg] = useState(""); const [ok, setOk] = useState("");
   const [spa, setSpa] = useState<SpaClaim[]>([]);
+  const [spaRate, setSpaRate] = useState(20);
+  useEffect(() => { if (me.level < 3) api<{ rates: SalesRates }>(`/api/sales?mine=1&month=${ym}`).then((r) => setSpaRate(r.rates.spa)).catch(() => {}); }, [me.level, ym]);
   const loadSpa = useCallback(async () => { try { setSpa((await api<{ claims: SpaClaim[] }>(`/api/sales?spaStore=1&storeId=${storeId}&month=${ym}`)).claims); } catch { setSpa([]); } }, [storeId, ym]);
   useEffect(() => { loadSpa(); }, [loadSpa]);
 
@@ -76,7 +78,7 @@ function Page() {
 
   const canEdit = me.level === 4 || (me.level === 3 && storeId === me.storeId);
   const canCommission = me.level === 4 || (me.level === 3 && storeId === me.storeId);
-  if (me.level < 3) return <main className="wide"><Link href="/home" className="back">← ホーム</Link><h1>売上</h1><p className="hint">この画面は、店長・シフト担当・管理者が使います。自分の売上は、ホームの「売上」から見られます。</p></main>;
+  if (me.level < 3) return <main className="wide"><Link href="/home" className="back">← ホーム</Link><h1>売上</h1><SubTabs items={salesTabs(me.level, me.displayOnly)} /><SpaMine ym={ym} ratePercent={spaRate} /><p className="hint">ヘッドスパは、アシスタントもスタイリストも、ここから申請できます。自分の月の売上は、ホームの「売上」→「自分の売上（提出）」から出します。</p></main>;
   const tgt = data?.storeTarget ?? null;
   const ach = achievement(sum.total, tgt);
 

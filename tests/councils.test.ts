@@ -49,9 +49,12 @@ describe("AI会議（議事録とは別）", () => {
     const { asUser } = await import("../lib/db/user-context");
     expect((await asUser(db, id.office, (q) => q.query("select * from ai_councils where private"))).rows).toHaveLength(0);
   });
-  it("消せるのは、自分がひらいた記録だけ", async () => {
+  it("消せるのは、ひらいた本人と、お店の会議をひらける人（店長・正美さん）。スタッフと他店の店長は消せない", async () => {
     const r = await svc.runCouncil(db, id.mgrA, { storeId: storeA, theme: "消す" }, ai);
-    await expect(svc.deleteCouncil(db, id.office, r.id)).rejects.toThrow();
-    await svc.deleteCouncil(db, id.mgrA, r.id);
+    await expect(svc.deleteCouncil(db, id.staffA, r.id)).rejects.toThrow();
+    await expect(svc.deleteCouncil(db, id.mgrB, r.id)).rejects.toThrow();
+    await svc.deleteCouncil(db, id.office, r.id);
+    const r2 = await svc.runCouncil(db, id.mgrA, { storeId: storeA, theme: "消す2" }, ai);
+    await svc.deleteCouncil(db, id.mgrA, r2.id);
   });
 });
