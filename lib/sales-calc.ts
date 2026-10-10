@@ -10,12 +10,18 @@ export const yoy = (cur: number, prev: number | null | undefined) => (prev && pr
 export const yen = (n: number) => `${n.toLocaleString("ja-JP")}円`;
 export const signed = (n: number) => `${n > 0 ? "+" : ""}${n}%`;
 
-export interface CommissionInput { retail: number; kitsukeSales: number; makeupSales: number; spaSales: number }
+/** ヘッドスパは、1人につき 1,000円 を売上から引いた金額に、歩合がつく（例: 1,800円×2人＋4,500円×3人＝17,100円・5人 → 17,100−5,000＝12,100円の20%）。事務所への報告も、引いたあとの金額 */
+export const SPA_DEDUCT_PER_PERSON = 1000;
+export const spaNet = (sales: number, count: number) => Math.max(0, sales - SPA_DEDUCT_PER_PERSON * Math.max(0, count));
+export interface CommissionInput { retail: number; kitsukeSales: number; makeupSales: number; spaSales: number; spaCount?: number }
 export interface CommissionRates { retail: number; kitsuke: number; makeup: number; spa: number }
 export const COMMISSION_LABELS = { retail: "店販", kitsuke: "着付け", makeup: "メイク", spa: "ヘッドスパ" } as const;
 /** 歩合の目安（売上 × 割合。1項目ごとに、円未満は切り捨て） */
-export function calcCommission(v: CommissionInput, rates: CommissionRates): { items: { key: keyof CommissionRates; label: string; sales: number; rate: number; amount: number }[]; total: number } {
-  const src = { retail: v.retail, kitsuke: v.kitsukeSales, makeup: v.makeupSales, spa: v.spaSales };
-  const items = (Object.keys(src) as (keyof CommissionRates)[]).map((key) => ({ key, label: COMMISSION_LABELS[key], sales: src[key], rate: rates[key], amount: Math.floor((src[key] * rates[key]) / 100) }));
+export function calcCommission(v: CommissionInput, rates: CommissionRates): { items: { key: keyof CommissionRates; label: string; sales: number; rate: number; amount: number; note?: string }[]; total: number } {
+  const src = { retail: v.retail, kitsuke: v.kitsukeSales, makeup: v.makeupSales, spa: spaNet(v.spaSales, v.spaCount ?? 0) };
+  const items = (Object.keys(src) as (keyof CommissionRates)[]).map((key) => ({
+    key, label: COMMISSION_LABELS[key], sales: src[key], rate: rates[key], amount: Math.floor((src[key] * rates[key]) / 100),
+    ...(key === "spa" && (v.spaCount ?? 0) > 0 ? { note: `売上 ${v.spaSales.toLocaleString("ja-JP")}円 − ${SPA_DEDUCT_PER_PERSON.toLocaleString("ja-JP")}円×${v.spaCount}人` } : {}),
+  }));
   return { items, total: items.reduce((s, i) => s + i.amount, 0) };
 }

@@ -24,12 +24,13 @@ beforeAll(async () => {
 });
 
 describe("AI会議（議事録とは別）", () => {
-  it("店長がひらくと、自店の人は読める。ほかのお店の人は読めない。スタッフはひらけない", async () => {
+  it("自店の全員がひらける・読める。ほかのお店の人は読めない・ひらけない", async () => {
     await svc.runCouncil(db, id.mgrA, { storeId: storeA, theme: "定着率", private: false }, ai);
-    expect((await svc.listCouncils(db, id.staffA, { storeId: storeA })).map((x) => x.theme)).toEqual(["定着率"]);
+    expect((await svc.listCouncils(db, id.staffA, { storeId: storeA })).map((x) => x.theme).sort()).toEqual(["定着率"]);
     expect(await svc.listCouncils(db, id.mgrB, { storeId: storeA })).toHaveLength(0);
-    await expect(svc.runCouncil(db, id.staffA, { storeId: storeA, theme: "x" }, ai)).rejects.toThrow();
-    await expect(svc.runCouncil(db, id.mgrA, { storeId: storeB, theme: "x" }, ai)).rejects.toThrow();
+    await svc.runCouncil(db, id.staffA, { storeId: storeA, theme: "スタッフもひらける" }, ai);                 // お店の全員がひらける
+    await expect(svc.runCouncil(db, id.mgrA, { storeId: storeB, theme: "x" }, ai)).rejects.toThrow();      // ほかのお店の分は不可
+    await expect(svc.runCouncil(db, id.mgrB, { storeId: storeA, theme: "x" }, ai)).rejects.toThrow();
   });
   it("貼りつけで残せる。テーマが空ならだめ", async () => {
     await svc.runCouncil(db, id.mgrA, { storeId: storeA, theme: "貼る", paste: "他のAIの答え" }, ai);

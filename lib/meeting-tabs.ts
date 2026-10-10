@@ -1,7 +1,8 @@
-/** 「ミーティング」と「AI会議（僕専用）」の切りかえ（僕専用はアプリ制作者だけ。ほかの人には切りかえは出ない） */
+/** 「ミーティング」の中の切りかえ（会議の記録／AI会議／AI会議（僕専用）＝アプリ制作者だけ） */
 export function meetingTabs(appOwner = false): { href: string; label: string; show?: boolean }[] {
   return [
-    { href: "/meetings", label: "🎙 ミーティング" },
+    { href: "/meetings", label: "🎙 会議の記録" },
+    { href: "/councils", label: "🤖 AI会議" },
     { href: "/councils/private", label: "🔒 AI会議（僕専用）", show: appOwner },
   ];
 }

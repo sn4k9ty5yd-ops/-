@@ -87,6 +87,7 @@ function Page() {
       const pics: Pic[] = [];
       for (const f of Array.from(files)) if (f.type.startsWith("image/")) pics.push(await shrink(f));
       setForm((cur) => (cur ? { ...cur, pics: [...cur.pics, ...pics] } : cur));
+      for (const p of pics) await readPic(p);   // 貼ったら、自動で文字を読み取って、明細の下書きにする
     } catch { setMsg("画像を読みこめませんでした"); }
   };
   const [reading, setReading] = useState("");
@@ -236,35 +237,43 @@ function Page() {
             <label>内容<input value={form.item} onChange={(e) => setForm({ ...form, item: e.target.value })} placeholder="例: カラー剤・シャンプー" /></label>
             <label>メモ<input value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} /></label>
             <div onPaste={(e) => { const fs = Array.from(e.clipboardData.files); if (fs.length) { e.preventDefault(); addPics(fs); } }}>
-              <label>発注画面のスクリーンショット（貼った人と日時は自動で記録されます）
+              <label>発注画面のスクリーンショット（貼ると、自動で文字を読み取って明細に入れます。貼った人と日時も自動で記録されます）
                 <input type="file" accept="image/*" multiple onChange={(e) => { addPics(e.target.files); e.target.value = ""; }} /></label>
               <input aria-label="ここに画像を貼り付け" placeholder="パソコンでは、ここを押して貼り付け（Ctrl+V）もできます" readOnly style={{ width: "100%" }} />
               <div>{form.pics.map((p, i) => (
                 // eslint-disable-next-line @next/next/no-img-element
                 <span key={i} style={{ position: "relative", display: "inline-block", marginRight: 6 }}><img src={p.preview} alt="" style={{ height: 64, borderRadius: 6 }} />
                   <button className="ghost" style={{ position: "absolute", top: -6, right: -6 }} onClick={() => setForm({ ...form, pics: form.pics.filter((_, j) => j !== i) })}>×</button>
-                  <button className="ghost" style={{ color: "var(--blue)", display: "block" }} disabled={!!reading} onClick={() => readPic(p)}>文字を読み取る</button></span>))}</div>
+</span>))}</div>
               {reading && <p className="sub">{reading}</p>}
               {form.id && (data?.images ?? []).some((i) => i.orderId === form.id) && <p className="sub">すでに付いている画像は、一覧に出ています（手では消せません）。</p>}
             </div>
             {form.lines !== null && (() => {
-              const fq = (memory.frequent ?? []).filter((f) => !form.supplier || f.supplier === form.supplier).slice(0, 24);
+              const fq = (memory.frequent ?? []).filter((f) => !form.supplier || f.supplier === form.supplier);
               if (fq.length === 0) return null;
+              // カテゴリーごとに分ける。いま選んでいるカテゴリーは開いておく（ほかは「▶」を押すと開く）
+              const groups = new Map<string, typeof fq>();
+              for (const f of fq) groups.set(f.category || "カテゴリーなし", [...(groups.get(f.category || "カテゴリーなし") ?? []), f]);
+              const addItem = (f: (typeof fq)[number]) => setForm((cur) => {
+                if (!cur) return cur;
+                const ls = cur.lines ?? [];
+                const i = ls.findIndex((x) => x.name === f.name);
+                const lines = i >= 0 ? ls.map((x, j) => (j === i ? { ...x, qty: x.qty + 1, amount: x.amount + f.unit } : x)) : [...ls, { name: f.name, qty: 1, amount: f.unit }];
+                return { ...cur, supplier: cur.supplier || f.supplier, category: cur.category || f.category, lines };
+              });
               return (
                 <div>
                   <b>よく使う商品（ポチッと押すと明細に入ります。もう1回押すと数量が増えます）</b>
-                  <div className="actions" style={{ flexWrap: "wrap" }}>
-                    {fq.map((f) => (
-                      <button key={f.supplier + f.name} className="ghost" style={{ width: "auto", color: "var(--ink)", border: "1px solid var(--line, #ddd)", borderRadius: 20 }}
-                        onClick={() => setForm((cur) => {
-                          if (!cur) return cur;
-                          const ls = cur.lines ?? [];
-                          const i = ls.findIndex((x) => x.name === f.name);
-                          const lines = i >= 0 ? ls.map((x, j) => (j === i ? { ...x, qty: x.qty + 1, amount: x.amount + f.unit } : x)) : [...ls, { name: f.name, qty: 1, amount: f.unit }];
-                          return { ...cur, supplier: cur.supplier || f.supplier, lines };
-                        })}>{f.name}</button>
-                    ))}
-                  </div>
+                  {[...groups].map(([cat, items]) => (
+                    <details key={cat} open={form.category ? form.category === cat : groups.size === 1} style={{ margin: "4px 0" }}>
+                      <summary className="sub" style={{ cursor: "pointer", fontWeight: 700 }}>{cat}（{items.length}）</summary>
+                      <div className="actions" style={{ flexWrap: "wrap" }}>
+                        {items.slice(0, 40).map((f) => (
+                          <button key={f.supplier + f.category + f.name} className="ghost" style={{ width: "auto", color: "var(--ink)", border: "1px solid var(--line, #ddd)", borderRadius: 20 }} onClick={() => addItem(f)}>{f.name}</button>
+                        ))}
+                      </div>
+                    </details>
+                  ))}
                 </div>
               );
             })()}

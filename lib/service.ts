@@ -1724,7 +1724,7 @@ export async function cancelMaterialOrder(db: Database, userId: string, id: stri
 }
 
 /** 新しい業者に、はじめから入れておくカテゴリー（店長があとで、しまう・直す・足すができる） */
-export const DEFAULT_MATERIAL_CATEGORIES = ["カラー", "ストレート", "パーマ", "その他"];
+export const DEFAULT_MATERIAL_CATEGORIES = ["カラー", "ストレート", "パーマ", "小物", "その他"];
 async function addDefaultCategories(q: Queryable, companyId: string, userId: string, storeId: string, dealerId: string) {
   for (let i = 0; i < DEFAULT_MATERIAL_CATEGORIES.length; i++)
     await q.query(
@@ -1910,7 +1910,7 @@ export async function getMaterialImage(db: Database, userId: string, id: string)
 export interface MaterialMemory {
   suppliers: string[];
   /** よく使う商品（ボタンにする）。発注先ごとに、回数の多い順。単価=最後に入れた金額÷数量 */
-  frequent?: { name: string; supplier: string; unit: number; count: number }[];
+  frequent?: { name: string; supplier: string; category: string; unit: number; count: number }[];
   /** 今まで入れた商品名（よく使う順） */
   items: string[];
   /** 読み取った文字 → 直した商品名（学習） */
@@ -1932,13 +1932,13 @@ export async function getMaterialMemory(db: Database, userId: string, storeId: s
          from material_orders o, jsonb_array_elements(o.lines) l
         where o.store_id = $1 and o.deleted_at is null and coalesce(l->>'name','') <> ''
         group by 1, 2 order by n desc limit 1500`, [storeId])).rows;
-    const freq = (await q.query<{ name: string; supplier: string; unit: number; count: number }>(
-      `select name, supplier, (array_agg(unit order by at desc))[1]::int as unit, count(*)::int as count from (
-         select l->>'name' as name, o.supplier, o.created_at as at,
+    const freq = (await q.query<{ name: string; supplier: string; category: string; unit: number; count: number }>(
+      `select name, supplier, category, (array_agg(unit order by at desc))[1]::int as unit, count(*)::int as count from (
+         select l->>'name' as name, o.supplier, o.category, o.created_at as at,
                 round(coalesce((l->>'amount')::numeric, 0) / greatest(coalesce((l->>'qty')::numeric, 1), 1)) as unit
            from material_orders o, jsonb_array_elements(o.lines) l
           where o.store_id = $1 and o.deleted_at is null and coalesce(l->>'name','') <> '') t
-        group by name, supplier order by count desc, name limit 60`, [storeId])).rows;
+        group by name, supplier, category order by count desc, name limit 150`, [storeId])).rows;
     const items = [...new Set(lines.map((l) => l.name))].slice(0, 500);
     const aliases = lines.filter((l) => l.raw && l.raw !== l.name).map((l) => ({ raw: l.raw as string, name: l.name }));
     const st = (await q.query<{ supplier: string; tax_mode: "ex" | "in" }>(
@@ -2859,7 +2859,7 @@ export async function exportRecords(db: Database, userId: string, o: RecordsOpti
     }
     if (has("sales")) out.sales = (await q.query(`select to_char(x.month, 'YYYY-MM') as "月", s.name as "店舗", m.name as "氏名", case x.status when 'draft' then '下書き' when 'submitted' then '提出済み' when 'manager_ok' then '店長確認済み' when 'office_ok' then '確定' else '差し戻し' end as "状態", x.total_sales as "総合売上", x.free_sales as "フリー売上", x.nominated_sales as "指名技術売上",
         x.retail_sales as "店販売上", x.retail_count as "店販人数", x.customers as "客数", x.new_customers as "新規", x.repeat_customers as "再来",
-        x.kitsuke_count as "着付け人数", x.kitsuke_sales as "着付け売上", x.makeup_count as "メイク人数", x.makeup_sales as "メイク売上", x.spa_count as "スパ人数", x.spa_sales as "スパ売上", x.commission_amount as "歩合"
+        x.kitsuke_count as "着付け人数", x.kitsuke_sales as "着付け売上", x.makeup_count as "メイク人数", x.makeup_sales as "メイク売上", x.spa_count as "スパ人数", x.spa_sales as "スパ売上", greatest(0, x.spa_sales - 1000 * x.spa_count) as "スパ売上（1人1,000円を引いたあと）", x.commission_amount as "歩合"
         from sales_stats x join memberships m on m.id = x.membership_id join stores s on s.id = x.store_id where x.month between date_trunc('month', $1::date) and $2::date and ($3::uuid[] is null or m.id = any($3)) order by x.month, s.sort_order, m.employee_code`, [ranges.sales.from, ranges.sales.to, sel])).rows;
     if (has("materials")) {
       out.materials = (await q.query(`select o.ordered_on::text as "発注日", s.name as "店舗", o.supplier as "発注先", o.category as "カテゴリー", o.item as "内容", case o.kind when 'supply' then '材料(業務)' when 'retail' then '店販' else 'その他' end as "種類",
@@ -3239,8 +3239,8 @@ export async function runCouncil(db: Database, userId: string, input: { storeId?
     if (text.length > 100000) throw new Error("文字が多すぎます");
   } else {
     if (!priv) {
-      const ok = await asUser(db, userId, async (q) => (await q.query<{ v: boolean }>("select app.meeting_edit($1) as v", [input.storeId])).rows[0].v);
-      if (!ok) throw new ForbiddenError("ミーティングをひらけるのは、店長と正美さんです");
+      const ok = await asUser(db, userId, async (q) => (await q.query<{ v: boolean }>("select app.meeting_view($1) as v", [input.storeId])).rows[0].v);
+      if (!ok) throw new ForbiddenError("自分のお店の分だけ、ひらけます");
     }
     aiThrottle(userId);
     text = await aiFn(discussionPrompt(theme));
@@ -3249,7 +3249,7 @@ export async function runCouncil(db: Database, userId: string, input: { storeId?
     const r = await asUser(db, userId, (q) => q.query<{ id: string }>(
       "insert into ai_councils (company_id, store_id, private, theme, result, created_by) values ($1,$2,$3,$4,$5,$6) returning id", [me.companyId, priv ? null : input.storeId, priv, theme, text, userId]));
     return { id: r.rows[0].id, text };
-  } catch (e) { if ((e as { code?: string }).code === "42501") throw new ForbiddenError("ミーティングをひらけるのは、店長と正美さんです"); throw e; }
+  } catch (e) { if ((e as { code?: string }).code === "42501") throw new ForbiddenError("自分のお店の分だけ、ひらけます"); throw e; }
 }
 
 /** 自分がひらいたAI会議の記録を消す */

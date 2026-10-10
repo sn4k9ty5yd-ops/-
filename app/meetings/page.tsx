@@ -35,7 +35,7 @@ function Page() {
       <Link href="/home" className="back">← ホーム</Link>
       <h1>🎙 ミーティング</h1>
       <SubTabs items={meetingTabs(!!me.appOwner)} />
-      <p className="sub">会議のボイスメモから、文字起こし・議事録・要約・マインドマップをつくります。</p>
+      <p className="sub">会議のボイスメモから、文字起こし・議事録・要約・マインドマップをつくります。課題をAIに会議してもらうのは、上の「AI会議」です。</p>
       {me.level === 4 && <select aria-label="お店" value={storeId} onChange={(e) => setStoreId(e.target.value)} style={{ marginBottom: 10 }}>{stores.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select>}
       {msg && <p className="err">{msg}</p>}
       {canEdit && !form && <button onClick={() => setForm({ title: "", heldOn: todayJst(), attendees: "" })}>＋ 新しい会議</button>}

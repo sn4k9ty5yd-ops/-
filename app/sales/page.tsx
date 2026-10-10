@@ -138,7 +138,7 @@ function Page() {
                 <td className="r">{canEdit ? <Stepper className="cellstp" label="個人目標" placeholder="－" step={10000} max={999999999} value={tEdit[r.membershipId] ?? (ptg === null ? "" : String(ptg))} onChange={(x) => setTEdit({ ...tEdit, [r.membershipId]: x })} onCommit={(x) => saveTarget(r.membershipId, x)} /> : ptg ?? "－"}</td>
                 <td className="r">{achievement(v.total, ptg) ?? "－"}</td>
                 <td className="r" style={{ whiteSpace: "nowrap" }}>{(() => {
-                  const sug = calcCommission({ retail: v.retail, kitsukeSales: v.kitsukeSales, makeupSales: v.makeupSales, spaSales: v.spaSales }, data!.rates).total;
+                  const sug = calcCommission({ retail: v.retail, kitsukeSales: v.kitsukeSales, makeupSales: v.makeupSales, spaSales: v.spaSales, spaCount: v.spaCount }, data!.rates).total;
                   const lock = !r.status || r.status === "draft" || r.status === "returned" || r.status === "office_ok" || r.membershipId === me.id || !canCommission;
                   return (<>
                     <span className="sub">目安 {yen(sug)}</span>{" "}
