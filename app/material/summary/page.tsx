@@ -105,6 +105,7 @@ function Page() {
             <Bars rows={sum.byStore} title="お店ごとの割合" />
             <Bars rows={sum.byKind} title="種類ごとの割合" />
             <Bars rows={sum.bySupplier} title="発注先ごとの割合" />
+            {sum.byCategory.some((r) => !r.label.endsWith("（カテゴリーなし）")) && <Bars rows={sum.byCategory} title="業者・カテゴリーごとの割合" />}
           </div>
 
           <div className="card">

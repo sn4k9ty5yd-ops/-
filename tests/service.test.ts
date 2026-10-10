@@ -17,7 +17,7 @@ async function person(co: string, code: string, name: string, level: number, st:
 
 beforeAll(async () => {
   db = await newDb();
-  expect(await migrate(db)).toEqual(["0001_tenant_core.sql", "0002_periods_requests.sql", "0003_store_changes.sql", "0004_shifts.sql", "0005_break_rule.sql", "0006_attendance.sql", "0007_products_stocktake.sql", "0008_stock.sql", "0009_display_accounts.sql", "0010_presence.sql", "0011_saturday_hours.sql", "0012_scheduled_retirement.sql", "0013_manual.sql", "0014_ranks.sql", "0015_short_name.sql", "0016_day_limits.sql", "0017_material_orders.sql", "0018_material_tax.sql", "0019_material_manager.sql", "0020_push.sql", "0021_lessons.sql", "0022_lesson_subcategories.sql", "0023_paid_leave.sql", "0024_sales.sql", "0025_sales_flow.sql", "0026_sales_commission.sql", "0027_security.sql", "0028_shift_maker_perms.sql", "0029_app_owner.sql", "0030_feedback.sql", "0031_undo_step.sql", "0032_acknowledge_owner.sql", "0033_register_sales.sql", "0034_product_add_store_use.sql", "0035_register_staff_hidden.sql", "0036_stocktake_everyone.sql", "0037_stocktake_everyone_manage.sql", "0038_lesson_checks.sql", "0039_check_max_from_items.sql", "0040_drop_register_sales.sql", "0041_wipe_sales.sql", "0042_sales_own_only.sql", "0043_manager_own_store_shifts.sql", "0044_tester_staffbuy.sql", "0045_rename_tester.sql", "0046_check_stylists.sql", "0047_exec_tiers.sql", "0048_meetings.sql", "0049_activity_log.sql", "0050_mentor.sql", "0052_interview_edit.sql", "0053_mbti_directory.sql", "0054_remove_empty_interview_pages.sql", "0055_shift_break.sql", "0056_app_secrets.sql", "0057_shift_edit_after_publish.sql", "0058_product_add_everyone.sql", "0059_mbti_own_store.sql", "0060_mbti_all_for_exec.sql", "0061_view_as.sql", "0062_leave_anytime.sql", "0063_office_inbox.sql", "0064_stocktake_line_edit.sql", "0065_close_time_reminder.sql", "0066_request_stage_visible.sql", "0067_check_assessor_pick.sql", "0068_commute_pass.sql", "0069_limits_by_rank.sql", "0070_commute_months.sql", "0071_material_manager_own_store.sql", "0072_fortune_push.sql", "0073_ai_councils.sql"]);
+  expect(await migrate(db)).toEqual(["0001_tenant_core.sql", "0002_periods_requests.sql", "0003_store_changes.sql", "0004_shifts.sql", "0005_break_rule.sql", "0006_attendance.sql", "0007_products_stocktake.sql", "0008_stock.sql", "0009_display_accounts.sql", "0010_presence.sql", "0011_saturday_hours.sql", "0012_scheduled_retirement.sql", "0013_manual.sql", "0014_ranks.sql", "0015_short_name.sql", "0016_day_limits.sql", "0017_material_orders.sql", "0018_material_tax.sql", "0019_material_manager.sql", "0020_push.sql", "0021_lessons.sql", "0022_lesson_subcategories.sql", "0023_paid_leave.sql", "0024_sales.sql", "0025_sales_flow.sql", "0026_sales_commission.sql", "0027_security.sql", "0028_shift_maker_perms.sql", "0029_app_owner.sql", "0030_feedback.sql", "0031_undo_step.sql", "0032_acknowledge_owner.sql", "0033_register_sales.sql", "0034_product_add_store_use.sql", "0035_register_staff_hidden.sql", "0036_stocktake_everyone.sql", "0037_stocktake_everyone_manage.sql", "0038_lesson_checks.sql", "0039_check_max_from_items.sql", "0040_drop_register_sales.sql", "0041_wipe_sales.sql", "0042_sales_own_only.sql", "0043_manager_own_store_shifts.sql", "0044_tester_staffbuy.sql", "0045_rename_tester.sql", "0046_check_stylists.sql", "0047_exec_tiers.sql", "0048_meetings.sql", "0049_activity_log.sql", "0050_mentor.sql", "0052_interview_edit.sql", "0053_mbti_directory.sql", "0054_remove_empty_interview_pages.sql", "0055_shift_break.sql", "0056_app_secrets.sql", "0057_shift_edit_after_publish.sql", "0058_product_add_everyone.sql", "0059_mbti_own_store.sql", "0060_mbti_all_for_exec.sql", "0061_view_as.sql", "0062_leave_anytime.sql", "0063_office_inbox.sql", "0064_stocktake_line_edit.sql", "0065_close_time_reminder.sql", "0066_request_stage_visible.sql", "0067_check_assessor_pick.sql", "0068_commute_pass.sql", "0069_limits_by_rank.sql", "0070_commute_months.sql", "0071_material_manager_own_store.sql", "0072_fortune_push.sql", "0073_ai_councils.sql", "0074_material_dealers.sql"]);
   expect(await migrate(db)).toEqual([]); // 2回目は何もしない
   const a = (await db.query<{ id: string }>("insert into companies (code, name) values ('co-a','A社') returning id")).rows[0].id;
   const b = (await db.query<{ id: string }>("insert into companies (code, name) values ('co-b','B社') returning id")).rows[0].id;
@@ -306,4 +306,45 @@ describe("材料費（発注額）", () => {
     expect(o.lines).toHaveLength(1);
   });
 
+});
+
+describe("材料費: 業者とカテゴリーを選ぶ・覚える・店長が直す", () => {
+  const base = { orderedOn: "2026-10-06", item: "x", kind: "supply" as const, amount: 1000 };
+  it("発注に使った業者・カテゴリーは自動で覚え、次から選べる。2回目は増えない", async () => {
+    await svc.addMaterialOrder(db, id.staff, store.a1, { ...base, supplier: "髪ドラ", category: "カラー" });
+    await svc.addMaterialOrder(db, id.staff, store.a1, { ...base, supplier: "髪ドラ", category: "カラー" });
+    await svc.addMaterialOrder(db, id.staff, store.a1, { ...base, supplier: "髪ドラ", category: "ストレート" });
+    await svc.addMaterialOrder(db, id.staff, store.a1, { ...base, supplier: "ダリア" });
+    const r = await svc.listMaterialDealers(db, id.staff, store.a1);
+    expect(r.canManage).toBe(false);
+    expect(r.dealers.map((d) => d.name)).toEqual(expect.arrayContaining(["髪ドラ", "ダリア"]));
+    expect(r.dealers.find((d) => d.name === "髪ドラ")!.categories.map((c) => c.name)).toEqual(["カラー", "ストレート"]);
+    expect((await svc.getMaterialMemory(db, id.staff, store.a1)).suppliers).toEqual(expect.arrayContaining(["髪ドラ", "ダリア"]));
+    expect((await svc.listMaterialOrders(db, id.mgr, store.a1, "2026-10-01", "2026-10-31")).some((o) => o.supplier === "髪ドラ" && o.category === "ストレート")).toBe(true);
+  });
+  it("直せるのは店長以上。スタッフは直せない。他店の店長も直せない", async () => {
+    const d = (await svc.listMaterialDealers(db, id.mgr, store.a1)).dealers.find((x) => x.name === "ダリア")!;
+    await expect(svc.saveMaterialDealer(db, id.staff, store.a1, { kind: "dealer", id: d.id, active: false })).rejects.toThrow();
+    await svc.saveMaterialDealer(db, id.mgr, store.a1, { kind: "dealer", id: d.id, active: false });
+    expect((await svc.listMaterialDealers(db, id.staff, store.a1)).dealers.some((x) => x.name === "ダリア")).toBe(false);   // しまうと、スタッフには出ない
+    expect((await svc.listMaterialDealers(db, id.mgr, store.a1)).dealers.find((x) => x.name === "ダリア")!.active).toBe(false);
+    expect((await svc.getMaterialMemory(db, id.staff, store.a1)).suppliers).not.toContain("ダリア");
+    await svc.saveMaterialDealer(db, id.mgr, store.a1, { kind: "dealer", id: d.id, active: true });
+    await expect(svc.saveMaterialDealer(db, id.staff2, store.a2, { kind: "dealer", id: d.id, active: false })).rejects.toThrow();
+  });
+  it("名前を直すと過去の発注の名前もそろう。足す・上下に動かすもできる", async () => {
+    const list = (await svc.listMaterialDealers(db, id.mgr, store.a1)).dealers;
+    const hd = list.find((x) => x.name === "髪ドラ")!;
+    await svc.saveMaterialDealer(db, id.mgr, store.a1, { kind: "dealer", id: hd.id, name: "髪どら" });
+    const orders = await svc.listMaterialOrders(db, id.mgr, store.a1, "2026-10-01", "2026-10-31");
+    expect(orders.filter((o) => o.supplier === "髪どら").length).toBe(3);
+    expect(orders.some((o) => o.supplier === "髪ドラ")).toBe(false);
+    await svc.saveMaterialDealer(db, id.mgr, store.a1, { kind: "category", dealerId: hd.id, name: "パーマ" });
+    await svc.saveMaterialDealer(db, id.mgr, store.a1, { kind: "dealer", name: "新しい業者" });
+    const cat = (await svc.listMaterialDealers(db, id.mgr, store.a1)).dealers.find((x) => x.id === hd.id)!.categories;
+    expect(cat.map((c) => c.name)).toEqual(["カラー", "ストレート", "パーマ"]);
+    await svc.saveMaterialDealer(db, id.mgr, store.a1, { kind: "category", id: cat[2].id, move: "up" });
+    expect((await svc.listMaterialDealers(db, id.mgr, store.a1)).dealers.find((x) => x.id === hd.id)!.categories.map((c) => c.name)).toEqual(["カラー", "パーマ", "ストレート"]);
+    await expect(svc.saveMaterialDealer(db, id.mgr, store.a1, { kind: "dealer", name: "髪どら" })).rejects.toThrow("同じ名前");
+  });
 });

@@ -3,9 +3,9 @@ import { summarize } from "../lib/material-summary";
 
 describe("材料費の統括", () => {
   const orders = [
-    { id: "1", storeId: "a", orderedOn: "2026-09-05", supplier: "甲", item: "", kind: "supply" as const, amount: 10000 },
-    { id: "2", storeId: "b", orderedOn: "2026-10-02", supplier: "甲", item: "シャンプー", kind: "retail" as const, amount: 5000 },
-    { id: "3", storeId: "a", orderedOn: "2026-10-09", supplier: "乙", item: "", kind: "supply" as const, amount: 15000 },
+    { id: "1", storeId: "a", orderedOn: "2026-09-05", supplier: "甲", category: "カラー", item: "", kind: "supply" as const, amount: 10000 },
+    { id: "2", storeId: "b", orderedOn: "2026-10-02", supplier: "甲", category: "", item: "シャンプー", kind: "retail" as const, amount: 5000 },
+    { id: "3", storeId: "a", orderedOn: "2026-10-09", supplier: "乙", category: "", item: "", kind: "supply" as const, amount: 15000 },
   ];
   const lines = [{ orderId: "1", name: "カラー剤", qty: 10, amount: 8000 }, { orderId: "1", name: "シャンプー", qty: 2, amount: 2000 }, { orderId: "3", name: "カラー剤", qty: 20, amount: 15000 }];
   const s = summarize(orders, lines, (id) => (id === "a" ? "ATENA" : "六本松"));

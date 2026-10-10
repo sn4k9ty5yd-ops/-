@@ -6,7 +6,7 @@ export interface MonthRow { month: string; total: number; count: number; change:
 export interface ItemRow { name: string; qty: number; amount: number; pct: number; orders: number }
 export interface Summary {
   total: number; count: number; avgPerMonth: number;
-  months: MonthRow[]; byStore: Share[]; byKind: Share[]; bySupplier: Share[]; byItem: ItemRow[];
+  months: MonthRow[]; byStore: Share[]; byKind: Share[]; bySupplier: Share[]; byCategory: Share[]; byItem: ItemRow[];
   /** 月ごとの「何を発注したか」（商品名ごとの合計） */
   itemsByMonth: Record<string, ItemRow[]>;
 }
@@ -50,6 +50,7 @@ export function summarize(orders: SummaryOrder[], lines: SummaryLine[], storeNam
     byStore: shares(orders, (o) => [o.storeId, storeName(o.storeId)], total),
     byKind: shares(orders, (o) => [o.kind, KIND[o.kind]], total),
     bySupplier: shares(orders, (o) => [o.supplier, o.supplier], total),
+    byCategory: shares(orders, (o) => [`${o.supplier}｜${o.category}`, o.category ? `${o.supplier}・${o.category}` : `${o.supplier}（カテゴリーなし）`], total),
     byItem: itemRows(entries),
   };
 }

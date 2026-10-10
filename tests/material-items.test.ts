@@ -3,7 +3,7 @@ import { itemsByMonthTable, monthItems } from "../lib/material-items";
 import type { MaterialOrder } from "../lib/service";
 
 const o = (id: string, day: string, lines: { name: string; qty: number; amount: number }[], item = "", amount = 0, deleted = false): MaterialOrder =>
-  ({ id, storeId: "s", orderedOn: day, supplier: "A社", item, kind: "supply", amount, note: "", lines, taxMode: "ex", entered: null, by: null, at: "", deleted, edited: false });
+  ({ id, storeId: "s", orderedOn: day, category: "", supplier: "A社", item, kind: "supply", amount, note: "", lines, taxMode: "ex", entered: null, by: null, at: "", deleted, edited: false });
 
 describe("発注した商品の一覧", () => {
   const orders = [

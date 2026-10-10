@@ -8,7 +8,8 @@ import { materialTabs } from "@/lib/material-tabs";
 import { applyMemory, findSupplier, parseOrderText, similarity, type OrderLine } from "@/lib/material-ocr";
 import { itemsByMonthTable, monthItems } from "@/lib/material-items";
 import { todayJst } from "@/lib/period-nav";
-import { MATERIAL_KIND_LABEL, toExTax, type MaterialImage, type MaterialMemory, type MaterialKind, type MaterialLogRow, type MaterialOrder, type ProductRow, type StoreRow } from "@/lib/service";
+import { DealerEditor, DealerPicker } from "./DealerPicker";
+import { MATERIAL_KIND_LABEL, toExTax, type MaterialDealerRow, type MaterialImage, type MaterialMemory, type MaterialKind, type MaterialLogRow, type MaterialOrder, type ProductRow, type StoreRow } from "@/lib/service";
 
 const yen = (n: number) => `${n.toLocaleString("ja-JP")}円`;
 const toInt = (raw: string) => raw.replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0)).replace(/[^\d]/g, "").replace(/^0+(?=\d)/, "");
@@ -28,7 +29,7 @@ async function shrink(file: File): Promise<{ mime: string; base64: string; previ
   return { mime: "image/jpeg", base64: url.split(",")[1], preview: url };
 }
 interface Pic { mime: string; base64: string; preview: string }
-interface Form { id?: string; orderedOn: string; supplier: string; item: string; kind: MaterialKind; amount: string; note: string; pics: Pic[]; lines: OrderLine[] | null; tax: "ex" | "in" }
+interface Form { id?: string; orderedOn: string; supplier: string; category: string; item: string; kind: MaterialKind; amount: string; note: string; pics: Pic[]; lines: OrderLine[] | null; tax: "ex" | "in" }
 
 function Page() {
   const { me } = useMe();
@@ -72,7 +73,7 @@ function Page() {
 
   const save = async () => {
     if (!form) return;
-    const input = { taxMode: form.tax, orderedOn: form.orderedOn, supplier: form.supplier, item: form.item, kind: form.kind, amount: Number(form.amount || "x"), note: form.note, ...(form.lines ? { lines: form.lines } : {}) };
+    const input = { taxMode: form.tax, orderedOn: form.orderedOn, supplier: form.supplier, category: form.category, item: form.item, kind: form.kind, amount: Number(form.amount || "x"), note: form.note, ...(form.lines ? { lines: form.lines } : {}) };
     try {
       const r = await api<{ id?: string }>("/api/material", form.id ? { action: "update", id: form.id, input } : { action: "add", storeId, input });
       const oid = form.id ?? r.id;
@@ -89,6 +90,10 @@ function Page() {
     } catch { setMsg("画像を読みこめませんでした"); }
   };
   const [reading, setReading] = useState("");
+  const [dealers, setDealers] = useState<{ dealers: MaterialDealerRow[]; canManage: boolean }>({ dealers: [], canManage: false });
+  const [editDealers, setEditDealers] = useState(false);
+  const loadDealers = useCallback(async () => { try { setDealers(await api(`/api/material?storeId=${storeId}&dealers=1`)); } catch { /* 無視 */ } }, [storeId]);
+  useEffect(() => { loadDealers(); }, [loadDealers, data]);
   const [memory, setMemory] = useState<MaterialMemory>({ suppliers: [], items: [], aliases: [], supplierTax: {} });
   useEffect(() => { api<MaterialMemory>(`/api/material?storeId=${storeId}&memory=1`).then(setMemory).catch(() => {}); }, [storeId, data]);
   /** 画像の文字を読み取って、明細の下書きにする（スマホ・パソコンの中で読む。お金はかからない） */
@@ -121,7 +126,7 @@ function Page() {
   const saveBudget = async () => {
     try { await api("/api/material", { action: "budget", storeId, month, amount: budgetEdit === "" ? null : Number(budgetEdit) }); setBudgetEdit(null); await load(); } catch (e) { setMsg((e as Error).message); }
   };
-  const tsv = () => ["日付\t発注先\t内容\t種類\t金額（税抜）\tメモ\t記入した人", ...live.slice().reverse().map((o) => [o.orderedOn, o.supplier, o.item, MATERIAL_KIND_LABEL[o.kind], o.amount, o.note, o.by ?? ""].join("\t")), `合計\t\t\t\t${total}`].join("\n");
+  const tsv = () => ["日付\t発注先\tカテゴリー\t内容\t種類\t金額（税抜）\tメモ\t記入した人", ...live.slice().reverse().map((o) => [o.orderedOn, o.supplier, o.category ?? "", o.item, MATERIAL_KIND_LABEL[o.kind], o.amount, o.note, o.by ?? ""].join("\t")), `合計\t\t\t\t\t${total}`].join("\n");
 
   return (
     <main className="wide">
@@ -178,7 +183,7 @@ function Page() {
       })()}
 
       <div className="toolbar">
-        {canEdit && <button onClick={() => { setMsg(""); setForm({ orderedOn: todayJst(), supplier: "", item: "", kind: "supply", amount: "", note: "", pics: [], lines: [], tax: "ex" }); }}>＋ 発注を記録する</button>}
+        {canEdit && <button onClick={() => { setMsg(""); setForm({ orderedOn: todayJst(), supplier: "", category: "", item: "", kind: "supply", amount: "", note: "", pics: [], lines: [], tax: "ex" }); }}>＋ 発注を記録する</button>}
         <button className="ghost" style={{ color: "var(--blue)" }} onClick={async () => setNote((await copyText(tsv())) ? "表をコピーしました（Excelやメールに貼れます）" : "コピーできませんでした")}>表をコピー</button>
         <button className="ghost" style={{ color: "var(--blue)" }} onClick={() => window.print()}>印刷</button>
         {(me.level >= 3 || mgr) && <button className="ghost" style={{ color: "var(--blue)" }} onClick={async () => setLog(await api<MaterialLogRow[]>(`/api/material?storeId=${storeId}&log=1`))}>変更の記録</button>}
@@ -190,9 +195,9 @@ function Page() {
         : <ul className="list">
           {data.orders.map((o) => (
             <li key={o.id} style={{ opacity: o.deleted ? 0.5 : 1, textDecoration: o.deleted ? "line-through" : "none", cursor: canEdit && !o.deleted ? "pointer" : "default" }}
-              onClick={() => { if (canEdit && !o.deleted) { setMsg(""); setForm({ id: o.id, orderedOn: o.orderedOn, supplier: o.supplier, item: o.item, kind: o.kind, amount: String(o.amount), note: o.note, pics: [], lines: o.lines ?? [], tax: "ex" }); } }}>
+              onClick={() => { if (canEdit && !o.deleted) { setMsg(""); setForm({ id: o.id, orderedOn: o.orderedOn, supplier: o.supplier, category: o.category ?? "", item: o.item, kind: o.kind, amount: String(o.amount), note: o.note, pics: [], lines: o.lines ?? [], tax: "ex" }); } }}>
               <div style={{ minWidth: 0, flex: 1 }}>
-                <b>{md(o.orderedOn)}　{o.supplier}</b><span className="chip">{MATERIAL_KIND_LABEL[o.kind]}</span>{o.edited && !o.deleted && <span className="chip">直した</span>}{o.deleted && <span className="chip warn">取り消し</span>}
+                <b>{md(o.orderedOn)}　{o.supplier}</b>{o.category && <span className="chip">{o.category}</span>}<span className="chip">{MATERIAL_KIND_LABEL[o.kind]}</span>{o.edited && !o.deleted && <span className="chip">直した</span>}{o.deleted && <span className="chip warn">取り消し</span>}
                 <div className="sub">{[o.item, o.note, o.by && `記入: ${o.by}`, o.taxMode === "in" && o.entered ? `入力は税込 ${yen(o.entered)}` : ""].filter(Boolean).join("　")}</div>
                 {(o.lines ?? []).length > 0 && <details onClick={(e) => e.stopPropagation()}><summary className="sub">明細 {o.lines.length}件</summary>{o.lines.map((l, i) => <div key={i} className="sub">{l.name} ×{l.qty}　{yen(l.amount)}</div>)}</details>}
                 {(data.images ?? []).filter((i) => i.orderId === o.id).map((i) => (
@@ -209,13 +214,14 @@ function Page() {
       <p className="hint">スクリーンショットは、今月と先月の2か月分だけ残り、それより前は自動で消えます（金額・明細などの数字は残ります）。</p>
       <p className="hint">発注画面が税込表示のときは「税込」を選んでください。保存と合計は、いつも<b>税抜</b>になります。記録は消えません（直す・取り消すと、だれがいつ変えたかが残ります）。</p>
 
+      {editDealers && <DealerEditor storeId={storeId} dealers={dealers.dealers} onChanged={loadDealers} onClose={() => setEditDealers(false)} />}
       {form && (
         <div className="sheet-bg" onClick={() => setForm(null)}>
           <div className="sheet" onClick={(e) => e.stopPropagation()} role="dialog" aria-label="発注の記録">
             <h3>{form.id ? "発注を直す" : "発注を記録する"}</h3>
             <label>発注した日<input type="date" value={form.orderedOn} onChange={(e) => setForm({ ...form, orderedOn: e.target.value })} /></label>
-            <label>発注先（業者）<input list="suppliers" value={form.supplier} onChange={(e) => setForm({ ...form, supplier: e.target.value, tax: memory.supplierTax[e.target.value] ?? form.tax })} placeholder="例: ○○商事" /></label>
-            <datalist id="suppliers">{[...new Set([...(data?.suppliers ?? []), ...memory.suppliers])].map((s) => <option key={s} value={s} />)}</datalist>
+            <DealerPicker dealers={dealers.dealers} supplier={form.supplier} category={form.category} onPick={(sup, cat) => setForm((cur) => cur ? { ...cur, supplier: sup, category: cat, tax: memory.supplierTax[sup] ?? cur.tax } : cur)} />
+            {dealers.canManage && <p style={{ margin: "6px 0 0" }}><button type="button" className="ghost" style={{ width: "auto", color: "var(--blue)" }} onClick={() => setEditDealers(true)}>✏ 業者・カテゴリーを直す</button></p>}
             <datalist id="itemnames">{memory.items.map((s) => <option key={s} value={s} />)}</datalist>
             <label>種類
               <select value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value as MaterialKind })}>

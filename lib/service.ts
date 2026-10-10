@@ -1643,13 +1643,13 @@ export async function markNotificationsRead(db: Database, userId: string, ids?: 
 export type MaterialKind = "supply" | "retail" | "other";
 export const MATERIAL_KIND_LABEL: Record<MaterialKind, string> = { supply: "材料（業務）", retail: "店販", other: "その他" };
 export interface MaterialOrder {
-  id: string; storeId: string; orderedOn: string; supplier: string; item: string; kind: MaterialKind; amount: number; note: string; lines: MaterialLine[]; taxMode: "ex" | "in"; entered: number | null;
+  id: string; storeId: string; orderedOn: string; supplier: string; category: string; item: string; kind: MaterialKind; amount: number; note: string; lines: MaterialLine[]; taxMode: "ex" | "in"; entered: number | null;
   by: string | null; at: string; deleted: boolean; edited: boolean;
 }
 export interface MaterialLogRow { id: number; orderId: string; action: string; by: string | null; at: string; before: Record<string, unknown> | null; after: Record<string, unknown> | null }
 export interface MaterialLine { name: string; qty: number; amount: number; raw?: string }
 /** taxMode: 入れた金額が「税抜(ex)」か「税込(in)」か。保存する金額は、いつも税抜（税込は税率10%で割り戻す） */
-export interface MaterialInput { orderedOn: string; supplier: string; item: string; kind: MaterialKind; amount: number; note?: string; lines?: MaterialLine[]; taxMode?: "ex" | "in" }
+export interface MaterialInput { orderedOn: string; supplier: string; category?: string; item: string; kind: MaterialKind; amount: number; note?: string; lines?: MaterialLine[]; taxMode?: "ex" | "in" }
 export const MATERIAL_TAX_RATE = 0.1;
 export const toExTax = (v: number, mode: "ex" | "in" | undefined) => (mode === "in" ? Math.round(v / (1 + MATERIAL_TAX_RATE)) : v);
 function materialValues(i: MaterialInput) {
@@ -1667,13 +1667,14 @@ function checkMaterial(i: MaterialInput) {
     if (!Array.isArray(i.lines) || i.lines.length > 200) throw new Error("明細が多すぎます（200行まで）");
     for (const l of i.lines) if (typeof l.name !== "string" || !l.name.trim() || l.name.length > 120 || !Number.isInteger(l.qty) || l.qty < 1 || l.qty > 100000 || !Number.isInteger(l.amount) || l.amount < 0 || l.amount > 100000000) throw new Error("明細の商品名・数量・金額を確認してください");
   }
+  if ((i.category ?? "").length > 40) throw new Error("カテゴリーの名前が長すぎます（40文字まで）");
   if ((i.supplier ?? "").length > 80 || (i.item ?? "").length > 200 || (i.note ?? "").length > 500) throw new Error("文字が長すぎます");
 }
 
 /** 期間（from〜to）の発注を、新しい順に。取り消したものは、店長以上だけに「取り消し」として見える */
 export async function listMaterialOrders(db: Database, userId: string, storeId: string, from: string, to: string): Promise<MaterialOrder[]> {
   return (await asUser(db, userId, (q) => q.query<MaterialOrder>(
-    `select o.id, o.store_id as "storeId", o.ordered_on::text as "orderedOn", o.supplier, o.item, o.kind, o.amount, o.note, o.lines, o.tax_mode as "taxMode", o.entered_amount as entered,
+    `select o.id, o.store_id as "storeId", o.ordered_on::text as "orderedOn", o.supplier, o.category, o.item, o.kind, o.amount, o.note, o.lines, o.tax_mode as "taxMode", o.entered_amount as entered,
             m.name as by, o.created_at as at, (o.deleted_at is not null) as deleted, (o.updated_at is not null) as edited
        from material_orders o left join memberships m on m.id = o.created_by
       where o.store_id = $1 and o.ordered_on between $2 and $3
@@ -1686,10 +1687,14 @@ export async function addMaterialOrder(db: Database, userId: string, storeId: st
   const me = await getMe(db, userId);
   if (!me) throw new ForbiddenError();
   try {
-    return await asUser(db, userId, async (q) => (await q.query<{ id: string }>(
-      `insert into material_orders (company_id, store_id, ordered_on, supplier, item, kind, amount, note, lines, created_by, tax_mode, entered_amount)
-       values ($1,$2,$3,$4,$5,$6,$7,$8,coalesce($9::jsonb,'[]'::jsonb),$10,$11,$12) returning id`,
-      [me.companyId, storeId, i.orderedOn, i.supplier.trim(), (i.item ?? "").trim(), i.kind, v.amountEx, (i.note ?? "").trim(), v.lines, userId, v.mode, v.entered])).rows[0].id);
+    return await asUser(db, userId, async (q) => {
+      const id = (await q.query<{ id: string }>(
+        `insert into material_orders (company_id, store_id, ordered_on, supplier, category, item, kind, amount, note, lines, created_by, tax_mode, entered_amount)
+         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,coalesce($10::jsonb,'[]'::jsonb),$11,$12,$13) returning id`,
+        [me.companyId, storeId, i.orderedOn, i.supplier.trim(), (i.category ?? "").trim(), (i.item ?? "").trim(), i.kind, v.amountEx, (i.note ?? "").trim(), v.lines, userId, v.mode, v.entered])).rows[0].id;
+      await learnDealer(q, me.companyId, userId, storeId, i.supplier, i.category);
+      return id;
+    });
   } catch { throw new ForbiddenError(); }
 }
 
@@ -1698,10 +1703,15 @@ export async function updateMaterialOrder(db: Database, userId: string, id: stri
   const v = materialValues(i);
   let n = 0;
   try {
-    n = await asUser(db, userId, async (q) => (await q.query(
-      `update material_orders set ordered_on=$2, supplier=$3, item=$4, kind=$5, amount=$6, note=$7, lines=coalesce($9::jsonb, lines), tax_mode=$10, entered_amount=$11, updated_at=now(), updated_by=$8
-        where id = $1 and deleted_at is null returning id`,
-      [id, i.orderedOn, i.supplier.trim(), (i.item ?? "").trim(), i.kind, v.amountEx, (i.note ?? "").trim(), userId, v.lines, v.mode, v.entered])).rows.length);
+    const me = await getMe(db, userId);
+    n = await asUser(db, userId, async (q) => {
+      const r = (await q.query<{ store_id: string }>(
+        `update material_orders set ordered_on=$2, supplier=$3, category=$12, item=$4, kind=$5, amount=$6, note=$7, lines=coalesce($9::jsonb, lines), tax_mode=$10, entered_amount=$11, updated_at=now(), updated_by=$8
+          where id = $1 and deleted_at is null returning store_id`,
+        [id, i.orderedOn, i.supplier.trim(), (i.item ?? "").trim(), i.kind, v.amountEx, (i.note ?? "").trim(), userId, v.lines, v.mode, v.entered, (i.category ?? "").trim()])).rows[0];
+      if (r && me) await learnDealer(q, me.companyId, userId, r.store_id, i.supplier, i.category);
+      return r ? 1 : 0;
+    });
   } catch { throw new ForbiddenError(); }
   if (n === 0) throw new ForbiddenError();
 }
@@ -1711,6 +1721,84 @@ export async function cancelMaterialOrder(db: Database, userId: string, id: stri
   let ok = false;
   try { ok = await asUser(db, userId, async (q) => (await q.query<{ ok: boolean }>("select public.material_cancel($1) as ok", [id])).rows[0].ok); } catch { throw new ForbiddenError(); }
   if (!ok) throw new ForbiddenError();
+}
+
+/** 使った業者・カテゴリーを、次から選べるように覚える（すでにあれば何もしない。しまってある業者は、そのまま） */
+async function learnDealer(q: Queryable, companyId: string, userId: string, storeId: string, supplier: string, category?: string) {
+  const name = supplier.trim();
+  if (!name) return;
+  let d = (await q.query<{ id: string }>("select id from material_dealers where store_id = $1 and name = $2", [storeId, name])).rows[0];
+  if (!d) d = (await q.query<{ id: string }>(
+    "insert into material_dealers (company_id, store_id, name, sort_order, created_by) values ($1,$2,$3,(select coalesce(max(sort_order), 0) + 1 from material_dealers where store_id = $2),$4) returning id", [companyId, storeId, name, userId])).rows[0];
+  const cat = (category ?? "").trim();
+  if (!cat) return;
+  const has = (await q.query("select 1 from material_categories where store_id = $1 and dealer_id = $2 and name = $3", [storeId, d.id, cat])).rows.length > 0;
+  if (!has) await q.query(
+    "insert into material_categories (company_id, store_id, dealer_id, name, sort_order, created_by) values ($1,$2,$3,$4,(select coalesce(max(sort_order), 0) + 1 from material_categories where dealer_id = $3),$5)", [companyId, storeId, d.id, cat, userId]);
+}
+
+export interface MaterialCategoryRow { id: string; name: string; active: boolean }
+export interface MaterialDealerRow { id: string; name: string; active: boolean; categories: MaterialCategoryRow[] }
+/** 業者とそのカテゴリーの一覧。しまってあるもの(active=false)は、編集できる人にだけ見える */
+export async function listMaterialDealers(db: Database, userId: string, storeId: string): Promise<{ dealers: MaterialDealerRow[]; canManage: boolean }> {
+  return asUser(db, userId, async (q) => {
+    const canManage = (await q.query<{ v: boolean }>("select app.material_dealer_edit($1) as v", [storeId])).rows[0].v;
+    const ds = (await q.query<{ id: string; name: string; active: boolean }>("select id, name, active from material_dealers where store_id = $1 order by sort_order, name", [storeId])).rows;
+    const cs = (await q.query<{ id: string; dealer_id: string; name: string; active: boolean }>("select id, dealer_id, name, active from material_categories where store_id = $1 and dealer_id is not null order by sort_order, name", [storeId])).rows;
+    const dealers = ds.filter((d) => canManage || d.active).map((d) => ({ ...d, categories: cs.filter((c) => c.dealer_id === d.id && (canManage || c.active)).map((c) => ({ id: c.id, name: c.name, active: c.active })) }));
+    return { dealers, canManage };
+  });
+}
+
+type DealerAct = { kind: "dealer" | "category"; id?: string; dealerId?: string; name?: string; active?: boolean; move?: "up" | "down" };
+/** 業者・カテゴリーを、足す／名前を変える／しまう・もどす／上下に動かす（店長=自店・正美さんたち=全店・その店の材料担当） */
+export async function saveMaterialDealer(db: Database, userId: string, storeId: string, a: DealerAct): Promise<void> {
+  const me = await getMe(db, userId);
+  if (!me) throw new ForbiddenError();
+  const table = a.kind === "dealer" ? "material_dealers" : "material_categories";
+  const name = a.name === undefined ? undefined : a.name.trim();
+  if (name !== undefined && (name.length < 1 || name.length > (a.kind === "dealer" ? 80 : 40))) throw new Error(a.kind === "dealer" ? "業者の名前は、1〜80文字で入れてください" : "カテゴリーの名前は、1〜40文字で入れてください");
+  const after: [string, unknown[]][] = [];   // 名前を変えたあとで、過去の発注の名前もそろえる
+  try {
+    await asUser(db, userId, async (q) => {
+      if (!(await q.query<{ v: boolean }>("select app.material_dealer_edit($1) as v", [storeId])).rows[0].v) throw new ForbiddenError("業者・カテゴリーを直せるのは、店長・正美さん・材料担当です");
+      if (!a.id) {
+        if (!name) throw new Error("名前を入れてください");
+        if (a.kind === "dealer") await q.query("insert into material_dealers (company_id, store_id, name, sort_order, created_by) values ($1,$2,$3,(select coalesce(max(sort_order), 0) + 1 from material_dealers where store_id = $2),$4)", [me.companyId, storeId, name, userId]);
+        else {
+          if (!a.dealerId) throw new Error("どの業者の下か、えらんでください");
+          await q.query("insert into material_categories (company_id, store_id, dealer_id, name, sort_order, created_by) values ($1,$2,$3,$4,(select coalesce(max(sort_order), 0) + 1 from material_categories where dealer_id = $3),$5)", [me.companyId, storeId, a.dealerId, name, userId]);
+        }
+        return;
+      }
+      const cur = (await q.query<{ name: string; dealer_id?: string }>(`select name${a.kind === "category" ? ", dealer_id" : ""} from ${table} where id = $1 and store_id = $2`, [a.id, storeId])).rows[0];
+      if (!cur) throw new ForbiddenError();
+      if (name !== undefined && name !== cur.name) {
+        await q.query(`update ${table} set name = $2 where id = $1`, [a.id, name]);
+        // 過去の発注の名前も、そろえて直す（記録には「変更」として残る）
+        if (a.kind === "dealer") after.push(["update material_orders set supplier = $3 where store_id = $1 and supplier = $2", [storeId, cur.name, name]]);
+        else {
+          const dn = (await q.query<{ name: string }>("select name from material_dealers where id = $1", [cur.dealer_id])).rows[0]?.name;
+          if (dn) after.push(["update material_orders set category = $4 where store_id = $1 and supplier = $2 and category = $3", [storeId, dn, cur.name, name]]);
+        }
+      }
+      if (a.active !== undefined) await q.query(`update ${table} set active = $2 where id = $1`, [a.id, !!a.active]);
+      if (a.move) {
+        const scope = a.kind === "dealer" ? "store_id = $1" : "dealer_id = (select dealer_id from material_categories where id = $1)";
+        const rows = (await q.query<{ id: string }>(`select id from ${table} where ${scope} order by sort_order, name`, a.kind === "dealer" ? [storeId] : [a.id])).rows;
+        const ix = rows.findIndex((r) => r.id === a.id), to = a.move === "up" ? ix - 1 : ix + 1;
+        if (ix >= 0 && to >= 0 && to < rows.length) {
+          [rows[ix], rows[to]] = [rows[to], rows[ix]];
+          for (let k = 0; k < rows.length; k++) await q.query(`update ${table} set sort_order = $2 where id = $1`, [rows[k].id, k + 1]);
+        }
+      }
+    });
+  } catch (e) {
+    if (e instanceof ForbiddenError || e instanceof Error && !(e as { code?: string }).code) throw e;
+    if ((e as { code?: string }).code === "23505") throw new Error("同じ名前が、もうあります");
+    throw new ForbiddenError();
+  }
+  for (const [sql, args] of after) await db.query(sql, args);
 }
 
 export async function listMaterialSuppliers(db: Database, userId: string, storeId: string): Promise<string[]> {
@@ -1796,8 +1884,11 @@ export interface MaterialMemory {
 /** 今までの記録から、業者・商品名・読み取りの直し方・税の入れ方を覚えておく（新しく覚えさせる作業は不要） */
 export async function getMaterialMemory(db: Database, userId: string, storeId: string): Promise<MaterialMemory> {
   return asUser(db, userId, async (q) => {
-    const suppliers = (await q.query<{ supplier: string }>(
+    const dealerNames = (await q.query<{ name: string; active: boolean }>("select name, active from material_dealers where store_id = $1 order by sort_order, name", [storeId])).rows;
+    const hidden = new Set(dealerNames.filter((d) => !d.active).map((d) => d.name));
+    const past = (await q.query<{ supplier: string }>(
       `select supplier from material_orders where store_id = $1 and deleted_at is null and supplier <> '' group by supplier order by count(*) desc, max(created_at) desc limit 100`, [storeId])).rows.map((r) => r.supplier);
+    const suppliers = [...new Set([...dealerNames.filter((d) => d.active).map((d) => d.name), ...past.filter((n) => !hidden.has(n))])];
     const lines = (await q.query<{ name: string; raw: string | null; n: number }>(
       `select l->>'name' as name, l->>'raw' as raw, count(*)::int as n
          from material_orders o, jsonb_array_elements(o.lines) l
@@ -1828,7 +1919,7 @@ export async function setMaterialManager(db: Database, userId: string, targetId:
   await db.query("update memberships set material_manager = $2 where id = $1", [targetId, on]);
 }
 
-export interface SummaryOrder { id: string; storeId: string; orderedOn: string; supplier: string; item: string; kind: MaterialKind; amount: number }
+export interface SummaryOrder { id: string; storeId: string; orderedOn: string; supplier: string; category: string; item: string; kind: MaterialKind; amount: number }
 export interface SummaryLine { orderId: string; name: string; qty: number; amount: number }
 
 /** 統括: 期間の発注（取り消しは除く）と明細。管理者・材料担当だけ（見える範囲はDBの権限で決まる） */
@@ -1839,7 +1930,7 @@ export async function materialSummaryData(db: Database, userId: string, from: st
   if (!ok) throw new ForbiddenError();
   return asUser(db, userId, async (q) => {
     const orders = (await q.query<SummaryOrder>(
-      `select id, store_id as "storeId", ordered_on::text as "orderedOn", supplier, item, kind, amount
+      `select id, store_id as "storeId", ordered_on::text as "orderedOn", supplier, category, item, kind, amount
          from material_orders where deleted_at is null and ordered_on between $1 and $2 order by ordered_on, created_at`, [from, to])).rows;
     const lines = (await q.query<SummaryLine>(
       `select o.id as "orderId", l->>'name' as name, (l->>'qty')::int as qty, (l->>'amount')::int as amount
@@ -2733,7 +2824,7 @@ export async function exportRecords(db: Database, userId: string, o: RecordsOpti
         x.kitsuke_count as "着付け人数", x.kitsuke_sales as "着付け売上", x.makeup_count as "メイク人数", x.makeup_sales as "メイク売上", x.spa_count as "スパ人数", x.spa_sales as "スパ売上", x.commission_amount as "歩合"
         from sales_stats x join memberships m on m.id = x.membership_id join stores s on s.id = x.store_id where x.month between date_trunc('month', $1::date) and $2::date and ($3::uuid[] is null or m.id = any($3)) order by x.month, s.sort_order, m.employee_code`, [ranges.sales.from, ranges.sales.to, sel])).rows;
     if (has("materials")) {
-      out.materials = (await q.query(`select o.ordered_on::text as "発注日", s.name as "店舗", o.supplier as "発注先", o.item as "内容", case o.kind when 'supply' then '材料(業務)' when 'retail' then '店販' else 'その他' end as "種類",
+      out.materials = (await q.query(`select o.ordered_on::text as "発注日", s.name as "店舗", o.supplier as "発注先", o.category as "カテゴリー", o.item as "内容", case o.kind when 'supply' then '材料(業務)' when 'retail' then '店販' else 'その他' end as "種類",
         o.amount as "金額(税抜)", case o.tax_mode when 'in' then '税込で入力' else '税抜で入力' end as "入力", o.entered_amount as "入力した税込額", u.name as "記入した人", to_char(o.created_at at time zone 'Asia/Tokyo', 'YYYY-MM-DD HH24:MI') as "記入日時",
         case when o.deleted_at is not null then '取り消し ' || to_char(o.deleted_at at time zone 'Asia/Tokyo', 'YYYY-MM-DD') else '' end as "取り消し", (select string_agg((l->>'name') || '×' || (l->>'qty') || ' ' || (l->>'amount') || '円', ' / ') from jsonb_array_elements(o.lines) l) as "明細"
         from material_orders o join stores s on s.id = o.store_id left join memberships u on u.id = o.created_by where o.ordered_on between $1 and $2 order by o.ordered_on, s.sort_order, o.created_at`, [ranges.materials.from, ranges.materials.to])).rows;

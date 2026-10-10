@@ -20,7 +20,7 @@ export const SEARCH_ITEMS: SearchItem[] = [
   { icon: "📝", title: "レッスンチェック表", sub: "アシスタントの採点（1〜5点）", href: "/lesson-check", keys: "レッスン チェック 採点 点数 合格 アシスタント 技術評価", show: (me) => !me.displayOnly },
   { icon: "🎓", title: "レッスン記録", sub: "アシスタントが今日何をしたかを記録・報告", href: "/lessons", keys: "レッスン 記録 報告 何人目 カット モデル ウィッグ", show: (me) => (me.level >= 3 || !!me.eduLead) && !isOfficeOnly(me) },
   { icon: "🎓", title: "自分のレッスン", sub: "自分がしたレッスンをカレンダーで見る", href: "/my-lessons", keys: "自分 レッスン 練習 何人目 時間", show: (me) => me.rank === "assistant" },
-  { icon: "🧴", title: "材料費（発注額）", sub: "発注した金額・業者・スクリーンショット・予算", href: "/material", keys: "材料費 発注 発注額 金額 業者 予算 スクリーンショット 税込 税抜 何個 商品", show: (me) => !me.displayOnly },
+  { icon: "🧴", title: "材料費（発注額）", sub: "発注した金額・業者・スクリーンショット・予算", href: "/material", keys: "材料費 発注 発注額 金額 業者 ディーラー カテゴリー 髪ドラ ダリア カラー ストレート 予算 スクリーンショット 税込 税抜 何個 商品", show: (me) => !me.displayOnly },
   { icon: "📦", title: "在庫", sub: "在庫の数・入庫・出庫・数え直し・発注の目安", href: "/material/stock", keys: "在庫 入庫 出庫 数え直し 発注点 足りない 少ない", show: (me) => !me.displayOnly },
   { icon: "🧪", title: "業務に回した分", sub: "店販を業務に使った分（テスター）を記録", href: "/material/tester", keys: "業務に回した分 テスター 店販 使った 写真 読み込み", show: (me) => !me.displayOnly },
   { icon: "🛍️", title: "スタッフ購入", sub: "スタッフ価格の購入・給料から引く額", href: "/material/staff-buy", keys: "スタッフ購入 個人購入 給料 天引き 引く 半値 仕入値", show: (me) => !me.displayOnly },
