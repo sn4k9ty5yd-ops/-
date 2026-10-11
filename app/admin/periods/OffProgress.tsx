@@ -19,19 +19,22 @@ export function OffProgress({ periodId, storeId, start, end, canEdit }: { period
   const [reqs, setReqs] = useState<Req[]>([]);
   const [shifts, setShifts] = useState<Sh[]>([]);
   const [lims, setLims] = useState<Lim[]>([]);
+  const [shEdit, setShEdit] = useState(false);
   const [sel, setSel] = useState<string | null>(null);
   const [edSty, setEdSty] = useState("0"); const [edA1, setEdA1] = useState("0"); const [edA2, setEdA2] = useState("0");
   const [msg, setMsg] = useState(""); const [busy, setBusy] = useState(false);
+  const [fixDows, setFixDows] = useState<number[]>([]); const [fixWho, setFixWho] = useState<Set<string> | null>(null);
+  const [fixOk, setFixOk] = useState("");
 
   const load = useCallback(async () => {
     try {
       const [r, rq, sh, dl] = await Promise.all([
         api<Person[]>(`/api/roster?storeId=${storeId}`),
         api<Req[]>(`/api/requests?periodId=${periodId}`).catch(() => [] as Req[]),
-        api<{ shifts: Sh[] }>(`/api/shifts?periodId=${periodId}&storeId=${storeId}`).catch(() => ({ shifts: [] as Sh[] })),
+        api<{ shifts: Sh[]; editable?: boolean }>(`/api/shifts?periodId=${periodId}&storeId=${storeId}`).catch(() => ({ shifts: [] as Sh[], editable: false })),
         api<{ limits: Lim[] }>(`/api/day-limits?periodId=${periodId}&storeId=${storeId}`).catch(() => ({ limits: [] as Lim[] })),
       ]);
-      setRoster(r); setReqs(rq.filter((x) => x.storeId === storeId)); setShifts(sh.shifts); setLims(dl.limits); setMsg("");
+      setRoster(r); setReqs(rq.filter((x) => x.storeId === storeId)); setShifts(sh.shifts); setShEdit(!!sh.editable); setLims(dl.limits); setMsg("");
     } catch (e) { setMsg((e as Error).message); }
   }, [periodId, storeId]);
   useEffect(() => { load(); }, [load]);
@@ -72,6 +75,30 @@ export function OffProgress({ periodId, storeId, start, end, canEdit }: { period
     catch (e) { setMsg((e as Error).message); }
     setBusy(false);
   };
+  // スタッフ名簿から: この日を、その人の「公休」にする／はずす（シフトの休みとして入れる）
+  const toggleOff = async (personId: string, day: string) => {
+    setBusy(true);
+    try {
+      const sh = shifts.find((x) => x.membershipId === personId && x.day === day && x.kind !== "work");
+      if (sh) await api("/api/shifts", { action: "clear", periodId, storeId, items: [{ membershipId: personId, day }] });
+      else await api("/api/shifts", { action: "save", periodId, storeId, entries: [{ membershipId: personId, day, kind: "holiday" }] });
+      await load(); setMsg("");
+    } catch (e) { setMsg((e as Error).message); }
+    setBusy(false);
+  };
+  // 固定休: えらんだ曜日の、期間のすべての日に、えらんだ人へ「公休」をまとめて入れる（有給・すでに休みの日は、そのまま）
+  const applyFixed = async () => {
+    const who = fixWho ?? new Set(roster.map((p) => p.id));
+    const target = days.filter((d) => fixDows.includes(new Date(d + "T00:00:00Z").getUTCDay()));
+    const entries = [] as { membershipId: string; day: string; kind: string }[];
+    for (const id of who) for (const d of target) if (!shifts.some((x) => x.membershipId === id && x.day === d && x.kind !== "work")) entries.push({ membershipId: id, day: d, kind: "holiday" });
+    if (entries.length === 0) { setFixOk("入れる休みはありませんでした（すでに休みが入っています）"); return; }
+    if (!confirm(`${who.size}人に、${fixDows.map((i) => WEEKDAYS[i]).join("・")}曜日の休み（公休）を、${entries.length}日ぶん入れます。よろしいですか？`)) return;
+    setBusy(true);
+    try { await api("/api/shifts", { action: "save", periodId, storeId, entries }); setFixOk(`${entries.length}日ぶんの休みを入れました`); setMsg(""); await load(); }
+    catch (e) { setMsg((e as Error).message); setFixOk(""); }
+    setBusy(false);
+  };
   const notYet = roster.filter((p) => !submitted.has(p.id));
   const md = (d: string) => `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}（${WEEKDAYS[new Date(d + "T00:00:00Z").getUTCDay()]}）`;
 
@@ -94,14 +121,35 @@ export function OffProgress({ periodId, storeId, start, end, canEdit }: { period
               <b style={{ color: hol ? "#d70015" : undefined }}>{Number(d.slice(8, 10))}</b>
               <span className="offline" style={{ color: l?.maxStylist !== null && l && cs > (l.maxStylist ?? 99) ? "var(--bad)" : undefined }}>👔{cs}/{l?.maxStylist ?? "－"}</span>
               {l && l.maxAssistant1 !== null && l.maxAssistant2 !== null ? (<>
-                <span className="offline" style={{ color: countY(d, 1) > l.maxAssistant1 ? "var(--bad)" : YEAR1_GREEN }}>🌱①{countY(d, 1)}/{l.maxAssistant1}</span>
-                <span className="offline" style={{ color: countY(d, 2) > l.maxAssistant2 ? "var(--bad)" : YEAR2_BLUE }}>🌱②{countY(d, 2)}/{l.maxAssistant2}</span>
+                <span className="offline" style={{ color: countY(d, 1) > l.maxAssistant1 ? "var(--bad)" : YEAR1_GREEN }}>①{countY(d, 1)}/{l.maxAssistant1}</span>
+                <span className="offline" style={{ color: countY(d, 2) > l.maxAssistant2 ? "var(--bad)" : YEAR2_BLUE }}>②{countY(d, 2)}/{l.maxAssistant2}</span>
               </>) : <span className="offline" style={{ color: l?.maxAssistant !== null && l && ca > (l.maxAssistant ?? 99) ? "var(--bad)" : undefined }}>🌱{ca}/{l?.maxAssistant ?? "－"}</span>}
               <span className="offnames">{(offBy.get(d) ?? []).map((p, k) => <span key={p.id} style={{ color: color.get(p.id) ?? "var(--sub)" }}>{k > 0 && "・"}{short.get(p.id) ?? ""}</span>)}</span>
             </button>
           );
         })}
       </div>
+      {canEdit && (
+        <details style={{ marginTop: 10 }}>
+          <summary style={{ cursor: "pointer", fontWeight: 700 }}>📌 固定休を、曜日でまとめて入れる（例：月曜・火曜は全員お休み）</summary>
+          <p className="sub" style={{ margin: "6px 0" }}>休みにしたい曜日と、人をえらんで「入れる」を押すと、この期間のその曜日すべてに「公休」が入ります。{!shEdit ? "（希望休の受付を始めてから、入れられます）" : ""}</p>
+          <div className="toolbar" style={{ flexWrap: "wrap" }}>
+            {WEEKDAYS.map((w, i) => <button key={w} className={fixDows.includes(i) ? undefined : "ghost"} style={{ width: "auto", margin: 0, padding: "8px 14px", ...(fixDows.includes(i) ? {} : { border: "1px solid var(--line)" }) }} onClick={() => setFixDows((v) => v.includes(i) ? v.filter((x) => x !== i) : [...v, i])}>{w}</button>)}
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", margin: "8px 0" }}>
+            <button className="ghost" style={{ width: "auto", margin: 0, padding: "6px 10px", border: "1px solid var(--line)" }} onClick={() => setFixWho(new Set(roster.map((p) => p.id)))}>全員</button>
+            <button className="ghost" style={{ width: "auto", margin: 0, padding: "6px 10px", border: "1px solid var(--line)" }} onClick={() => setFixWho(new Set())}>だれもえらばない</button>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 4 }}>
+            {roster.map((p) => { const on = (fixWho ?? new Set(roster.map((x) => x.id))).has(p.id); return (
+              <label key={p.id} style={{ display: "flex", gap: 6, alignItems: "center", margin: 0, color: color.get(p.id), fontWeight: 700 }}>
+                <input type="checkbox" style={{ width: 20, height: 20 }} checked={on} onChange={() => setFixWho((cur) => { const n = new Set(cur ?? roster.map((x) => x.id)); if (n.has(p.id)) n.delete(p.id); else n.add(p.id); return n; })} />{p.name}
+              </label>); })}
+          </div>
+          <button style={{ marginTop: 8 }} disabled={busy || !shEdit || fixDows.length === 0} onClick={applyFixed}>えらんだ曜日に、休みを入れる</button>
+          {fixOk && <p className="sub" style={{ color: "var(--ok)" }}>✅ {fixOk}</p>}
+        </details>
+      )}
       {sel && createPortal(
         <div className="sheet-bg" onClick={() => setSel(null)}>
           <div className="sheet" onClick={(e) => e.stopPropagation()} role="dialog" aria-label="この日の休みと上限" style={{ maxHeight: "90vh", overflow: "auto" }}>
@@ -126,6 +174,24 @@ export function OffProgress({ periodId, storeId, start, end, canEdit }: { period
                 </div>
               </>
             ) : <button className="ghost" style={{ width: "100%" }} onClick={() => setSel(null)}>閉じる</button>}
+            <hr style={{ margin: "14px 0 10px", border: 0, borderTop: "1px solid var(--line)" }} />
+            <b>👥 スタッフ名簿（タップで、この日を休みにする）</b>
+            <p className="sub" style={{ margin: "4px 0 8px" }}>固定休の人など、この日は必ず休みにしたい人の名前を押すと、「公休」が入ります。もう一度押すと、はずれます。{!canEdit ? "（シフト担当・店長・正美さんだけが押せます）" : !shEdit ? "（希望休の受付を始めてから、入れられます）" : ""}</p>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 6 }}>
+              {roster.map((p) => {
+                const cur = (offBy.get(sel) ?? []).find((x) => x.id === p.id);
+                const isShift = shifts.some((x) => x.membershipId === p.id && x.day === sel && x.kind !== "work");
+                const paid = shifts.some((x) => x.membershipId === p.id && x.day === sel && x.kind === "paid");
+                const c = color.get(p.id);
+                return (
+                  <button key={p.id} className={isShift ? undefined : "ghost"} disabled={busy || !canEdit || !shEdit || paid}
+                    style={{ width: "auto", margin: 0, padding: "8px 6px", fontSize: 14, textAlign: "left", ...(isShift ? { background: c ?? "var(--blue)", borderColor: c ?? undefined } : { color: c, border: `1px solid ${c ?? "var(--line)"}` }) }}
+                    onClick={() => toggleOff(p.id, sel)}>
+                    {p.name}<br /><span style={{ fontSize: 11, fontWeight: 600 }}>{paid ? "有給" : isShift ? "✓ 休み" : cur ? "🌴 希望休" : "タップで休みに"}</span>
+                  </button>
+                );
+              })}
+            </div>
             {msg && <p className="err">{msg}</p>}
           </div>
         </div>, document.body)}
