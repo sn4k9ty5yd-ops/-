@@ -171,14 +171,15 @@ function Page() {
                 <div className="card" style={{ margin: "8px 0", padding: 10 }}>
                   <div className="sub">この日に休める人数の目安（シフト担当・店長が決めます）</div>
                   {conflicts.has(detail) && <p style={{ color: "#d70015", margin: "4px 0", fontWeight: 700 }}>⚠ いま{conflicts.get(detail)!.count}人が休み（上限{conflicts.get(detail)!.maxOff}人）。かぶっています。</p>}
-                  <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                    <span>スタイリスト</span>
+                  <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "8px 12px", alignItems: "center", margin: "8px 0" }}>
+                    <b>スタイリスト</b>
                     <Stepper label="スタイリストの人数" unit="人" max={99} value={limitInput !== "" ? limitInput : limS.get(detail) != null ? String(limS.get(detail)) : ""} placeholder="未" onChange={setLimitInput} />
-                    <span style={{ color: YEAR1_GREEN }}>アシスタント1年目</span>
-                    <Stepper label="アシスタント1年目の人数" unit="人" max={99} value={limitInputA1 !== "" ? limitInputA1 : limA1.get(detail) != null ? String(limA1.get(detail)) : limA.get(detail) != null ? String(Math.ceil(limA.get(detail)! / 2)) : ""} placeholder="未" onChange={setLimitInputA1} />
-                    <span style={{ color: YEAR2_BLUE }}>2年目</span>
+                    <b style={{ color: YEAR2_BLUE }}>アシスタント2年目</b>
                     <Stepper label="アシスタント2年目の人数" unit="人" max={99} value={limitInputA2 !== "" ? limitInputA2 : limA2.get(detail) != null ? String(limA2.get(detail)) : limA.get(detail) != null ? String(Math.floor(limA.get(detail)! / 2)) : ""} placeholder="未" onChange={setLimitInputA2} />
-                    <span>人まで</span>
+                    <b style={{ color: YEAR1_GREEN }}>アシスタント1年目</b>
+                    <Stepper label="アシスタント1年目の人数" unit="人" max={99} value={limitInputA1 !== "" ? limitInputA1 : limA1.get(detail) != null ? String(limA1.get(detail)) : limA.get(detail) != null ? String(Math.ceil(limA.get(detail)! / 2)) : ""} placeholder="未" onChange={setLimitInputA1} />
+                  </div>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                     <button style={{ width: "auto", margin: 0, padding: "8px 12px" }} onClick={async () => { try { const st = limitInput !== "" ? limitInput : String(limS.get(detail) ?? ""), x1 = limitInputA1 !== "" ? limitInputA1 : limA1.get(detail) != null ? String(limA1.get(detail)) : limA.get(detail) != null ? String(Math.ceil(limA.get(detail)! / 2)) : "", x2 = limitInputA2 !== "" ? limitInputA2 : limA2.get(detail) != null ? String(limA2.get(detail)) : limA.get(detail) != null ? String(Math.floor(limA.get(detail)! / 2)) : ""; if (st === "" || x1 === "" || x2 === "" || st === "null") { setLimitMsg("スタイリスト・アシスタント1年目・2年目の人数を、全部入れてください"); return; } await api("/api/day-limits", { periodId: db.id, storeId, days: [detail], maxStylist: Number(st), maxAssistant1: Number(x1), maxAssistant2: Number(x2) }); setLimitInput(""); setLimitInputA1(""); setLimitInputA2(""); setLimitMsg("決めました"); await load(); } catch (e) { setLimitMsg((e as Error).message); } }}>決める</button>
                     <button className="ghost" style={{ width: "auto", margin: 0 }} onClick={async () => { try { await api("/api/day-limits", { periodId: db.id, storeId, days: [detail], maxOff: null }); setLimitInput(""); setLimitInputA(""); setLimitInputA1(""); setLimitInputA2(""); setLimitMsg("目安をなくしました（受付を始めたあとは、決めなおしてください）"); await load(); } catch (e) { setLimitMsg((e as Error).message); } }}>なくす</button>
                   </div>

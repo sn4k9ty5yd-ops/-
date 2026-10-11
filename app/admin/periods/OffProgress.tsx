@@ -114,10 +114,10 @@ export function OffProgress({ periodId, storeId, start, end, canEdit }: { period
             {canEdit ? (
               <>
                 <b>この日に休める人数（上限）</b>
-                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", margin: "6px 0" }}>
-                  <span>👔スタイリスト</span><Stepper label="スタイリストの上限" unit="人" max={99} value={edSty} onChange={setEdSty} />
-                  <span style={{ color: YEAR1_GREEN }}>🌱1年目</span><Stepper label="アシスタント1年目の上限" unit="人" max={99} value={edA1} onChange={setEdA1} />
-                  <span style={{ color: YEAR2_BLUE }}>🌱2年目</span><Stepper label="アシスタント2年目の上限" unit="人" max={99} value={edA2} onChange={setEdA2} />
+                <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "8px 12px", alignItems: "center", margin: "8px 0" }}>
+                  <b>👔 スタイリスト</b><Stepper label="スタイリストの上限" unit="人" max={99} value={edSty} onChange={setEdSty} />
+                  <b style={{ color: YEAR2_BLUE }}>🌱 アシスタント2年目</b><Stepper label="アシスタント2年目の上限" unit="人" max={99} value={edA2} onChange={setEdA2} />
+                  <b style={{ color: YEAR1_GREEN }}>🌱 アシスタント1年目</b><Stepper label="アシスタント1年目の上限" unit="人" max={99} value={edA1} onChange={setEdA1} />
                 </div>
                 <div style={{ display: "grid", gap: 8 }}>
                   <p className="sub" style={{ margin: 0 }}>アシスタント全体の上限：{Number(edA1) + Number(edA2)}人（1年目＋2年目）</p>
