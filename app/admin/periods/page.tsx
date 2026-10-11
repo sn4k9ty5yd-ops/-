@@ -4,7 +4,8 @@ import Link from "next/link";
 import { api, useAutoRefresh, useMe } from "@/lib/client";
 import { NEXT_ACTION } from "@/lib/labels";
 import { reiwaRange } from "@/lib/era";
-import { periodFor, todayJst, tintStyle } from "@/lib/period-nav";
+import { PeriodNav, periodFor, todayJst } from "@/lib/period-nav";
+import type { Period } from "@/lib/periods";
 import { relationLabel } from "@/lib/periods";
 import { LimitRequired } from "@/app/admin/shifts/LimitAll";
 import { OffProgress } from "./OffProgress";
@@ -36,85 +37,76 @@ export default function PeriodsPage() {
         if (confirm(`${(e as Error).message}\n\nそれでも、このまま確定しますか？`)) await api("/api/periods", { periodId, storeId, status: next.to, force: true });
       }
     });
-  // 「やること」: 自分のお店の、いま進めるシフト（確認済みになるまで）
+  // 見る期間は、矢印で前後に動かせる。はじめは「いま進めるシフト」（自分のお店の、確認済みになっていない、いちばん近い期間）
   const todayStr = todayJst();
-  const addMonth = (ym: string, n: number) => { const [y, m] = ym.split("-").map(Number); const t = new Date(Date.UTC(y, m - 1 + n, 1)); return `${t.getUTCFullYear()}-${String(t.getUTCMonth() + 1).padStart(2, "0")}`; };
-  const todo = [...periods].sort((x, y) => x.start.localeCompare(y.start)).filter((x) => x.end >= todayStr).map((x) => ({ p: x, s: x.stores.find((y) => y.storeId === me.storeId) })).find((x) => x.s && x.s.status !== "acknowledged");
+  const todoPeriod = [...periods].sort((x, y) => x.start.localeCompare(y.start)).filter((x) => x.end >= todayStr).find((x) => { const s = x.stores.find((y) => y.storeId === me.storeId); return s && s.status !== "acknowledged"; });
+  const [sel, setSel] = useState<Period | null>(null);
+  const [storeId, setStoreId] = useState(me.storeId);
+  useEffect(() => {
+    if (sel || periods.length === 0) return;
+    setSel(todoPeriod ? { start: todoPeriod.start, end: todoPeriod.end, label: todoPeriod.label } : periodFor(todayStr, me.closingStartDay));
+  }, [periods]); // eslint-disable-line react-hooks/exhaustive-deps
+  const dbP = periods.find((x) => x.start === sel?.start);
+  const st = dbP?.stores.find((x) => x.storeId === storeId);
+  const shownStores = (me.level === 4 ? stores.filter((x) => x.status !== "closed") : stores.filter((x) => x.id === me.storeId));
   return (
     <>
-      
       <h1>つくる</h1>
-      <p className="hint">シフトを作って、正美さんに出すまでの「やること」です。いまの段階と、次に押すボタンが出ます。</p>
-      {todo && todo.s && (() => {
-        const { p, s } = todo; const next = NEXT_ACTION[s.status];
-        const idx = STATUS_ORDER.indexOf(s.status);
+      <p className="hint">シフトを作って、正美さんに出すまでの「やること」です。上の矢印（‹ ›）で、前のシフト・次のシフトに動かせます。</p>
+      {me.level === 4 && shownStores.length > 1 && (
+        <select aria-label="お店" value={storeId} onChange={(e) => setStoreId(e.target.value)} style={{ marginBottom: 8 }}>{shownStores.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select>
+      )}
+      {sel && <PeriodNav period={sel} startDay={me.closingStartDay} onChange={setSel} />}
+      {sel && !dbP && (
+        <div className="card" style={{ margin: "10px 0" }}>
+          <b>この期間は、まだ作られていません。</b>
+          <p className="sub" style={{ margin: "4px 0" }}>下の「次の期間を作る」を押すと、いまあるいちばん先の期間の、次のシフトができます。（前の期間から順に作ります）</p>
+        </div>
+      )}
+      {sel && dbP && !st && <p className="hint">この期間に、{name(storeId)}のシフトはありません。</p>}
+      {sel && dbP && st && (() => {
+        const next = NEXT_ACTION[st.status];
+        const idx = STATUS_ORDER.indexOf(st.status);
         const cur = STEP_GUIDE[idx];
-        const can = next && canManage(s.storeId) && (next.to !== "acknowledged" || me.level >= 3);
+        const can = next && canManage(storeId) && (next.to !== "acknowledged" || me.level >= 3);
         return (
-          <div className="card guide" style={{ margin: "10px 0" }}>
-            <span className="sub">いま進めるシフト（{name(s.storeId)}）</span>
-            <div style={{ marginBottom: 8 }}><b style={{ fontSize: 20 }}>{p.label}</b>　<span className="sub">{reiwaRange(p.start, p.end)}</span></div>
-            <ol className="stepguide">
-              {STEP_GUIDE.filter((g) => g.key !== "closed" || s.status === "closed").map((g) => { const i = STATUS_ORDER.indexOf(g.key); return (
-                <li key={g.key} className={i < idx ? "done" : i === idx ? "now" : ""}>
-                  <span className="sgdot">{i < idx ? "✓" : i === idx ? "●" : ""}</span>
-                  <div>
-                    <b>{g.short}</b>
-                    {i === idx && <p className="whatnow">{cur.now}</p>}
-                  </div>
-                </li>
-              ); })}
-            </ol>
-            {s.status === "preparing" && canManage(s.storeId) && <LimitRequired periodId={p.id} storeId={s.storeId} days={daysOf(p.start, p.end)} />}
-            {can && <button onClick={() => { advance(p.id, s.storeId, next); }}>次は：{next.label}</button>}
-            {!can && next && <p className="hint" style={{ margin: "6px 0 0" }}>この次の操作は、{cur.who || "店長・正美さん"}が行います。</p>}
-            {cur.open && <Link href="/admin/shifts" className="ghost" style={{ display: "block", textAlign: "center", padding: 10 }}>出勤簿予定を開く</Link>}
-          </div>
+          <>
+            <div className="card guide" style={{ margin: "10px 0" }}>
+              <span className="sub">{name(storeId)}　{reiwaRange(dbP.start, dbP.end)}</span>
+              <ol className="stepguide">
+                {STEP_GUIDE.filter((g) => g.key !== "closed" || st.status === "closed").map((g) => { const i = STATUS_ORDER.indexOf(g.key); return (
+                  <li key={g.key} className={i < idx ? "done" : i === idx ? "now" : ""}>
+                    <span className="sgdot">{i < idx ? "✓" : i === idx ? "●" : ""}</span>
+                    <div>
+                      <b>{g.short}</b>
+                      {i === idx && <p className="whatnow">{cur.now}</p>}
+                    </div>
+                  </li>
+                ); })}
+              </ol>
+              {st.status === "preparing" && canManage(storeId) && <LimitRequired periodId={dbP.id} storeId={storeId} days={daysOf(dbP.start, dbP.end)} />}
+              {can && <button onClick={() => { advance(dbP.id, storeId, next); }}>次は：{next.label}</button>}
+              {!can && next && <p className="hint" style={{ margin: "6px 0 0" }}>この次の操作は、{cur.who || "店長・正美さん"}が行います。</p>}
+              {cur.open && <Link href="/admin/shifts" className="ghost" style={{ display: "block", textAlign: "center", padding: 10 }}>出勤簿予定を開く</Link>}
+              {canManage(storeId) && (st.status === "preparing" || st.status === "collecting") && (
+                <label className="sub" style={{ margin: "10px 0 0", display: "block" }}>希望休の締切（いつまでに出してもらうか）
+                  <input type="datetime-local" key={st.closeAt ?? "none"} defaultValue={st.closeAt ? st.closeAt.slice(0, 16).replace(" ", "T") : ""} style={{ fontSize: 14, padding: 8 }}
+                    onBlur={(e) => e.target.value && run(() => api("/api/periods", { periodId: dbP.id, storeId, closeAt: `${e.target.value}:00+09:00` }))} />
+                </label>
+              )}
+              {canManage(storeId) && st.status !== "preparing" && (me.level >= 3 || st.status !== "acknowledged") && (
+                <button className="ghost" style={{ color: "var(--sub)", marginTop: 8 }}
+                  onClick={() => confirm("ひとつ前の状態に戻しますか？") && run(() => api("/api/periods", { periodId: dbP.id, storeId, status: STATUS_ORDER[STATUS_ORDER.indexOf(st.status as PeriodStatus) - 1] }))}>
+                  ひとつ戻す
+                </button>
+              )}
+            </div>
+            {me.level >= 2 && ["preparing", "collecting", "closed", "drafting"].includes(st.status) && <OffProgress periodId={dbP.id} storeId={storeId} start={dbP.start} end={dbP.end} canEdit={canManage(storeId)} />}
+          </>
         );
       })()}
-      {todo && todo.s && me.level >= 2 && ["preparing", "collecting", "closed", "drafting"].includes(todo.s.status) && <OffProgress periodId={todo.p.id} storeId={todo.s.storeId} start={todo.p.start} end={todo.p.end} canEdit={canManage(todo.s.storeId)} />}
-      {!todo && periods.length > 0 && <p className="hint">いま進めるシフトは、ありません。下の「次の期間を作る」を押すと、次のシフトを始められます。</p>}
-      {me.level >= 2 && <button onClick={() => run(async () => { const r = await api<{ created: boolean; label: string }>("/api/periods", { action: "next" }); setNote(r.created ? `「${r.label}」を作りました` : `「${r.label}」は、もう作ってあります`); })}>次の期間を作る</button>}
+      {me.level >= 2 && <button onClick={() => run(async () => { const r = await api<{ created: boolean; label: string; start?: string }>("/api/periods", { action: "next" }); setNote(r.created ? `「${r.label}」を作りました` : `「${r.label}」は、すでにあります`); })}>＋ 次の期間を作る</button>}
       {periods.length === 0 && <p className="hint">まだ期間がありません。「次の期間を作る」を押してください。</p>}
-      {periods.slice(0, 3).map((p) => {
-        const rel = relationLabel(p.start, periodFor(todayJst(), me.closingStartDay).start);
-        return (
-        <div key={p.id} className="card tint" style={{ marginTop: 16, ...tintStyle(p.start) }}>
-          <span className={`badge2 ${rel.kind}`}>{rel.label}</span> <b style={{ fontSize: 18 }}>{p.label}</b> <span className="sub">{reiwaRange(p.start, p.end)}</span>
-          {p.stores.filter((s) => (me.level === 4 || s.storeId === me.storeId) && stores.find((x) => x.id === s.storeId)?.status !== "closed").map((s) => {
-            const next = NEXT_ACTION[s.status];
-            const needOffice = next?.to === "acknowledged";
-            return (
-              <div key={s.storeId} className="storerow">
-                <div><b>{name(s.storeId)}</b><div className="sub">{STATUS_LABEL[s.status]}</div>
-                  <div className="steps2">{STATUS_ORDER.map((x) => <i key={x} className={x === s.status ? "now" : STATUS_ORDER.indexOf(x) < STATUS_ORDER.indexOf(s.status) ? "done" : ""} />)}</div>
-                </div>
-                <div className="actions">
-                  {canManage(s.storeId) && (s.status === "preparing" || s.status === "collecting") && (
-                    <label className="sub" style={{ margin: 0 }}>希望休の締切（いつまでに出してもらうか）
-                      <input type="datetime-local" key={s.closeAt ?? "none"} defaultValue={s.closeAt ? s.closeAt.slice(0, 16).replace(" ", "T") : ""} style={{ fontSize: 14, padding: 8 }}
-                        onBlur={(e) => e.target.value && run(() => api("/api/periods", { periodId: p.id, storeId: s.storeId, closeAt: `${e.target.value}:00+09:00` }))} />
-                    </label>
-                  )}
-                  {next && canManage(s.storeId) && (!needOffice || me.level >= 3) && (
-                    <button style={{ width: "auto", margin: 0, padding: "10px 14px", fontSize: 14 }}
-                      onClick={() => advance(p.id, s.storeId, next)}>
-                      {next.label}
-                    </button>
-                  )}
-                  {canManage(s.storeId) && s.status !== "preparing" && (me.level >= 3 || s.status !== "acknowledged") && (
-                    <button className="ghost" style={{ color: "var(--sub)" }}
-                      onClick={() => confirm("ひとつ前の状態に戻しますか？") && run(() => api("/api/periods", { periodId: p.id, storeId: s.storeId, status: STATUS_ORDER[STATUS_ORDER.indexOf(s.status as PeriodStatus) - 1] }))}>
-                      ひとつ戻す
-                    </button>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-        );
-      })}
       {note && <p className="hint">{note}</p>}
       {msg && <p className="err">{msg}</p>}
     </>
