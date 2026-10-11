@@ -7,6 +7,7 @@ import { reiwaRange } from "@/lib/era";
 import { periodFor, todayJst, tintStyle } from "@/lib/period-nav";
 import { relationLabel } from "@/lib/periods";
 import { LimitRequired } from "@/app/admin/shifts/LimitAll";
+import { OffProgress } from "./OffProgress";
 import { daysOf } from "@/lib/labels";
 import { STEP_GUIDE } from "@/lib/step-guide";
 import { STATUS_LABEL, STATUS_ORDER, type PeriodRow, type PeriodStatus } from "@/lib/service";
@@ -71,6 +72,7 @@ export default function PeriodsPage() {
           </div>
         );
       })()}
+      {todo && todo.s && me.level >= 2 && ["preparing", "collecting", "closed", "drafting"].includes(todo.s.status) && <OffProgress periodId={todo.p.id} storeId={todo.s.storeId} start={todo.p.start} end={todo.p.end} canEdit={canManage(todo.s.storeId)} />}
       {!todo && periods.length > 0 && <p className="hint">いま進めるシフトは、ありません。下の「次の期間を作る」を押すと、次のシフトを始められます。</p>}
       {me.level >= 2 && <button onClick={() => run(async () => { const r = await api<{ created: boolean; label: string }>("/api/periods", { action: "next" }); setNote(r.created ? `「${r.label}」を作りました` : `「${r.label}」は、もう作ってあります`); })}>次の期間を作る</button>}
       {periods.length === 0 && <p className="hint">まだ期間がありません。「次の期間を作る」を押してください。</p>}

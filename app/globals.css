@@ -670,3 +670,10 @@ main.home .tile:nth-child(n+7),main.home .row:nth-child(n+7){animation-delay:.28
 .mn-tap { width: 40px; height: 40px; min-width: 40px; padding: 0; border-radius: 10px; border: 2px solid #c9ccd6; background: #fff; color: #fff; font-size: 22px; font-weight: 800; line-height: 1; }
 .mn-tap.on { background: #34c759; border-color: #34c759; }
 .mn-tap:disabled { opacity: .9; }
+
+/* つくる: 希望休の進み具合のカレンダー */
+.offgrid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;margin-top:8px}
+.offhead{text-align:center;font-size:12px;font-weight:700;color:var(--sub)}
+.offday{display:flex;flex-direction:column;align-items:flex-start;gap:1px;padding:4px 5px;min-height:62px;border:1px solid var(--line,#ddd);border-radius:10px;width:auto;margin:0;text-align:left}
+.offday b{font-size:14px}
+.offline{font-size:11px;line-height:1.25;white-space:nowrap}
