@@ -23,7 +23,7 @@ function Page() {
   // つくれる人: ふつう=店長・正美さんたち／スタイリスト・アシスタントのミーティング=スタイリスト・店長・正美さんたち
   const canEdit = kind === "general" ? me.level === 4 || (me.level === 3 && storeId === me.storeId) : own && isStylist;
   const canDelete = me.level === 4 || (me.level === 3 && storeId === me.storeId);
-  const showKinds: [MeetingKind, string][] = [["general", "会議の記録"], ["stylist", "👔 スタイリストミーティング"], ["assistant", "🌱 アシスタントミーティング"]];
+  const showKinds: [MeetingKind, string][] = [["general", "🎙 全体"], ["stylist", "👔 スタイリスト"], ["assistant", "🌱 アシスタント"]];
 
   useEffect(() => { api<StoreRow[]>("/api/stores").then((s) => setStores(s.filter((x) => x.status === "active"))).catch(() => {}); }, []);
   const load = useCallback(async () => {
@@ -41,13 +41,13 @@ function Page() {
       <Link href="/home" className="back">← ホーム</Link>
       <h1>🎙 ミーティング</h1>
       <SubTabs items={meetingTabs(!!me.appOwner)} />
-      <p className="sub">会議のボイスメモから、文字起こし・議事録・要約・マインドマップをつくります。課題をAIに会議してもらうのは、上の「AI会議」です。</p>
-      {me.level === 4 && <select aria-label="お店" value={storeId} onChange={(e) => setStoreId(e.target.value)} style={{ marginBottom: 10 }}>{stores.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select>}
-      <div className="toolbar" style={{ flexWrap: "wrap" }}>{showKinds.map(([k, l]) => <button key={k} className={k === kind ? undefined : "ghost"} style={k === kind ? undefined : { border: "1px solid var(--line, #ccc)" }} onClick={() => { setKind(k); setForm(null); }}>{l}</button>)}</div>
-      {kind === "stylist" && <p className="sub">スタイリストだけが見られる会議です（そのお店のスタイリストと店長、正美さんたち）。</p>}
-      {kind === "assistant" && <p className="sub">スタイリストが、事前に「話し合うこと」を決めておきます。アシスタントは、それを見ながら話して、文字起こし・議事録を残せます。</p>}
+      <p className="sub">ボイスメモから、文字起こし・議事録・要約・マインドマップをつくります。</p>
+      {me.level === 4 && <label style={{ display: "block", marginBottom: 10 }}>お店<select value={storeId} onChange={(e) => setStoreId(e.target.value)}>{stores.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select></label>}
+      <div role="tablist" aria-label="会議の種類" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6, margin: "4px 0 10px" }}>{showKinds.map(([k, l]) => <button key={k} role="tab" aria-selected={k === kind} className={k === kind ? undefined : "ghost"} style={{ padding: "10px 4px", fontSize: 14, whiteSpace: "nowrap", ...(k === kind ? {} : { border: "1px solid var(--line, #ccc)" }) }} onClick={() => { setKind(k); setForm(null); }}>{l}</button>)}</div>
+      {kind === "stylist" && <p className="sub">スタイリストと店長だけが見られます。</p>}
+      {kind === "assistant" && <p className="sub">スタイリストが「話し合うこと」を決めておき、アシスタントはそれを見ながら話します。</p>}
       {msg && <p className="err">{msg}</p>}
-      {canEdit && !form && <button onClick={() => setForm({ title: "", heldOn: todayJst(), attendees: "", agenda: "" })}>＋ 新しい会議</button>}
+      {canEdit && !form && <button style={{ marginTop: 6 }} onClick={() => setForm({ title: "", heldOn: todayJst(), attendees: "", agenda: "" })}>＋ 新しい会議</button>}
       {form && (
         <div className="card" style={{ margin: "10px 0" }}>
           <input placeholder="会議の名前（例：10月の全体ミーティング）" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
