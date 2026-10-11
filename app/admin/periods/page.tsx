@@ -94,7 +94,7 @@ export default function PeriodsPage() {
                     onBlur={(e) => e.target.value && run(() => api("/api/periods", { periodId: dbP.id, storeId, closeAt: `${e.target.value}:00+09:00` }))} />
                 </label>
               )}
-              {canManage(storeId) && st.status !== "preparing" && (me.level >= 3 || st.status !== "acknowledged") && (
+              {canManage(storeId) && st.status !== "preparing" && (
                 <button className="ghost" style={{ color: "var(--sub)", marginTop: 8 }}
                   onClick={() => confirm("ひとつ前の状態に戻しますか？") && run(() => api("/api/periods", { periodId: dbP.id, storeId, status: STATUS_ORDER[STATUS_ORDER.indexOf(st.status as PeriodStatus) - 1] }))}>
                   ひとつ戻す

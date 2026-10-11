@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import { Stepper } from "@/app/Stepper";
+import { StepBack } from "@/app/StepBack";
 import { SubTabs } from "@/app/SubTabs";
 import { shiftTabs, viewTabs } from "@/lib/shift-tabs";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -114,6 +115,7 @@ function Page() {
           {stores.filter((s) => me.level === 4 || s.id === me.storeId).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
       )}
+      {me.level >= 2 && !me.displayOnly && db && (me.level === 4 || storeId === me.storeId) && <StepBack periodId={db.id} storeId={storeId} status={db.stores.find((x) => x.storeId === storeId)?.status} onDone={() => location.reload()} />}
       {inView && shiftOut && (
         <div className="card">
           <b style={{ fontSize: 18 }}>今日（{md(today)}）の出勤</b>

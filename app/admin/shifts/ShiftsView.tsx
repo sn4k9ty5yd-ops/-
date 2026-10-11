@@ -1,4 +1,5 @@
 "use client";
+import { StepBack } from "@/app/StepBack";
 import { SubTabs } from "@/app/SubTabs";
 import { Stepper } from "@/app/Stepper";
 import { viewTabs } from "@/lib/shift-tabs";
@@ -156,6 +157,7 @@ export function ShiftsView({ final = false }: { final?: boolean }) {
       </div>
       <PeriodNav period={view} startDay={me.closingStartDay} onChange={setView} />
       <p className="sub" style={{ margin: "0 0 8px" }}>{store?.name}：{loading ? "読み込み中…" : pstatus ? STATUS_LABEL[pstatus] : "未作成"}　{readOnlyReason && <b style={{ color: "#b45309" }}>{readOnlyReason}</b>}</p>
+      {me.level >= 2 && (me.level === 4 || storeId === me.storeId) && dbPeriod && <StepBack periodId={dbPeriod.id} storeId={storeId} status={pstatus} onDone={() => location.reload()} />}
       {editable && !loading && (
         <details className="card" style={{ marginBottom: 8, padding: "8px 12px" }} open={shifts.length === 0}>
           <summary style={{ cursor: "pointer", fontWeight: 700 }}>まとめて入れる・上限・貼り付け</summary>

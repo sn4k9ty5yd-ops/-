@@ -80,7 +80,7 @@ describe("シフト期間の作成と進行", () => {
       expect(await fails(setStatus(S1, "submitted"))).toBe(false);      // ダメなら戻せる
       expect(await fails(setStatus(S1, "acknowledged"))).toBe(false);
     });
-    await as(U.shift1, async () => expect(await fails(setStatus(S1, "submitted"))).toBe(true));   // 確認済みからは、シフト担当は戻せない
+    await as(U.shift1, async () => expect(await fails(setStatus(S1, "submitted"))).toBe(false));   // 確認済みからも、シフト担当が自店で戻せる
     await as(U.mgr2, async () => expect(await fails(setStatus(S1, "submitted"))).toBe(true));      // 他店の店長は動かせない
     await as(U.office, async () => {
       expect(await fails(setStatus(S1, "collecting"))).toBe(false);     // 後戻りOK（やり直し）

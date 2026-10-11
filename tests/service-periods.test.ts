@@ -125,7 +125,7 @@ describe("シフト担当（Lv2）の操作", () => {
     await expect(svc.setPeriodStatus(d, u.staff, { periodId: p.id, storeId: s2.a, status: "confirmed" })).rejects.toThrow(svc.ForbiddenError);
     await svc.setPeriodStatus(d, u.maker, { periodId: p.id, storeId: s2.a, status: "submitted" });
     await svc.setPeriodStatus(d, u.office, { periodId: p.id, storeId: s2.a, status: "acknowledged" });
-    await expect(svc.setPeriodStatus(d, u.maker, { periodId: p.id, storeId: s2.a, status: "submitted" })).rejects.toThrow();   // 確認済みから戻せるのはオフィスだけ
+    await svc.setPeriodStatus(d, u.maker, { periodId: p.id, storeId: s2.a, status: "submitted" });   // 確認済みからも、シフト担当が自店で戻せる
     await svc.setPeriodStatus(d, u.office, { periodId: p.id, storeId: s2.a, status: "submitted" });
     await svc.setAttendanceStatus(d, u.maker, p.id, s2.a, "submitted");
     await expect(svc.setAttendanceStatus(d, u.maker, p.id, s2.a, "acknowledged")).rejects.toThrow();
