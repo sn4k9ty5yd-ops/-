@@ -37,7 +37,7 @@ function Page() {
     try {
       const r = await api<Detail>(`/api/meetings?id=${id}`);
       setD(r);
-      if (first.current) { first.current = false; setText({ transcript: r.meeting.transcript, minutes: r.meeting.minutes, summary: r.meeting.summary }); }
+      if (first.current) { first.current = false; if (r.meeting.kind === "assistant") setTab("minutes"); setText({ transcript: r.meeting.transcript, minutes: r.meeting.minutes, summary: r.meeting.summary }); }
       setMsg("");
     } catch (e) { setMsg((e as Error).message); }
   }, [id]);
@@ -58,7 +58,7 @@ function Page() {
 
   useEffect(() => { if (recording && taRef.current) taRef.current.scrollTop = taRef.current.scrollHeight; }, [recording, live, text.transcript]);
   if (!d) return <main className="wide"><Link href="/meetings" className="back">← 会議の一覧</Link>{msg ? <p className="err">{msg}</p> : null}</main>;
-  const m = d.meeting; const canEdit = d.canEdit; const aiOn = d.aiStatus.available;
+  const m = d.meeting; const isAsst = m.kind === "assistant"; const canEdit = d.canEdit; const aiOn = d.aiStatus.available;
   const source = text.minutes.trim() || text.transcript.trim();
   const tree: MindNode | null = (() => { try { return m.mindmap ? (JSON.parse(m.mindmap) as MindNode) : null; } catch { return null; } })();
 
@@ -92,7 +92,7 @@ function Page() {
       {msg && <p className="err">{msg}</p>}{ok && <p className="sub">{ok}</p>}
       {(m.kind !== "general" || m.agenda) && (
         <div className="card" style={{ margin: "10px 0" }}>
-          <b>{m.kind === "assistant" ? "🌱 話し合うこと（スタイリストが決めました）" : m.kind === "stylist" ? "👔 話し合うこと" : "話し合うこと"}</b>
+          <b>{m.kind === "assistant" ? "🌱 話し合うこと（スタイリストが書いた議題です。報告は下の「📝 報告」に書きます）" : m.kind === "stylist" ? "👔 話し合うこと" : "話し合うこと"}</b>
           {d.canAgenda ? (
             <>
               <textarea rows={6} value={agenda ?? m.agenda} onChange={(e) => setAgenda(e.target.value)} placeholder="この会議で話し合いたいことを書きます（アシスタントが、これを見ながら話します）" />
@@ -103,7 +103,7 @@ function Page() {
       )}
       {!aiOn && <p className="hint noprint">いまは、AIの自動作成はまだ使えません（管理者がカギを設定すると使えます）。ボイスメモの文字起こしは使えます。議事録・要約・マインドマップは、「指示文をコピー」して、ほかのAIに貼って作れます。</p>}
 
-      <div className="seg noprint" style={{ flexWrap: "wrap" }}>{TABS.map(([t, l]) => <button key={t} className={tab === t ? "on" : ""} onClick={() => { setTab(t); setOk(""); }}>{l}</button>)}</div>
+      <div className="seg noprint" style={{ flexWrap: "wrap" }}>{(isAsst ? ([["minutes", "📝 報告"], ["transcript", "文字起こし"], ["summary", "要約"], ["mindmap", "マインドマップ"]] as [Tab, string][]) : TABS).map(([t, l]) => <button key={t} className={tab === t ? "on" : ""} onClick={() => { setTab(t); setOk(""); }}>{l}</button>)}</div>
 
       {tab === "transcript" && (
         <>
@@ -116,7 +116,7 @@ function Page() {
       {tab === "minutes" && (
         <>
           <Ai kind="minutes" label="AIで議事録をつくる" prompt={minutesPrompt(text.transcript, m.title, m.heldOn, m.attendees)} need={!!text.transcript.trim()} />
-          <textarea rows={18} value={text.minutes} readOnly={!canEdit} placeholder="議事録（会議名・議題・決まったこと・やること など）。AIでつくるか、ほかのAIの答えを貼りつけます。" onChange={(e) => edit("minutes", e.target.value)} />
+          <textarea rows={18} value={text.minutes} readOnly={!canEdit} placeholder={isAsst ? "ミーティングの報告（話し合ったこと・決まったこと・やること・先輩に伝えたいこと）を、ここに書きます。" : "議事録（会議名・議題・決まったこと・やること など）。AIでつくるか、ほかのAIの答えを貼りつけます。"} onChange={(e) => edit("minutes", e.target.value)} />
           <div className="toolbar noprint"><button className="ghost" onClick={async () => setOk((await copyText(text.minutes)) ? "議事録をコピーしました" : "コピーできませんでした")}>議事録をコピー</button><button className="ghost" onClick={() => window.print()}>印刷</button></div>
         </>
       )}

@@ -130,7 +130,16 @@ describe("スタイリストミーティング・アシスタントミーティ�
     await expect(svc.updateMeeting(d, id.asi, mid, { agenda: "書きかえ" })).rejects.toThrow();     // 議題は書けない
     await svc.updateMeeting(d, id.sty, mid, { agenda: "シャンプーと接客" });
     expect((await svc.getMeeting(d, id.asi, mid))!.meeting.agenda).toBe("シャンプーと接客");
-    await expect(svc.createMeeting(d, id.asi, { storeId: A, title: "x", heldOn: "2026-10-10", kind: "assistant" })).rejects.toThrow(svc.ForbiddenError);
+    // 次のミーティングの議題: スタイリストが書く → アシスタントは読めるが書けない／アシスタントも会議（報告）をつくれる（議題は掲示板から入る）
+    await svc.saveNextAgenda(d, id.sty, A, "来月のカラーの練習");
+    await expect(svc.saveNextAgenda(d, id.asi, A, "勝手に書く")).rejects.toThrow(svc.ForbiddenError);
+    expect((await svc.getNextAgenda(d, id.asi, A))).toMatchObject({ body: "来月のカラーの練習", canEdit: false });
+    expect((await svc.getNextAgenda(d, id.sty, A)).canEdit).toBe(true);
+    const mine = await svc.createMeeting(d, id.asi, { storeId: A, title: "報告", heldOn: "2026-10-12", kind: "assistant", agenda: "ずるい議題" });
+    expect((await svc.getMeeting(d, id.asi, mine))!.meeting.agenda).toBe("来月のカラーの練習");
+    await svc.updateMeeting(d, id.asi, mine, { minutes: "みんなで練習しました" });
+    await expect(svc.getNextAgenda(d, id.styB, A)).resolves.toMatchObject({ body: "" });
+    await expect(svc.createMeeting(d, id.asi, { storeId: A, title: "x", heldOn: "2026-10-10", kind: "general" })).rejects.toThrow(svc.ForbiddenError);
     expect(await svc.listMeetings(d, id.styB, A, "assistant")).toEqual([]);                      // 他店は見えない
   });
   it("ふつうの会議は、今までどおり（書けるのは店長・正美さんたち）", async () => {

@@ -3139,9 +3139,41 @@ export async function createMeeting(db: Database, userId: string, input: { store
   if (!title || title.length > 100) throw new Error("会議の名前を入れてください（100文字まで）");
   if (!/^\d{4}-\d{2}-\d{2}$/.test(input.heldOn)) throw new Error("日付が正しくありません");
   try {
-    return (await asUser(db, userId, (q) => q.query<{ id: string }>(
-      "insert into meetings (company_id, store_id, title, held_on, attendees, created_by, kind, agenda) values ($1,$2,$3,$4,$5,$6,$7,$8) returning id",
-      [me.companyId, input.storeId, title, input.heldOn, (input.attendees ?? "").trim().slice(0, 500), userId, kind, (input.agenda ?? "").slice(0, 20000)]))).rows[0].id;
+    return (await asUser(db, userId, async (q) => {
+      let agenda = (input.agenda ?? "").slice(0, 20000);
+      if (kind === "assistant") {
+        // 議題は、スタイリストが書いた「次のミーティングの議題」から入る（アシスタントは自分で議題を決められない）
+        const canAgenda = (await q.query<{ a: boolean }>("select app.meeting_can($1, 'assistant', 'agenda') as a", [input.storeId])).rows[0].a;
+        const board = (await q.query<{ body: string }>("select body from meeting_next_agenda where store_id = $1", [input.storeId])).rows[0]?.body ?? "";
+        if (!canAgenda || !agenda.trim()) agenda = board.slice(0, 20000);
+      }
+      return (await q.query<{ id: string }>(
+        "insert into meetings (company_id, store_id, title, held_on, attendees, created_by, kind, agenda) values ($1,$2,$3,$4,$5,$6,$7,$8) returning id",
+        [me.companyId, input.storeId, title, input.heldOn, (input.attendees ?? "").trim().slice(0, 500), userId, kind, agenda])).rows[0].id;
+    })) as string;
+  } catch { throw new ForbiddenError(); }
+}
+
+export interface NextAgenda { body: string; byName: string | null; updatedAt: string | null; canEdit: boolean }
+/** アシスタントミーティングの「次のミーティングの議題」（お店に1つ。スタイリスト・店長・レベル4が書ける） */
+export async function getNextAgenda(db: Database, userId: string, storeId: string): Promise<NextAgenda> {
+  const me = await getMe(db, userId);
+  if (!me || me.displayOnly) throw new ForbiddenError();
+  return asUser(db, userId, async (q) => {
+    const can = (await q.query<{ a: boolean }>("select app.meeting_can($1, 'assistant', 'agenda') as a", [storeId])).rows[0].a;
+    const r = (await q.query<{ body: string; byName: string | null; updatedAt: string }>(
+      `select n.body, u.name as "byName", to_char(n.updated_at at time zone 'Asia/Tokyo', 'YYYY-MM-DD HH24:MI') as "updatedAt" from meeting_next_agenda n left join memberships u on u.id = n.updated_by where n.store_id = $1`, [storeId])).rows[0];
+    return { body: r?.body ?? "", byName: r?.byName ?? null, updatedAt: r?.updatedAt ?? null, canEdit: can };
+  });
+}
+export async function saveNextAgenda(db: Database, userId: string, storeId: string, body: string): Promise<void> {
+  const me = await getMe(db, userId);
+  if (!me || me.displayOnly) throw new ForbiddenError();
+  if (typeof body !== "string" || body.length > 20000) throw new Error("文字が多すぎます");
+  try {
+    await asUser(db, userId, (q) => q.query(
+      `insert into meeting_next_agenda (company_id, store_id, body, updated_by, updated_at) values ($1,$2,$3,$4, now())
+       on conflict (store_id) do update set body = excluded.body, updated_by = excluded.updated_by, updated_at = now()`, [me.companyId, storeId, body, userId]));
   } catch { throw new ForbiddenError(); }
 }
 
