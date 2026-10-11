@@ -1532,8 +1532,8 @@ export async function setRank(db: Database, userId: string, targetId: string, ra
 
 // ------------------------------------------------------------------ 休みの上限・かぶりの知らせ・話し合い
 const jpDay = (iso: string) => { const d = new Date(iso + "T00:00:00Z"); return `${d.getUTCMonth() + 1}/${d.getUTCDate()}（${"日月火水木金土"[d.getUTCDay()]}）`; };
-export interface DayLimit { day: string; maxOff: number; maxStylist: number | null; maxAssistant: number | null }
-export interface Conflict { day: string; maxOff: number; count: number; maxStylist: number | null; countStylist: number; maxAssistant: number | null; countAssistant: number }
+export interface DayLimit { day: string; maxOff: number; maxStylist: number | null; maxAssistant: number | null; maxAssistant1: number | null; maxAssistant2: number | null }
+export interface Conflict { day: string; maxOff: number; count: number; maxStylist: number | null; countStylist: number; maxAssistant: number | null; countAssistant: number; maxAssistant1: number | null; countAssistant1: number; maxAssistant2: number | null; countAssistant2: number }
 export interface DayInfo {
   day: string; label: string; maxOff: number | null; people: { id: string; name: string; kind: string }[];
   messages: { id: number; userId: string; name: string; body: string; at: string }[]; canEdit: boolean;
@@ -1542,12 +1542,13 @@ export interface NotificationRow { id: string; kind: string; title: string; body
 
 export async function listDayLimits(db: Database, userId: string, periodId: string, storeId: string): Promise<DayLimit[]> {
   return (await asUser(db, userId, (q) => q.query<DayLimit>(
-    `select day::text as day, max_off as "maxOff", max_stylist as "maxStylist", max_assistant as "maxAssistant" from day_limits where period_id = $1 and store_id = $2 order by day`, [periodId, storeId]))).rows;
+    `select day::text as day, max_off as "maxOff", max_stylist as "maxStylist", max_assistant as "maxAssistant", max_assistant1 as "maxAssistant1", max_assistant2 as "maxAssistant2" from day_limits where period_id = $1 and store_id = $2 order by day`, [periodId, storeId]))).rows;
 }
 
 /** 日ごとの「休みの上限（◯人まで）」を決める。null で、上限なしに戻す（シフトを作れる人だけ） */
-export async function setDayLimits(db: Database, userId: string, periodId: string, storeId: string, days: string[], maxOff: number | null, roles?: { stylist: number; assistant: number }): Promise<number> {
-  if (roles) { for (const v of [roles.stylist, roles.assistant]) if (!Number.isInteger(v) || v < 0 || v > 99) throw new Error("人数は、0〜99で入れてください"); maxOff = roles.stylist + roles.assistant; }
+export async function setDayLimits(db: Database, userId: string, periodId: string, storeId: string, days: string[], maxOff: number | null, roles?: { stylist: number; assistant: number; assistant1?: number; assistant2?: number }): Promise<number> {
+  if (roles && roles.assistant1 !== undefined && roles.assistant2 !== undefined) roles = { ...roles, assistant: roles.assistant1 + roles.assistant2 };   // 1年目・2年目で決めたときは、アシスタント全体は、その合計
+  if (roles) { for (const v of [roles.stylist, roles.assistant, roles.assistant1 ?? 0, roles.assistant2 ?? 0]) if (!Number.isInteger(v) || v < 0 || v > 99) throw new Error("人数は、0〜99で入れてください"); maxOff = roles.stylist + roles.assistant; }
   if (maxOff !== null && (!Number.isInteger(maxOff) || maxOff < 0 || maxOff > 99)) throw new Error("人数は、0〜99で入れてください");
   if (days.length === 0 || days.length > 62 || days.some((d) => !/^\d{4}-\d{2}-\d{2}$/.test(d))) throw new Error("日付が正しくありません");
   try {
@@ -1557,9 +1558,9 @@ export async function setDayLimits(db: Database, userId: string, periodId: strin
       if (maxOff === null) { await q.query("delete from day_limits where period_id = $1 and store_id = $2 and day = any($3::date[])", [periodId, storeId, days]); return days.length; }
       for (const d of days) {
         await q.query(
-          `insert into day_limits (period_id, store_id, company_id, day, max_off, max_stylist, max_assistant, updated_by) values ($1,$2,$3,$4,$5,$6,$7,$8)
-           on conflict (period_id, store_id, day) do update set max_off = excluded.max_off, max_stylist = excluded.max_stylist, max_assistant = excluded.max_assistant, updated_at = now(), updated_by = excluded.updated_by`,
-          [periodId, storeId, per.company_id, d, maxOff, roles?.stylist ?? null, roles?.assistant ?? null, userId]);
+          `insert into day_limits (period_id, store_id, company_id, day, max_off, max_stylist, max_assistant, max_assistant1, max_assistant2, updated_by) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+           on conflict (period_id, store_id, day) do update set max_off = excluded.max_off, max_stylist = excluded.max_stylist, max_assistant = excluded.max_assistant, max_assistant1 = excluded.max_assistant1, max_assistant2 = excluded.max_assistant2, updated_at = now(), updated_by = excluded.updated_by`,
+          [periodId, storeId, per.company_id, d, maxOff, roles?.stylist ?? null, roles?.assistant ?? null, roles?.assistant1 ?? null, roles?.assistant2 ?? null, userId]);
       }
       return days.length;
     });
@@ -1568,7 +1569,7 @@ export async function setDayLimits(db: Database, userId: string, periodId: strin
 
 export async function listConflicts(db: Database, userId: string, periodId: string, storeId: string): Promise<Conflict[]> {
   return (await asUser(db, userId, (q) => q.query<Conflict>(
-    `select day::text as day, max_off as "maxOff", cnt as count, max_stylist as "maxStylist", cnt_stylist as "countStylist", max_assistant as "maxAssistant", cnt_assistant as "countAssistant" from app.period_conflicts($1, $2)`, [periodId, storeId]))).rows;
+    `select day::text as day, max_off as "maxOff", cnt as count, max_stylist as "maxStylist", cnt_stylist as "countStylist", max_assistant as "maxAssistant", cnt_assistant as "countAssistant", max_assistant1 as "maxAssistant1", cnt_assistant1 as "countAssistant1", max_assistant2 as "maxAssistant2", cnt_assistant2 as "countAssistant2" from app.period_conflicts($1, $2)`, [periodId, storeId]))).rows;
 }
 
 export async function getDayInfo(db: Database, userId: string, periodId: string, storeId: string, day: string): Promise<DayInfo> {

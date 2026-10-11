@@ -19,7 +19,8 @@ export function LimitAll({ periodId, storeId, days, onDone }: { periodId: string
 export function LimitRequired({ periodId, storeId, days, onChange }: { periodId: string; storeId: string; days: string[]; onChange?: () => void }) {
   const [set, setSet] = useState<number | null>(null);
   const [sty, setSty] = useState("");
-  const [ast, setAst] = useState("");
+  const [a1, setA1] = useState("");
+  const [a2, setA2] = useState("");
   const [msg, setMsg] = useState("");
   const load = async () => {
     const r = await api<{ limits: { day: string; maxStylist: number | null; maxAssistant: number | null }[] }>(`/api/day-limits?periodId=${periodId}&storeId=${storeId}`).catch(() => null);
@@ -30,14 +31,16 @@ export function LimitRequired({ periodId, storeId, days, onChange }: { periodId:
   return (
     <div className="card" style={{ margin: "8px 0", border: left ? "2px solid #ff9f0a" : undefined }}>
       <b>① 1日に何人まで休めるかを決める（必ず）</b>
-      <p className="sub" style={{ margin: "4px 0" }}>希望休を集める前に、すべての日に、スタイリストとアシスタントの人数を決めてください。スタッフは、この人数をこえても希望休を出せます。あとで調整するときの「目安」として、みんなの画面に出ます。</p>
+      <p className="sub" style={{ margin: "4px 0" }}>希望休を集める前に、すべての日に、スタイリストと、アシスタント（1年目・2年目）の人数を決めてください。スタッフは、この人数をこえても希望休を出せます。あとで調整するときの「目安」として、みんなの画面に出ます。</p>
       <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
         <span>全部の日を　スタイリスト</span>
         <Stepper label="スタイリストの人数" unit="人" max={99} value={sty} onChange={setSty} />
-        <span>アシスタント</span>
-        <Stepper label="アシスタントの人数" unit="人" max={99} value={ast} onChange={setAst} />
+        <span>アシスタント1年目</span>
+        <Stepper label="アシスタント1年目の人数" unit="人" max={99} value={a1} onChange={setA1} />
+        <span>2年目</span>
+        <Stepper label="アシスタント2年目の人数" unit="人" max={99} value={a2} onChange={setA2} />
         <span>人までにする</span>
-        <button style={{ width: "auto", margin: 0 }} disabled={sty === "" || ast === ""} onClick={async () => { try { await api("/api/day-limits", { periodId, storeId, days, maxStylist: Number(sty), maxAssistant: Number(ast) }); setMsg("決めました。日ごとに変えたいときは、「見る」のカレンダーで日にちを押してください"); await load(); onChange?.(); } catch (e) { setMsg((e as Error).message); } }}>決める</button>
+        <button style={{ width: "auto", margin: 0 }} disabled={sty === "" || a1 === "" || a2 === ""} onClick={async () => { try { await api("/api/day-limits", { periodId, storeId, days, maxStylist: Number(sty), maxAssistant1: Number(a1), maxAssistant2: Number(a2) }); setMsg("決めました。日ごとに変えたいときは、「見る」のカレンダーで日にちを押してください"); await load(); onChange?.(); } catch (e) { setMsg((e as Error).message); } }}>決める</button>
       </div>
       <p className="sub" style={{ margin: "6px 0 0" }}>{left === null ? "" : left === 0 ? "✓ すべての日に決まっています" : `まだ決まっていない日：${left}日`}</p>
       {msg && <p className="sub">{msg}</p>}

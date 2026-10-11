@@ -5,12 +5,12 @@ import { Stepper } from "@/app/Stepper";
 import { api, useAutoRefresh } from "@/lib/client";
 import { holidayName } from "@/lib/holidays";
 import { daysOf, shortNames, WEEKDAYS } from "@/lib/labels";
-import { nameColor, RANK_LEGEND } from "@/lib/rank-color";
+import { nameColor, RANK_LEGEND, YEAR1_GREEN, YEAR2_BLUE } from "@/lib/rank-color";
 
 type Person = { id: string; name: string; shortName?: string | null; rank?: string | null; assistantYear?: number | null };
 type Req = { membershipId: string; storeId: string; day: string; kind: string };
 type Sh = { membershipId: string; day: string; kind: string };
-type Lim = { day: string; maxStylist: number | null; maxAssistant: number | null };
+type Lim = { day: string; maxStylist: number | null; maxAssistant: number | null; maxAssistant1: number | null; maxAssistant2: number | null };
 const KIND: Record<string, string> = { hope: "公休希望", paid: "有給", holiday: "公休", off: "休み", other: "他" };
 
 /** 「つくる」: 作成中のシフトの、希望休の進み具合。日ごとに、スタイリスト・アシスタントが何人休むか／上限を見て、その場で上限を変えられる */
@@ -20,7 +20,7 @@ export function OffProgress({ periodId, storeId, start, end, canEdit }: { period
   const [shifts, setShifts] = useState<Sh[]>([]);
   const [lims, setLims] = useState<Lim[]>([]);
   const [sel, setSel] = useState<string | null>(null);
-  const [edSty, setEdSty] = useState("0"); const [edAst, setEdAst] = useState("0");
+  const [edSty, setEdSty] = useState("0"); const [edA1, setEdA1] = useState("0"); const [edA2, setEdA2] = useState("0");
   const [msg, setMsg] = useState(""); const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
@@ -57,12 +57,18 @@ export function OffProgress({ periodId, storeId, start, end, canEdit }: { period
   while (cells.length % 7) cells.push(null);
 
   const count = (day: string, r: "stylist" | "assistant") => (offBy.get(day) ?? []).filter((p) => rank.get(p.id) === r).length;
-  const over = (day: string) => { const l = limOf.get(day); return !!l && ((l.maxStylist !== null && count(day, "stylist") > l.maxStylist) || (l.maxAssistant !== null && count(day, "assistant") > l.maxAssistant)); };
+  const countY = (day: string, y: 1 | 2) => (offBy.get(day) ?? []).filter((p) => rank.get(p.id) === "assistant" && yearOf.get(p.id) === y).length;
+  const over = (day: string) => { const l = limOf.get(day); return !!l && ((l.maxStylist !== null && count(day, "stylist") > l.maxStylist) || (l.maxAssistant !== null && count(day, "assistant") > l.maxAssistant) || (l.maxAssistant1 !== null && countY(day, 1) > l.maxAssistant1) || (l.maxAssistant2 !== null && countY(day, 2) > l.maxAssistant2)); };
   const overDays = days.filter(over).length;
-  const open = (day: string) => { const l = limOf.get(day); setEdSty(String(l?.maxStylist ?? 0)); setEdAst(String(l?.maxAssistant ?? 0)); setSel(day); setMsg(""); };
+  const open = (day: string) => {
+    const l = limOf.get(day); const tot = l?.maxAssistant ?? 0;
+    setEdSty(String(l?.maxStylist ?? 0));
+    setEdA1(String(l?.maxAssistant1 ?? Math.ceil(tot / 2))); setEdA2(String(l?.maxAssistant2 ?? Math.floor(tot / 2)));   // 1年目・2年目が未設定のときは、いまの合計を半分ずつにしてから始める
+    setSel(day); setMsg("");
+  };
   const save = async () => {
     if (!sel) return; setBusy(true);
-    try { await api("/api/day-limits", { periodId, storeId, days: [sel], maxStylist: Number(edSty), maxAssistant: Number(edAst) }); setSel(null); await load(); }
+    try { await api("/api/day-limits", { periodId, storeId, days: [sel], maxStylist: Number(edSty), maxAssistant1: Number(edA1), maxAssistant2: Number(edA2) }); setSel(null); await load(); }
     catch (e) { setMsg((e as Error).message); }
     setBusy(false);
   };
@@ -87,7 +93,10 @@ export function OffProgress({ periodId, storeId, start, end, canEdit }: { period
             <button key={d} className="offday ghost" style={{ borderColor: bad ? "var(--bad)" : undefined, background: bad ? "rgba(215,0,21,.08)" : undefined }} onClick={() => open(d)}>
               <b style={{ color: hol ? "#d70015" : undefined }}>{Number(d.slice(8, 10))}</b>
               <span className="offline" style={{ color: l?.maxStylist !== null && l && cs > (l.maxStylist ?? 99) ? "var(--bad)" : undefined }}>👔{cs}/{l?.maxStylist ?? "－"}</span>
-              <span className="offline" style={{ color: l?.maxAssistant !== null && l && ca > (l.maxAssistant ?? 99) ? "var(--bad)" : undefined }}>🌱{ca}/{l?.maxAssistant ?? "－"}</span>
+              {l && l.maxAssistant1 !== null && l.maxAssistant2 !== null ? (<>
+                <span className="offline" style={{ color: countY(d, 1) > l.maxAssistant1 ? "var(--bad)" : YEAR1_GREEN }}>🌱①{countY(d, 1)}/{l.maxAssistant1}</span>
+                <span className="offline" style={{ color: countY(d, 2) > l.maxAssistant2 ? "var(--bad)" : YEAR2_BLUE }}>🌱②{countY(d, 2)}/{l.maxAssistant2}</span>
+              </>) : <span className="offline" style={{ color: l?.maxAssistant !== null && l && ca > (l.maxAssistant ?? 99) ? "var(--bad)" : undefined }}>🌱{ca}/{l?.maxAssistant ?? "－"}</span>}
               <span className="offnames">{(offBy.get(d) ?? []).map((p, k) => <span key={p.id} style={{ color: color.get(p.id) ?? "var(--sub)" }}>{k > 0 && "・"}{short.get(p.id) ?? ""}</span>)}</span>
             </button>
           );
@@ -107,9 +116,11 @@ export function OffProgress({ periodId, storeId, start, end, canEdit }: { period
                 <b>この日に休める人数（上限）</b>
                 <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", margin: "6px 0" }}>
                   <span>👔スタイリスト</span><Stepper label="スタイリストの上限" unit="人" max={99} value={edSty} onChange={setEdSty} />
-                  <span>🌱アシスタント</span><Stepper label="アシスタントの上限" unit="人" max={99} value={edAst} onChange={setEdAst} />
+                  <span style={{ color: YEAR1_GREEN }}>🌱1年目</span><Stepper label="アシスタント1年目の上限" unit="人" max={99} value={edA1} onChange={setEdA1} />
+                  <span style={{ color: YEAR2_BLUE }}>🌱2年目</span><Stepper label="アシスタント2年目の上限" unit="人" max={99} value={edA2} onChange={setEdA2} />
                 </div>
                 <div style={{ display: "grid", gap: 8 }}>
+                  <p className="sub" style={{ margin: 0 }}>アシスタント全体の上限：{Number(edA1) + Number(edA2)}人（1年目＋2年目）</p>
                   <button disabled={busy} onClick={save}>この日の上限を保存</button>
                   <button className="ghost" onClick={() => setSel(null)}>閉じる</button>
                 </div>
