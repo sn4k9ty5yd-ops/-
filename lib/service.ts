@@ -1584,6 +1584,17 @@ export async function setDayLimits(db: Database, userId: string, periodId: strin
   } catch (e) { if (e instanceof Error && e.message.includes("期間")) throw e; throw new ForbiddenError(); }
 }
 
+export interface OffDefault { stylist: number; assistant: number; assistant1: number | null; assistant2: number | null }
+/** お店の「1日に休める人数」の標準（なければ null） */
+export async function getOffDefault(db: Database, userId: string, storeId: string): Promise<OffDefault | null> {
+  return (await asUser(db, userId, (q) => q.query<OffDefault>(`select stylist, assistant, assistant1, assistant2 from store_off_defaults where store_id = $1`, [storeId]))).rows[0] ?? null;
+}
+export async function setOffDefault(db: Database, userId: string, storeId: string, v: { stylist: number; assistant: number; assistant1?: number | null; assistant2?: number | null }): Promise<void> {
+  for (const n of [v.stylist, v.assistant, v.assistant1 ?? 0, v.assistant2 ?? 0]) if (!Number.isInteger(n) || n < 0 || n > 99) throw new Error("人数は、0〜99で入れてください");
+  const split = v.assistant1 != null && v.assistant2 != null;
+  try { await asUser(db, userId, (q) => q.query("select public.store_off_default_set($1, $2, $3, $4, $5)", [storeId, v.stylist, split ? v.assistant1! + v.assistant2! : v.assistant, split ? v.assistant1 : null, split ? v.assistant2 : null])); } catch { throw new ForbiddenError(); }
+}
+
 export async function listConflicts(db: Database, userId: string, periodId: string, storeId: string): Promise<Conflict[]> {
   return (await asUser(db, userId, (q) => q.query<Conflict>(
     `select day::text as day, max_off as "maxOff", cnt as count, max_stylist as "maxStylist", cnt_stylist as "countStylist", max_assistant as "maxAssistant", cnt_assistant as "countAssistant", max_assistant1 as "maxAssistant1", cnt_assistant1 as "countAssistant1", max_assistant2 as "maxAssistant2", cnt_assistant2 as "countAssistant2" from app.period_conflicts($1, $2)`, [periodId, storeId]))).rows;

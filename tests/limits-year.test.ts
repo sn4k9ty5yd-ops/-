@@ -42,3 +42,14 @@ describe("休める人数の上限を、アシスタントの1年目・2年目�
     expect((await svc.listDayLimits(db, id.shift, P, S)).find((x) => x.day === days[3])).toMatchObject({ maxAssistant: 1, maxAssistant1: null, maxAssistant2: null });
   });
 });
+
+describe("お店ごとの休める人数の標準", () => {
+  it("シフト担当・店長が決められ、スタッフは決められない。他店には影響しない", async () => {
+    expect(await svc.getOffDefault(db, id.shift, S)).toBeNull();
+    await svc.setOffDefault(db, id.shift, S, { stylist: 1, assistant: 1 });
+    expect(await svc.getOffDefault(db, id.a1, S)).toMatchObject({ stylist: 1, assistant: 1, assistant1: null, assistant2: null });
+    await expect(svc.setOffDefault(db, id.sty, S, { stylist: 2, assistant: 2 })).rejects.toThrow(svc.ForbiddenError);
+    await svc.setOffDefault(db, id.office, S, { stylist: 1, assistant: 0, assistant1: 1, assistant2: 2 });
+    expect(await svc.getOffDefault(db, id.office, S)).toMatchObject({ stylist: 1, assistant: 3, assistant1: 1, assistant2: 2 });
+  });
+});
