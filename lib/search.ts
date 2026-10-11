@@ -11,7 +11,7 @@ export const SEARCH_ITEMS: SearchItem[] = [
   { icon: "📅", title: "シフトを見る", sub: "今日だれが出勤か・月のシフト・みんなの休み", href: "/shifts", keys: "上限 何人まで休める 休める人数 シフト 出勤 今日 カレンダー 誰 だれ 休み みんなの休み 見る" },
   { icon: "🌴", title: "希望休を出す", sub: "休みたい日を出す（公休・有給）", href: "/requests", keys: "希望休 休みたい 休み 公休 有給 申請 出す", show: (me) => !me.displayOnly },
   { icon: "🏝️", title: "有給申請", sub: "有給を取りたい日を、いつでも申請（店長が確認 → 正美さんが許可）", href: "/leave", keys: "有給 ゆうきゅう 提出 変更 申請 休暇", show: (me) => !me.displayOnly },
-  { icon: "📅", title: "社長・役員の出勤と休み（カレンダーだけの人）", sub: "出勤簿には入れず、シフトのカレンダーにだけ出す。休みだけを入れる", href: "/admin/staff", keys: "社長 役員 鬼塚 大庭 カレンダーだけ 出勤簿に入れない 休み 固定休 オルガン 天神", show: (me) => me.level >= 2 && !me.displayOnly },
+  { icon: "📅", title: "カレンダーだけの人の出勤と休み", sub: "出勤簿には入れず、シフトのカレンダーにだけ出す。休みだけを入れる", href: "/admin/staff", keys: "社長 役員 鬼塚 大庭 カレンダーだけ 出勤簿に入れない 休み 固定休 オルガン 天神", show: (me) => me.level >= 2 && !me.displayOnly },
   { icon: "📅", title: "希望休の進み具合のカレンダー", sub: "つくる：日ごとに、スタイリスト・アシスタントが何人休むか／上限を見て、その場で変える", href: "/admin/periods", keys: "希望休 進み具合 進捗 カレンダー 上限 休める人数 スタイリスト アシスタント 予約 つくる", show: (me) => me.level >= 2 && !me.displayOnly },
   { icon: "🗂️", title: "シフトを作る（進み具合・締切）", sub: "次のシフトを作る・締切・確定・公開・オフィスに提出", href: "/admin/periods", keys: "上限 何人まで休める 休める人数 シフト 作る 次のシフト 期間 締切 確定 公開 提出 進み具合 やること 確認済み", show: (me) => me.level >= 2 },
   { icon: "✏️", title: "出勤簿予定", sub: "入店・退店・休憩を入れる表（シフトの予定）", href: "/admin/shifts", keys: "出勤簿 予定 a4 一枚 入店 退店 休憩 実働 時間 プリント 印刷 並び", show: (me) => me.level >= 2 },

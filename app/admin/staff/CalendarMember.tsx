@@ -17,11 +17,11 @@ export function CalendarMember({ s, stores, run }: { s: StaffRow; stores: { id: 
     <div style={{ width: "100%" }}>
       {s.calendarOnly && <div className="sub" style={{ marginTop: 2 }}>📅 カレンダーだけの人（出勤簿には入りません）：{(s.stints ?? []).map((t) => `${name(t.storeId)} ${t.fromDay}〜${t.toDay}日`).join("／")}</div>}
       {!open ? (
-        <button className="ghost" style={{ color: "var(--blue)" }} onClick={() => setOpen(true)}>{s.calendarOnly ? "カレンダーだけの人：出勤するお店・日にちを直す" : "カレンダーだけの人にする（社長・役員など）"}</button>
+        <button className="ghost" style={{ color: "var(--blue)" }} onClick={() => setOpen(true)}>{s.calendarOnly ? "カレンダーだけの人：出勤するお店・日にちを直す" : "カレンダーだけの人にする"}</button>
       ) : (
         <div className="card" style={{ margin: "6px 0" }}>
           <b>出勤するお店と、月の日にち</b>
-          <p className="sub" style={{ margin: "4px 0" }}>例：社長が「16〜31日は天神店、1〜15日はオルガン」なら、2行入れます。ここで決めたお店のシフトのカレンダーに、休みでない日は「出勤」として出ます。出勤簿（入店・退店の表）には出ません。</p>
+          <p className="sub" style={{ margin: "4px 0" }}>例：「16〜31日は天神店、1〜15日はオルガン」なら、2行入れます。ここで決めたお店のシフトのカレンダーに、休みでない日は「出勤」として出ます。出勤簿（入店・退店の表）には出ません。</p>
           {list.map((t, i) => (
             <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr", gap: 6, margin: "8px 0", paddingBottom: 8, borderBottom: "1px solid var(--line)" }}>
               <select aria-label="お店" value={t.storeId} onChange={(e) => set(i, { storeId: e.target.value })}>{stores.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select>

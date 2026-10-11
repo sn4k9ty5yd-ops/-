@@ -6,4 +6,4 @@ export function nameColor(rank: string | null | undefined, year: number | null |
   if (rank === "assistant") return year === 1 ? YEAR1_GREEN : year === 2 ? YEAR2_BLUE : YEAR_NONE;
   return undefined;
 }
-export const RANK_LEGEND: [string, string][] = [["スタイリスト＝赤", RANK_RED], ["アシスタント1年目＝緑", YEAR1_GREEN], ["アシスタント2年目＝青", YEAR2_BLUE], ["社長・役員＝紫", CAL_PURPLE]];
+export const RANK_LEGEND: [string, string][] = [["スタイリスト＝赤", RANK_RED], ["アシスタント1年目＝緑", YEAR1_GREEN], ["アシスタント2年目＝青", YEAR2_BLUE], ["カレンダーだけの人＝紫", CAL_PURPLE]];
