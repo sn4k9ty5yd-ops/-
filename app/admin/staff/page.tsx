@@ -6,6 +6,7 @@ import { levelLabel, TIER_NAMES, tierOf, type Tier } from "@/lib/permissions";
 import { parseStaffPaste } from "@/lib/staff-paste";
 import type { BulkStaffResult } from "@/lib/service";
 import type { StaffRow } from "@/lib/service";
+import { CalendarMember } from "./CalendarMember";
 
 type Store = { id: string; name: string; status: "active" | "closed" };
 async function copyText(text: string) {
@@ -130,6 +131,7 @@ export default function StaffPage() {
                   <option value="">何年目か未設定</option><option value="1">1年目</option><option value="2">2年目</option>
                 </select>
               )}
+              {me.level === 4 && s.status === "active" && !s.displayOnly && <CalendarMember s={s} stores={registrableStores} run={run} />}
               {me.level === 4 && s.status === "active" && !s.displayOnly && (
                 <button className="ghost" style={{ color: "var(--blue)" }} onClick={() => run(() => api(`/api/staff/${s.id}/evaluate`, { on: !s.canEvaluate }))}>
                   {s.canEvaluate ? "技術評価をつけられる人：外す" : "技術評価をつけられる人にする"}

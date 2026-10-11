@@ -15,7 +15,7 @@ export function cellText(s?: ShiftRow): string {
 /** やさしい表示（一覧用） */
 export function longText(s?: ShiftRow): string {
   if (!s) return "未入力";
-  if (s.kind === "work") return `${s.start}〜${s.end}`;
+  if (s.kind === "work") return s.start && s.end ? `${s.start}〜${s.end}` : "出勤";
   return { off: "休み", paid: "有給", holiday: "公休", other: "その他", work: "" }[s.kind];
 }
 export function hoursText(start: string, end: string, rule: BreakRule = DEFAULT_BREAK_RULE): string {

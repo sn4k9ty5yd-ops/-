@@ -12,9 +12,9 @@ import { PeriodNav, periodFor, todayJst, tintStyle } from "@/lib/period-nav";
 import type { Period } from "@/lib/periods";
 import { STATUS_ORDER, type PeriodRow, type ShiftRow, type StoreRow } from "@/lib/service";
 import { longText } from "@/lib/shift-ui";
-import { nameColor, RANK_LEGEND, YEAR1_GREEN, YEAR2_BLUE } from "@/lib/rank-color";
+import { CAL_PURPLE, nameColor, RANK_LEGEND, YEAR1_GREEN, YEAR2_BLUE } from "@/lib/rank-color";
 
-type Person = { id: string; name: string; shortName?: string | null; rank?: string | null; assistantYear?: number | null };
+type Person = { id: string; name: string; shortName?: string | null; rank?: string | null; assistantYear?: number | null; calendarOnly?: boolean; stints?: { fromDay: number; toDay: number }[] };
 const LABEL: Record<string, string> = { off: "休", paid: "有給", holiday: "公休", other: "他" };
 
 function Page() {
@@ -59,7 +59,8 @@ function Page() {
   const db = periods.find((p) => p.start === view?.start);
   const load = useCallback(async () => {
     if (!view) return;
-    setRoster(await api<Person[]>(`/api/roster?storeId=${storeId}`));
+    const ro = await api<Person[]>(`/api/roster?storeId=${storeId}`);
+    setRoster(ro);
     if (!db) { setShifts([]); setMyReq(new Set()); setEditable(false); return; }
     const rq = me.displayOnly ? [] : await api<{ id: string; membershipId: string; storeId: string; day: string; kind: string }[]>(`/api/requests?periodId=${db.id}`).catch(() => []);
     if (!me.displayOnly) setMyReq(new Set(rq.filter((r) => r.membershipId === me.id).map((r) => r.day)));
@@ -70,7 +71,15 @@ function Page() {
     const have = new Set(sh.shifts.map((x) => `${x.membershipId}|${x.day}`));
     const fromReq: ShiftRow[] = early ? rq.filter((r) => r.storeId === storeId && !have.has(`${r.membershipId}|${r.day}`))
       .map((r) => ({ id: `req-${r.id}`, membershipId: r.membershipId, storeId, periodId: db.id, day: r.day, kind: r.kind === "paid" ? "paid" as const : "holiday" as const, start: null, end: null })) : [];
-    setShifts([...sh.shifts, ...fromReq]); setEditable(!!sh.editable && !me.displayOnly);
+    // 「カレンダーだけの人」（社長・役員）: 休みの入っていない日は、決めたお店・日にちの範囲で「出勤」として出す
+    const haveAny = new Set([...sh.shifts, ...fromReq].map((x) => `${x.membershipId}|${x.day}`));
+    const synth: ShiftRow[] = [];
+    for (const person of ro.filter((x) => x.calendarOnly)) for (const d of daysOf(db.start, db.end)) {
+      const dm = Number(d.slice(8, 10));
+      if ((person.stints ?? []).some((t) => dm >= t.fromDay && dm <= t.toDay) && !haveAny.has(`${person.id}|${d}`))
+        synth.push({ id: `cal-${person.id}-${d}`, membershipId: person.id, storeId, periodId: db.id, day: d, kind: "work", start: null, end: null } as ShiftRow);
+    }
+    setShifts([...sh.shifts, ...fromReq, ...synth]); setEditable(!!sh.editable && !me.displayOnly);
     if (!me.displayOnly) {
       const dl = await api<{ limits: { day: string; maxOff: number; maxStylist: number | null; maxAssistant: number | null; maxAssistant1: number | null; maxAssistant2: number | null }[]; conflicts: { day: string; maxOff: number; count: number }[] }>(`/api/day-limits?periodId=${db.id}&storeId=${storeId}`).catch(() => null);
       if (dl) { setLimits(new Map(dl.limits.map((l) => [l.day, l.maxOff]))); setLimS(new Map(dl.limits.map((l) => [l.day, l.maxStylist]))); setLimA(new Map(dl.limits.map((l) => [l.day, l.maxAssistant]))); setLimA1(new Map(dl.limits.map((l) => [l.day, l.maxAssistant1]))); setLimA2(new Map(dl.limits.map((l) => [l.day, l.maxAssistant2]))); setConflicts(new Map(dl.conflicts.map((c) => [c.day, c]))); }
@@ -82,7 +91,7 @@ function Page() {
   const name = useMemo(() => new Map(roster.map((r) => [r.id, r.name])), [roster]);
   const short = useMemo(() => shortNames(roster), [roster]);
   const rankOf = useMemo(() => new Map(roster.map((r) => [r.id, r.rank ?? null])), [roster]);
-  const colorOf = useMemo(() => new Map(roster.map((r) => [r.id, nameColor(r.rank, r.assistantYear)])), [roster]);
+  const colorOf = useMemo(() => new Map(roster.map((r) => [r.id, r.calendarOnly ? CAL_PURPLE : nameColor(r.rank, r.assistantYear)])), [roster]);
   const byDay = useMemo(() => { const m = new Map<string, ShiftRow[]>(); for (const s of shifts) m.set(s.day, [...(m.get(s.day) ?? []), s]); return m; }, [shifts]);
   if (!ready || !view) return null;
   const days = daysOf(view.start, view.end);
@@ -150,7 +159,7 @@ function Page() {
         const rows = byDay.get(detail) ?? [];
         const work = rows.filter((r) => r.kind === "work").sort((a, b) => ((a.start ?? "") < (b.start ?? "") ? -1 : 1));
         const off = rows.filter((r) => r.kind !== "work");
-        const none = roster.filter((p) => !rows.some((r) => r.membershipId === p.id));
+        const none = roster.filter((p) => !p.calendarOnly && !rows.some((r) => r.membershipId === p.id));
         const row = (id: string, label: string, tag?: string) => (
           <li key={id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, padding: "8px 0", borderBottom: "1px solid var(--line)" }}>
             <span><b style={{ color: colorOf.get(id) }}>{name.get(id) ?? ""}{id === me.id && "（あなた）"}</b>{tag && <span className="chip" style={{ marginLeft: 8 }}>{tag}</span>}{label && <span className="sub"> {label}</span>}</span>
@@ -214,6 +223,7 @@ function Page() {
       {editTarget && detail && db && (
         <ShiftSheet
           title={`${editTarget.name}　${md(detail)}（${WEEKDAYS[dow(detail)]}）`}
+          calendarOnly={!!roster.find((r) => r.id === editTarget.id)?.calendarOnly}
           initial={shifts.find((r) => r.membershipId === editTarget.id && r.day === detail)}
           defaults={hoursOn(stores.find((x) => x.id === storeId), detail)}
           onSave={async (e) => { await api("/api/shifts", { action: "save", periodId: db.id, storeId, entries: [{ membershipId: editTarget.id, day: detail, ...e }] }); await load(); }}

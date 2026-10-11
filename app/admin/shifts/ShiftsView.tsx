@@ -36,6 +36,7 @@ export function ShiftsView({ final = false }: { final?: boolean }) {
   const [editable, setEditable] = useState(false);
   const [reqs, setReqs] = useState<RequestRow[]>([]);
   const [day, setDay] = useState("");
+  const [calRoster, setCalRoster] = useState<Person[]>([]);   // 「カレンダーだけの人」も入った名簿（休みの貼り付けで使う）
   const [fillBreak, setFillBreak] = useState<{ day: string; v: string } | null>(null);   // 一括の休憩（分）。空=自動
   const [personId, setPersonId] = useState("");
   const [picked, setPicked] = useState<Set<string>>(new Set());
@@ -75,7 +76,7 @@ export function ShiftsView({ final = false }: { final?: boolean }) {
   const load = useCallback(async () => {
     const p = await api<PeriodRow[]>("/api/periods"); setPeriods(p);
     const db = p.find((x) => x.start === view.start);
-    if (!final) setRoster(sortRoster(await api<Person[]>(`/api/roster?storeId=${storeId}`)));
+    if (!final) { const all = sortRoster(await api<Person[]>(`/api/roster?storeId=${storeId}`)); setRoster(all.filter((p) => !(p as Person & { calendarOnly?: boolean }).calendarOnly)); setCalRoster(all); }
     if (!db) { setShifts([]); setReqs([]); setEditable(false); setLoadedKey(`${storeId}|${view.start}`); return; }
     const getAtt = () => api<{ rows: AttendanceRow[]; editable: boolean; roster: Person[] }>(`/api/attendance?periodId=${db.id}&storeId=${storeId}`);
     const [s, r] = await Promise.all([
@@ -162,7 +163,7 @@ export function ShiftsView({ final = false }: { final?: boolean }) {
           <button className="ghost" style={{ color: "var(--blue)" }} onClick={async () => { const n = await post({ action: "autoDraft" }); setNote(final ? `出勤簿予定の内容を、出勤簿確定に${n}件、反映しました（すでに入っているところは、そのままです）` : `シフトカレンダー（休み・有給）の内容を、出勤簿に${n}件、反映しました（すでに入っているところは、そのままです）`); }}>{final ? "出勤簿予定から反映（足りない所だけ）" : "シフトカレンダーから出勤簿に反映"}</button>
           {note && <span className="sub">{note}</span>}
           {!final && dbPeriod && <LimitAll periodId={dbPeriod.id} storeId={storeId} days={daysOf(view.start, view.end)} onDone={() => {}} />}
-          {!final && <PasteOff roster={roster} start={view.start} end={view.end} onApply={save} />}
+          {!final && <PasteOff roster={calRoster.length ? calRoster : roster} start={view.start} end={view.end} onApply={save} />}
         </div>
         </details>
       )}

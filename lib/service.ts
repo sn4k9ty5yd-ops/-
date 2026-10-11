@@ -27,7 +27,7 @@ export type Presence = "online" | "idle" | "loggedout" | "never";
 export const ONLINE_SECONDS = 120; // これ以内に開いていれば「オンライン」
 export interface StaffRow {
   presence?: Presence; seenAgoSec?: number | null; retireOn?: string | null;
-  id: string; name: string; employeeCode: string; storeId: string; /** 0＝見せない（自分のレベルと、アプリ制作者以外には、ほかの人のレベルは見せない） */ level: Level | 0; status: "active" | "disabled"; manageable: boolean; onShift: boolean; displayOnly: boolean; execView?: boolean; canEvaluate?: boolean; materialManager?: boolean; eduLead?: boolean; appOwner?: boolean; rank?: "assistant" | "stylist" | null; assistantYear?: 1 | 2 | null; shortName?: string | null;
+  id: string; name: string; employeeCode: string; storeId: string; /** 0＝見せない（自分のレベルと、アプリ制作者以外には、ほかの人のレベルは見せない） */ level: Level | 0; status: "active" | "disabled"; manageable: boolean; onShift: boolean; displayOnly: boolean; execView?: boolean; canEvaluate?: boolean; materialManager?: boolean; eduLead?: boolean; appOwner?: boolean; rank?: "assistant" | "stylist" | null; assistantYear?: 1 | 2 | null; calendarOnly?: boolean; stints?: { storeId: string; fromDay: number; toDay: number }[]; shortName?: string | null;
 }
 
 export class ForbiddenError extends Error {
@@ -138,7 +138,7 @@ export async function listStaff(db: Database, userId: string): Promise<StaffRow[
   if (!me) return [];
   const { rows } = await asUser(db, userId, (q) =>
     q.query<StaffRow>(
-      `select id, name, employee_code as "employeeCode", store_id as "storeId", level, status, on_shift as "onShift", display_only as "displayOnly", app_owner as "appOwner", exec_view as "execView", can_evaluate as "canEvaluate", material_manager as "materialManager", edu_lead as "eduLead", rank, assistant_year as "assistantYear", short_name as "shortName" from memberships order by store_id, level desc, name`));
+      `select id, name, employee_code as "employeeCode", store_id as "storeId", level, status, on_shift as "onShift", display_only as "displayOnly", app_owner as "appOwner", exec_view as "execView", can_evaluate as "canEvaluate", material_manager as "materialManager", edu_lead as "eduLead", rank, assistant_year as "assistantYear", calendar_only as "calendarOnly", (select coalesce(json_agg(json_build_object('storeId', c.store_id, 'fromDay', c.from_day, 'toDay', c.to_day) order by c.from_day), '[]'::json) from calendar_stints c where c.membership_id = memberships.id) as stints, short_name as "shortName" from memberships order by store_id, level desc, name`));
   // ログインの状況は管理者(Lv4)だけに見せる（管理用接続で読む）
   const pres = new Map<string, { presence: Presence; seenAgoSec: number | null; retireOn: string | null }>();
   if (me.level === 4 && rows.length > 0) {
@@ -514,13 +514,30 @@ export async function setOnShift(db: Database, userId: string, targetId: string,
   if (n === 0) throw new ForbiddenError();
 }
 
-/** シフト表に載せる人（その店舗の在籍者でシフトに入る人） */
-export async function listRoster(db: Database, userId: string, storeId: string): Promise<{ id: string; name: string; level: Level | 0; shortName: string | null; rank: string | null; assistantYear: number | null }[]> {
+/** シフト表に載せる人（その店舗の在籍者でシフトに入る人。「カレンダーだけの人」は、出勤するお店の名簿に出る） */
+export interface RosterPerson { id: string; name: string; level: Level | 0; shortName: string | null; rank: string | null; assistantYear: number | null; calendarOnly: boolean; stints: { fromDay: number; toDay: number }[] }
+export async function listRoster(db: Database, userId: string, storeId: string): Promise<RosterPerson[]> {
   const me = await getMe(db, userId);
   const rows = (await asUser(db, userId, (q) =>
-    q.query<{ id: string; name: string; level: Level; shortName: string | null; rank: string | null; assistantYear: number | null }>(
-      "select id, name, level, short_name as \"shortName\", rank, assistant_year as \"assistantYear\" from memberships where store_id = $1 and status = 'active' and on_shift order by level desc, name", [storeId]))).rows;
+    q.query<RosterPerson>(
+      `select m.id, m.name, m.level, m.short_name as "shortName", m.rank, m.assistant_year as "assistantYear", m.calendar_only as "calendarOnly",
+              (select coalesce(json_agg(json_build_object('fromDay', c.from_day, 'toDay', c.to_day) order by c.from_day), '[]'::json) from calendar_stints c where c.membership_id = m.id and c.store_id = $1) as stints
+         from memberships m
+        where m.status = 'active' and ((m.store_id = $1 and m.on_shift)
+              or (m.calendar_only and exists (select 1 from calendar_stints c where c.membership_id = m.id and c.store_id = $1)))
+        order by m.level desc, m.name`, [storeId]))).rows;
   return sortRoster(rows.map((r) => (r.id === userId && me?.viewAs ? { ...r, level: me.level as Level } : me?.appOwner || r.id === userId ? r : { ...r, level: 0 as const })));   // ほかの人のレベルの数字は、返事に入れない。並びは、決めた順
+}
+
+/** 「カレンダーだけの人」（社長・役員など）にする／やめる。出勤するお店と、月の日付の範囲（例：16〜31日は天神、1〜15日はオルガン）を決める（正美さんだけ） */
+export async function setCalendarMember(db: Database, userId: string, targetId: string, on: boolean, stints: { storeId: string; fromDay: number; toDay: number }[]): Promise<void> {
+  const me = await getMe(db, userId);
+  if (!me || me.level < 4) throw new ForbiddenError();
+  if (stints.some((x) => !Number.isInteger(x.fromDay) || !Number.isInteger(x.toDay) || x.fromDay < 1 || x.toDay > 31 || x.fromDay > x.toDay)) throw new Error("日にちは、1〜31で、はじまり ≦ おわり にしてください");
+  if (on && stints.length === 0) throw new Error("出勤するお店と日にちを、1つ以上決めてください");
+  await assertNotOwnerTarget(db, userId, targetId);
+  try { await asUser(db, userId, (q) => q.query("select public.calendar_member_set($1, $2, $3::jsonb)", [targetId, on, JSON.stringify(stints)])); }
+  catch { throw new ForbiddenError(); }
 }
 
 export async function listShifts(db: Database, userId: string, periodId: string, storeId: string): Promise<ShiftRow[]> {

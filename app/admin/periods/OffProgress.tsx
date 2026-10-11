@@ -5,9 +5,9 @@ import { Stepper } from "@/app/Stepper";
 import { api, useAutoRefresh } from "@/lib/client";
 import { holidayName } from "@/lib/holidays";
 import { daysOf, shortNames, WEEKDAYS } from "@/lib/labels";
-import { nameColor, RANK_LEGEND, YEAR1_GREEN, YEAR2_BLUE } from "@/lib/rank-color";
+import { CAL_PURPLE, nameColor, RANK_LEGEND, YEAR1_GREEN, YEAR2_BLUE } from "@/lib/rank-color";
 
-type Person = { id: string; name: string; shortName?: string | null; rank?: string | null; assistantYear?: number | null };
+type Person = { id: string; name: string; shortName?: string | null; rank?: string | null; assistantYear?: number | null; calendarOnly?: boolean };
 type Req = { membershipId: string; storeId: string; day: string; kind: string };
 type Sh = { membershipId: string; day: string; kind: string };
 type Lim = { day: string; maxStylist: number | null; maxAssistant: number | null; maxAssistant1: number | null; maxAssistant2: number | null };
@@ -41,7 +41,7 @@ export function OffProgress({ periodId, storeId, start, end, canEdit }: { period
   useAutoRefresh(() => { if (!sel) load(); });
 
   const rank = useMemo(() => new Map(roster.map((p) => [p.id, p.rank ?? null])), [roster]);
-  const color = useMemo(() => new Map(roster.map((p) => [p.id, nameColor(p.rank, p.assistantYear)])), [roster]);
+  const color = useMemo(() => new Map(roster.map((p) => [p.id, p.calendarOnly ? CAL_PURPLE : nameColor(p.rank, p.assistantYear)])), [roster]);
   const yearOf = useMemo(() => new Map(roster.map((p) => [p.id, p.assistantYear ?? null])), [roster]);
   const short = useMemo(() => shortNames(roster), [roster]);
   const limOf = useMemo(() => new Map(lims.map((l) => [l.day, l])), [lims]);
@@ -99,7 +99,7 @@ export function OffProgress({ periodId, storeId, start, end, canEdit }: { period
     catch (e) { setMsg((e as Error).message); setFixOk(""); }
     setBusy(false);
   };
-  const notYet = roster.filter((p) => !submitted.has(p.id));
+  const notYet = roster.filter((p) => !p.calendarOnly && !submitted.has(p.id));
   const md = (d: string) => `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}（${WEEKDAYS[new Date(d + "T00:00:00Z").getUTCDay()]}）`;
 
   return (
@@ -107,7 +107,7 @@ export function OffProgress({ periodId, storeId, start, end, canEdit }: { period
       <b style={{ fontSize: 18 }}>📅 いま作成中の、希望休の進み具合</b>
       <p className="sub" style={{ margin: "4px 0" }}>日ごとに、<b>スタイリスト（👔）・アシスタント（🌱）が何人休むか／上限</b>が出ます。日にちを押すと、休む人の名前を見ながら、上限を変えられます。</p>
       <p className="sub" style={{ margin: "2px 0" }}>名前の色：{RANK_LEGEND.map(([t, c], i) => <span key={t}>{i > 0 && "　"}<b style={{ color: c }}>{t}</b></span>)}</p>
-      <p style={{ margin: "6px 0" }}>希望休を出した人：<b>{roster.length - notYet.length}人</b> ／ {roster.length}人　{overDays > 0 ? <span className="chip" style={{ color: "var(--bad)" }}>⚠ 上限をこえた日 {overDays}日</span> : <span className="chip">上限をこえた日はありません</span>}</p>
+      <p style={{ margin: "6px 0" }}>希望休を出した人：<b>{roster.filter((p) => !p.calendarOnly).length - notYet.length}人</b> ／ {roster.filter((p) => !p.calendarOnly).length}人　{overDays > 0 ? <span className="chip" style={{ color: "var(--bad)" }}>⚠ 上限をこえた日 {overDays}日</span> : <span className="chip">上限をこえた日はありません</span>}</p>
       {notYet.length > 0 && <details><summary className="sub" style={{ cursor: "pointer" }}>まだ出していない人（{notYet.length}人）</summary><p className="sub" style={{ margin: "4px 0" }}>{notYet.map((p, k) => <span key={p.id} style={{ color: nameColor(p.rank, p.assistantYear) }}>{k > 0 && "、"}{p.name}</span>)}</p></details>}
       {msg && <p className="err">{msg}</p>}
       <div className="offgrid">

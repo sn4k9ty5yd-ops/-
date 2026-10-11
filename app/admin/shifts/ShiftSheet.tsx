@@ -8,13 +8,13 @@ import type { ShiftEntry, ShiftKind, ShiftRow } from "@/lib/service";
 
 /** 1人・1日（または複数日）のシフトを入力する下から出る入力欄 */
 export function ShiftSheet({
-  title, sub, initial, defaults, onSave, onClear, onClose,
+  title, sub, initial, defaults, onSave, onClear, onClose, calendarOnly,
 }: {
   title: string; sub?: string; initial?: ShiftRow; defaults: { start: string; end: string };
-  onSave(e: Pick<ShiftEntry, "kind" | "start" | "end" | "breakMin">): Promise<void>; onClear?: () => Promise<void>; onClose(): void;
+  onSave(e: Pick<ShiftEntry, "kind" | "start" | "end" | "breakMin">): Promise<void>; onClear?: () => Promise<void>; onClose(): void; calendarOnly?: boolean;
 }) {
   const { me } = useMe();
-  const [kind, setKind] = useState<ShiftKind>(initial?.kind ?? "work");
+  const [kind, setKind] = useState<ShiftKind>(calendarOnly && (!initial || initial.kind === "work") ? "holiday" : initial?.kind ?? "work");
   const [start, setStart] = useState(initial?.start ?? defaults.start);
   const [end, setEnd] = useState(initial?.end ?? defaults.end);
   const [brk, setBrk] = useState<string>(initial?.breakMin == null ? "" : String(initial.breakMin));   // 空=自動
@@ -28,7 +28,7 @@ export function ShiftSheet({
         <b style={{ fontSize: 18 }}>{title}</b>
         {sub && <div className="sub">{sub}</div>}
         <div className="seg">
-          {KIND_BUTTONS.map((k) => <button key={k.kind} className={kind === k.kind ? "on" : ""} onClick={() => setKind(k.kind)}>{k.label}</button>)}
+          {KIND_BUTTONS.filter((k) => !calendarOnly || k.kind !== "work").map((k) => <button key={k.kind} className={kind === k.kind ? "on" : ""} onClick={() => setKind(k.kind)}>{k.label}</button>)}
         </div>
         {kind === "work" && (
           <>
