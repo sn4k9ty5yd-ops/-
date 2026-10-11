@@ -10,6 +10,7 @@ type Person = { id: string; name: string; shortName?: string | null; rank?: stri
 type Req = { membershipId: string; storeId: string; day: string; kind: string };
 type Sh = { membershipId: string; day: string; kind: string };
 type Lim = { day: string; maxStylist: number | null; maxAssistant: number | null };
+const RED = "#d70015", BLUE = "#0a6cf0";   // スタイリスト=赤文字・アシスタント=青文字
 const KIND: Record<string, string> = { hope: "公休希望", paid: "有給", holiday: "公休", off: "休み", other: "他" };
 
 /** 「つくる」: 作成中のシフトの、希望休の進み具合。日ごとに、スタイリスト・アシスタントが何人休むか／上限を見て、その場で上限を変えられる */
@@ -70,8 +71,9 @@ export function OffProgress({ periodId, storeId, start, end, canEdit }: { period
     <div className="card" style={{ margin: "10px 0" }}>
       <b style={{ fontSize: 18 }}>📅 いま作成中の、希望休の進み具合</b>
       <p className="sub" style={{ margin: "4px 0" }}>日ごとに、<b>スタイリスト（👔）・アシスタント（🌱）が何人休むか／上限</b>が出ます。日にちを押すと、休む人の名前を見ながら、上限を変えられます。</p>
+      <p className="sub" style={{ margin: "2px 0" }}>名前の色：<b style={{ color: RED }}>スタイリスト＝赤</b>　<b style={{ color: BLUE }}>アシスタント＝青</b></p>
       <p style={{ margin: "6px 0" }}>希望休を出した人：<b>{roster.length - notYet.length}人</b> ／ {roster.length}人　{overDays > 0 ? <span className="chip" style={{ color: "var(--bad)" }}>⚠ 上限をこえた日 {overDays}日</span> : <span className="chip">上限をこえた日はありません</span>}</p>
-      {notYet.length > 0 && <details><summary className="sub" style={{ cursor: "pointer" }}>まだ出していない人（{notYet.length}人）</summary><p className="sub" style={{ margin: "4px 0" }}>{notYet.map((p) => p.name).join("、")}</p></details>}
+      {notYet.length > 0 && <details><summary className="sub" style={{ cursor: "pointer" }}>まだ出していない人（{notYet.length}人）</summary><p className="sub" style={{ margin: "4px 0" }}>{notYet.map((p, k) => <span key={p.id} style={{ color: p.rank === "stylist" ? RED : p.rank === "assistant" ? BLUE : undefined }}>{k > 0 && "、"}{p.name}</span>)}</p></details>}
       {msg && <p className="err">{msg}</p>}
       <div className="offgrid">
         {WEEKDAYS.map((w, i) => <div key={w} className="offhead" style={{ color: i === 0 ? "#d70015" : i === 6 ? "#0a6cf0" : undefined }}>{w}</div>)}
@@ -84,7 +86,7 @@ export function OffProgress({ periodId, storeId, start, end, canEdit }: { period
               <b style={{ color: hol ? "#d70015" : undefined }}>{Number(d.slice(8, 10))}</b>
               <span className="offline" style={{ color: l?.maxStylist !== null && l && cs > (l.maxStylist ?? 99) ? "var(--bad)" : undefined }}>👔{cs}/{l?.maxStylist ?? "－"}</span>
               <span className="offline" style={{ color: l?.maxAssistant !== null && l && ca > (l.maxAssistant ?? 99) ? "var(--bad)" : undefined }}>🌱{ca}/{l?.maxAssistant ?? "－"}</span>
-              {etc > 0 && <span className="offline sub">他{etc}</span>}
+              <span className="offnames">{(offBy.get(d) ?? []).map((p, k) => <span key={p.id} style={{ color: rank.get(p.id) === "stylist" ? RED : rank.get(p.id) === "assistant" ? BLUE : "var(--sub)" }}>{k > 0 && "・"}{short.get(p.id) ?? ""}</span>)}</span>
             </button>
           );
         })}
@@ -96,7 +98,7 @@ export function OffProgress({ periodId, storeId, start, end, canEdit }: { period
             <p className="sub" style={{ margin: "0 0 6px" }}>いま休む人（希望休・休み）：👔スタイリスト {count(sel, "stylist")}人　🌱アシスタント {count(sel, "assistant")}人</p>
             <ul className="list">
               {(offBy.get(sel) ?? []).length === 0 ? <li><span className="sub">まだ、だれも出していません</span></li> :
-                (offBy.get(sel) ?? []).map((p) => <li key={p.id}><span>{rank.get(p.id) === "stylist" ? "👔" : rank.get(p.id) === "assistant" ? "🌱" : "・"} {short.get(p.id) ?? roster.find((x) => x.id === p.id)?.name}</span><span className="chip">{KIND[p.kind] ?? p.kind}</span></li>)}
+                (offBy.get(sel) ?? []).map((p) => <li key={p.id}><span style={{ color: rank.get(p.id) === "stylist" ? RED : rank.get(p.id) === "assistant" ? BLUE : undefined, fontWeight: 700 }}>{rank.get(p.id) === "stylist" ? "👔" : rank.get(p.id) === "assistant" ? "🌱" : "・"} {roster.find((x) => x.id === p.id)?.name}</span><span className="chip">{KIND[p.kind] ?? p.kind}</span></li>)}
             </ul>
             {canEdit ? (
               <>
