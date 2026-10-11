@@ -49,3 +49,17 @@ describe("カレンダーだけの人（社長・役員）", () => {
     expect((await svc.listRoster(db, id.shift, st["福津"])).some((r) => r.id === id.yaku)).toBe(false);
   });
 });
+
+describe("退職になっている人をもどす", () => {
+  it("正美さん(レベル4)だけがもどせる。番号を空けた人はもどせない", async () => {
+    await svc.disableStaff(db, id.office, id.a);
+    await expect(svc.restoreStaff(db, id.shift, id.a)).rejects.toThrow(svc.ForbiddenError);
+    const pass = await svc.restoreStaff(db, id.office, id.a);
+    expect(pass).toMatch(/^\d{6}$/);
+    expect((await db.query<{ status: string }>("select status from memberships where id = $1", [id.a])).rows[0].status).toBe("active");
+    await expect(svc.restoreStaff(db, id.office, id.a)).rejects.toThrow("すでに在籍");
+    await svc.disableStaff(db, id.office, id.a);
+    await svc.releaseRetiredCode(db, id.office, id.a);
+    await expect(svc.restoreStaff(db, id.office, id.a)).rejects.toThrow("空けた人");
+  });
+});

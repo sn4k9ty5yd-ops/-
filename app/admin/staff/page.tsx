@@ -164,6 +164,12 @@ export default function StaffPage() {
               )}
               {me.level === 4 && s.status === "disabled" && !s.employeeCode.includes("-退職") && (
                 <button className="ghost" style={{ color: "var(--blue)" }}
+                  onClick={async () => { if (!confirm(`${s.name} さんを、もとにもどしますか？（在籍にもどります。新しいパスコードが出ます）`)) return; try { const r = await api<{ passcode: string }>(`/api/staff/${s.id}/restore`, {}); setMsg(`${s.name} さんをもどしました。新しいパスコード：${r.passcode}（この画面を閉じると見られません。本人に伝えてください）`); await load(); } catch (e) { setMsg((e as Error).message); } }}>
+                  もとにもどす（復活）
+                </button>
+              )}
+              {me.level === 4 && s.status === "disabled" && !s.employeeCode.includes("-退職") && (
+                <button className="ghost" style={{ color: "var(--blue)" }}
                   onClick={() => confirm(`${s.name} さんの社員番号「${s.employeeCode}」を空けて、新しい人が使えるようにしますか？（${s.name} さんの番号は「${s.employeeCode}-退職」に変わります。過去の記録はそのまま残ります）`) &&
                     run(() => api(`/api/staff/${s.id}/release`, {}))}>
                   番号を空ける

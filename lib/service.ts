@@ -225,6 +225,21 @@ export async function disableStaff(db: Database, userId: string, targetId: strin
   await db.query("delete from sessions where membership_id = $1", [targetId]);
 }
 
+/** 退職（無効）になっている人を、もとにもどす（正美さん以上）。新しいパスコードを発行して返す（最初のログインで変えてもらう） */
+export async function restoreStaff(db: Database, userId: string, targetId: string): Promise<string> {
+  const me = await getMe(db, userId);
+  if (!me || me.level !== 4) throw new ForbiddenError();
+  await assertNotOwnerTarget(db, userId, targetId);
+  const cur = (await asUser(db, userId, (q) => q.query<{ status: string; employeeCode: string }>('select status, employee_code as "employeeCode" from memberships where id = $1', [targetId]))).rows[0];
+  if (!cur) throw new ForbiddenError();
+  if (cur.status !== "disabled") throw new Error("この人は、すでに在籍しています");
+  if (cur.employeeCode.includes("-退職")) throw new Error("社員番号を空けた人は、もどせません。新しく登録してください");
+  const { rows } = await asUser(db, userId, (q) => q.query("update memberships set status = 'active', left_on = null where id = $1 returning id", [targetId]));
+  if (rows.length === 0) throw new ForbiddenError();
+  await db.query("update memberships set retire_on = null where id = $1", [targetId]);
+  return issuePasscode(db, targetId);
+}
+
 /** レベルを変える。1〜3は正美さん以上。4（鬼塚さん・見るだけ）と5（正美さん）に決められるのは、アプリ制作者だけ（中の数字はどちらも4。鬼塚さんだけ exec_view の印をつける） */
 export async function setStaffLevel(db: Database, userId: string, targetId: string, level: Level | 5): Promise<void> {
   const me = await getMe(db, userId);
