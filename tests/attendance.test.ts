@@ -90,12 +90,11 @@ describe("入力の正しさ", () => {
 });
 
 describe("提出と確認", () => {
-  it("提出後は店長は直せない。オフィスは直せる。確認済みは誰も直せない", async () => {
+  it("提出後も店長・オフィスは訂正できる。確認済みは誰も直せない", async () => {
     await as(U.mgr1, async () => expect(await fails(`update store_period_status set attendance_status='submitted' where period_id='${P}' and store_id='${S1}'`)).toBe(false));
     await as(U.mgr1, async () => {
-      expect(await fails(`update attendance_records set note='x' where membership_id='${U.staff1}' and day='2026-11-20'`)).toBe(true);
-      expect(await fails(`delete from attendance_records where membership_id='${U.staff1}' and day='2026-11-20'`)).toBe(true);
-      expect(await fails(work(U.staff1b, S1, "2026-11-26"))).toBe(true);
+      expect(await fails(`update attendance_records set note='x' where membership_id='${U.staff1}' and day='2026-11-20'`)).toBe(false);   // 提出のあとも、店長は訂正できる
+      expect(await fails(work(U.staff1b, S1, "2026-11-26"))).toBe(false);
     });
     await as(U.office, async () => expect(await fails(`update attendance_records set note='オフィス修正' where membership_id='${U.staff1}' and day='2026-11-20'`)).toBe(false));
     await att(S1, "acknowledged");
