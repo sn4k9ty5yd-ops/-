@@ -12,8 +12,9 @@ import { PeriodNav, periodFor, todayJst, tintStyle } from "@/lib/period-nav";
 import type { Period } from "@/lib/periods";
 import { STATUS_ORDER, type PeriodRow, type ShiftRow, type StoreRow } from "@/lib/service";
 import { longText } from "@/lib/shift-ui";
+import { nameColor, RANK_LEGEND } from "@/lib/rank-color";
 
-type Person = { id: string; name: string; shortName?: string | null; rank?: string | null };
+type Person = { id: string; name: string; shortName?: string | null; rank?: string | null; assistantYear?: number | null };
 const LABEL: Record<string, string> = { off: "休", paid: "有給", holiday: "公休", other: "他" };
 
 function Page() {
@@ -77,6 +78,7 @@ function Page() {
   const name = useMemo(() => new Map(roster.map((r) => [r.id, r.name])), [roster]);
   const short = useMemo(() => shortNames(roster), [roster]);
   const rankOf = useMemo(() => new Map(roster.map((r) => [r.id, r.rank ?? null])), [roster]);
+  const colorOf = useMemo(() => new Map(roster.map((r) => [r.id, nameColor(r.rank, r.assistantYear)])), [roster]);
   const byDay = useMemo(() => { const m = new Map<string, ShiftRow[]>(); for (const s of shifts) m.set(s.day, [...(m.get(s.day) ?? []), s]); return m; }, [shifts]);
   if (!ready || !view) return null;
   const days = daysOf(view.start, view.end);
@@ -129,7 +131,7 @@ function Page() {
                   {list.length === 0 && show === "off" ? <small className="sub">なし</small> : (
                     <div className="names">
                       {list.map((s, i) => (
-                        <span key={s.id} className={s.membershipId === me.id ? "me" : ""} style={{ color: rankOf.get(s.membershipId) === "stylist" ? "#d70015" : rankOf.get(s.membershipId) === "assistant" ? "#0a6cf0" : undefined }}>{i > 0 && "・"}{short.get(s.membershipId) ?? ""}{show === "off" && s.kind === "paid" ? "🈶" : ""}</span>
+                        <span key={s.id} className={s.membershipId === me.id ? "me" : ""} style={{ color: colorOf.get(s.membershipId) }}>{i > 0 && "・"}{short.get(s.membershipId) ?? ""}{show === "off" && s.kind === "paid" ? "🈶" : ""}</span>
                       ))}
                     </div>
                   )}
@@ -139,7 +141,7 @@ function Page() {
           </div>
         </div>
       )}
-      {!me.displayOnly && <p className="hint">日にちを押すと、その日の全員が見られます。名前の色は、<b style={{ color: "#d70015" }}>スタイリスト＝赤</b>・<b style={{ color: "#0a6cf0" }}>アシスタント＝青</b>です。自分の名前は太字、自分の休みの日は <b style={{ color: "#d70015" }}>赤い丸</b> で表示されます。</p>}
+      {!me.displayOnly && <p className="hint">日にちを押すと、その日の全員が見られます。名前の色は、{RANK_LEGEND.map(([t, c], i) => <span key={t}>{i > 0 && "・"}<b style={{ color: c }}>{t}</b></span>)}です。自分の名前は太字、自分の休みの日は <b style={{ color: "#d70015" }}>赤い丸</b> で表示されます。</p>}
       {detail && (() => {
         const rows = byDay.get(detail) ?? [];
         const work = rows.filter((r) => r.kind === "work").sort((a, b) => ((a.start ?? "") < (b.start ?? "") ? -1 : 1));
@@ -147,7 +149,7 @@ function Page() {
         const none = roster.filter((p) => !rows.some((r) => r.membershipId === p.id));
         const row = (id: string, label: string, tag?: string) => (
           <li key={id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, padding: "8px 0", borderBottom: "1px solid var(--line)" }}>
-            <span><b style={{ color: rankOf.get(id) === "stylist" ? "#d70015" : rankOf.get(id) === "assistant" ? "#0a6cf0" : undefined }}>{name.get(id) ?? ""}{id === me.id && "（あなた）"}</b>{tag && <span className="chip" style={{ marginLeft: 8 }}>{tag}</span>}{label && <span className="sub"> {label}</span>}</span>
+            <span><b style={{ color: colorOf.get(id) }}>{name.get(id) ?? ""}{id === me.id && "（あなた）"}</b>{tag && <span className="chip" style={{ marginLeft: 8 }}>{tag}</span>}{label && <span className="sub"> {label}</span>}</span>
             {editable && <button className="ghost" style={{ color: "var(--blue)", width: "auto", padding: "6px 10px" }} onClick={() => setEditTarget({ id, name: name.get(id) ?? "" })}>編集</button>}
           </li>
         );

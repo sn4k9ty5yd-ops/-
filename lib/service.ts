@@ -27,7 +27,7 @@ export type Presence = "online" | "idle" | "loggedout" | "never";
 export const ONLINE_SECONDS = 120; // これ以内に開いていれば「オンライン」
 export interface StaffRow {
   presence?: Presence; seenAgoSec?: number | null; retireOn?: string | null;
-  id: string; name: string; employeeCode: string; storeId: string; /** 0＝見せない（自分のレベルと、アプリ制作者以外には、ほかの人のレベルは見せない） */ level: Level | 0; status: "active" | "disabled"; manageable: boolean; onShift: boolean; displayOnly: boolean; execView?: boolean; canEvaluate?: boolean; materialManager?: boolean; eduLead?: boolean; appOwner?: boolean; rank?: "assistant" | "stylist" | null; shortName?: string | null;
+  id: string; name: string; employeeCode: string; storeId: string; /** 0＝見せない（自分のレベルと、アプリ制作者以外には、ほかの人のレベルは見せない） */ level: Level | 0; status: "active" | "disabled"; manageable: boolean; onShift: boolean; displayOnly: boolean; execView?: boolean; canEvaluate?: boolean; materialManager?: boolean; eduLead?: boolean; appOwner?: boolean; rank?: "assistant" | "stylist" | null; assistantYear?: 1 | 2 | null; shortName?: string | null;
 }
 
 export class ForbiddenError extends Error {
@@ -138,7 +138,7 @@ export async function listStaff(db: Database, userId: string): Promise<StaffRow[
   if (!me) return [];
   const { rows } = await asUser(db, userId, (q) =>
     q.query<StaffRow>(
-      `select id, name, employee_code as "employeeCode", store_id as "storeId", level, status, on_shift as "onShift", display_only as "displayOnly", app_owner as "appOwner", exec_view as "execView", can_evaluate as "canEvaluate", material_manager as "materialManager", edu_lead as "eduLead", rank, short_name as "shortName" from memberships order by store_id, level desc, name`));
+      `select id, name, employee_code as "employeeCode", store_id as "storeId", level, status, on_shift as "onShift", display_only as "displayOnly", app_owner as "appOwner", exec_view as "execView", can_evaluate as "canEvaluate", material_manager as "materialManager", edu_lead as "eduLead", rank, assistant_year as "assistantYear", short_name as "shortName" from memberships order by store_id, level desc, name`));
   // ログインの状況は管理者(Lv4)だけに見せる（管理用接続で読む）
   const pres = new Map<string, { presence: Presence; seenAgoSec: number | null; retireOn: string | null }>();
   if (me.level === 4 && rows.length > 0) {
@@ -515,11 +515,11 @@ export async function setOnShift(db: Database, userId: string, targetId: string,
 }
 
 /** シフト表に載せる人（その店舗の在籍者でシフトに入る人） */
-export async function listRoster(db: Database, userId: string, storeId: string): Promise<{ id: string; name: string; level: Level | 0; shortName: string | null; rank: string | null }[]> {
+export async function listRoster(db: Database, userId: string, storeId: string): Promise<{ id: string; name: string; level: Level | 0; shortName: string | null; rank: string | null; assistantYear: number | null }[]> {
   const me = await getMe(db, userId);
   const rows = (await asUser(db, userId, (q) =>
-    q.query<{ id: string; name: string; level: Level; shortName: string | null; rank: string | null }>(
-      "select id, name, level, short_name as \"shortName\", rank from memberships where store_id = $1 and status = 'active' and on_shift order by level desc, name", [storeId]))).rows;
+    q.query<{ id: string; name: string; level: Level; shortName: string | null; rank: string | null; assistantYear: number | null }>(
+      "select id, name, level, short_name as \"shortName\", rank, assistant_year as \"assistantYear\" from memberships where store_id = $1 and status = 'active' and on_shift order by level desc, name", [storeId]))).rows;
   return sortRoster(rows.map((r) => (r.id === userId && me?.viewAs ? { ...r, level: me.level as Level } : me?.appOwner || r.id === userId ? r : { ...r, level: 0 as const })));   // ほかの人のレベルの数字は、返事に入れない。並びは、決めた順
 }
 
@@ -1508,6 +1508,17 @@ export async function setManualGrant(db: Database, userId: string, pageId: strin
   } catch { throw new ForbiddenError(); }
 }
 
+/** アシスタントの「1年目／2年目」を決める（管理者のみ）。空にもできる。ランクがアシスタントの人だけ */
+export async function setAssistantYear(db: Database, userId: string, targetId: string, year: number | null): Promise<void> {
+  const me = await getMe(db, userId);
+  if (!me || me.level < 4) throw new ForbiddenError();
+  if (year !== null && year !== 1 && year !== 2) throw new Error("1年目か2年目をえらんでください");
+  const t = (await asUser(db, userId, (q) => q.query<{ rank: string | null }>("select rank from memberships where id = $1 and status = 'active'", [targetId]))).rows[0];
+  if (!t) throw new ForbiddenError();
+  if (year !== null && t.rank !== "assistant") throw new Error("先に、ランクを「アシスタント」にしてください");
+  await db.query("update memberships set assistant_year = $2 where id = $1", [targetId, year]);
+}
+
 /** ランク（アシスタント／スタイリスト）を決める（管理者のみ）。空にもできる */
 export async function setRank(db: Database, userId: string, targetId: string, rank: string | null): Promise<void> {
   const me = await getMe(db, userId);
@@ -1515,7 +1526,7 @@ export async function setRank(db: Database, userId: string, targetId: string, ra
   if (rank !== null && !RANKS.includes(rank)) throw new Error("ランクが正しくありません");
   const ok = await asUser(db, userId, (q) => q.query("select 1 from memberships where id = $1 and status = 'active'", [targetId]));
   if (ok.rows.length === 0) throw new ForbiddenError();
-  await db.query("update memberships set rank = $2 where id = $1", [targetId, rank]);
+  await db.query("update memberships set rank = $2, assistant_year = case when $2 = 'assistant' then assistant_year else null end where id = $1", [targetId, rank]);
 }
 
 

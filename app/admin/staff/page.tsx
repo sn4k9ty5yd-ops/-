@@ -98,7 +98,7 @@ export default function StaffPage() {
               <b>{s.name}</b> <span className="sub">{storeName(s.storeId)}</span>{s.displayOnly && <span className="chip warn">表示専用（お店の端末）</span>}
               <div className="sub">社員番号 {s.employeeCode}{s.status === "disabled" && " ／ 退職（無効）"}{s.status === "active" && !s.displayOnly && (s.onShift ? " ／ シフトに入る" : " ／ シフトに入らない")}</div>
               {s.status === "active" && s.shortName && <div className="sub" style={{ marginTop: 2 }}>カレンダーの名前：{s.shortName}</div>}
-              {s.status === "active" && s.rank && <div className="sub" style={{ marginTop: 2 }}>ランク：{s.rank === "stylist" ? "スタイリスト" : "アシスタント"}</div>}
+              {s.status === "active" && s.rank && <div className="sub" style={{ marginTop: 2 }}>ランク：{s.rank === "stylist" ? "スタイリスト" : `アシスタント${s.assistantYear ? `（${s.assistantYear}年目）` : ""}`}</div>}
               {s.status === "active" && s.canEvaluate && <div className="sub" style={{ marginTop: 2 }}>✔ 技術評価をつけられる人</div>}
               {s.status === "active" && s.eduLead && <div className="sub" style={{ marginTop: 2 }}>✔ 教育担当（レッスンを記録できる）</div>}
               {s.status === "active" && s.materialManager && <div className="sub" style={{ marginTop: 2 }}>✔ 材料担当（自分のお店の材料費を、まとめて見られる・書ける）</div>}
@@ -123,6 +123,11 @@ export default function StaffPage() {
               {me.level === 4 && s.status === "active" && !s.displayOnly && (
                 <select aria-label="ランク" value={s.rank ?? ""} onChange={(e) => run(() => api(`/api/staff/${s.id}/rank`, { rank: e.target.value || null }))}>
                   <option value="">ランク未設定</option><option value="assistant">アシスタント</option><option value="stylist">スタイリスト</option>
+                </select>
+              )}
+              {me.level === 4 && s.status === "active" && !s.displayOnly && s.rank === "assistant" && (
+                <select aria-label="アシスタントの年" value={s.assistantYear ?? ""} onChange={(e) => run(() => api(`/api/staff/${s.id}/assistant-year`, { year: e.target.value ? Number(e.target.value) : null }))}>
+                  <option value="">何年目か未設定</option><option value="1">1年目</option><option value="2">2年目</option>
                 </select>
               )}
               {me.level === 4 && s.status === "active" && !s.displayOnly && (

@@ -120,3 +120,18 @@ describe("レッスン記録", () => {
     expect(trend(s)).toBe("slower");
   });
 });
+describe("アシスタントの1年目・2年目", () => {
+  it("決められるのは管理者だけ。アシスタントの人にだけ。名簿に出る。ランクを変えると消える", async () => {
+    await expect(svc.setAssistantYear(db, id.mgr, id.a1, 1)).rejects.toThrow(svc.ForbiddenError);
+    await expect(svc.setAssistantYear(db, id.office, id.plain, 1)).rejects.toThrow("アシスタント");
+    await expect(svc.setAssistantYear(db, id.office, id.a1, 3)).rejects.toThrow();
+    await svc.setAssistantYear(db, id.office, id.a1, 1); await svc.setAssistantYear(db, id.office, id.a2, 2);
+    const roster = await svc.listRoster(db, id.mgr, st["A店"]);
+    expect(roster.find((r) => r.id === id.a1)?.assistantYear).toBe(1);
+    expect(roster.find((r) => r.id === id.a2)?.assistantYear).toBe(2);
+    await svc.setRank(db, id.office, id.a2, "stylist");
+    expect((await svc.listRoster(db, id.mgr, st["A店"])).find((r) => r.id === id.a2)?.assistantYear).toBeNull();
+    await svc.setRank(db, id.office, id.a2, "assistant");
+  });
+});
+
