@@ -655,7 +655,7 @@ export interface AttendanceRow {
 }
 export interface AttendanceEntry { membershipId: string; day: string; kind: ShiftKind; clockIn?: string | null; clockOut?: string | null; breakMin?: number; note?: string | null; }
 
-const NOT_EDITABLE_ATT = "いまは出勤簿を変更できません（提出済み・確認済み、または権限がありません）";
+const NOT_EDITABLE_ATT = "いまは出勤簿を変更できません（確認済み、または権限がありません）";
 
 export async function listAttendanceRoster(db: Database, userId: string, periodId: string, storeId: string): Promise<{ id: string; name: string; status: string }[]> {
   const rows = (await asUser(db, userId, (q) =>

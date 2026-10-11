@@ -135,7 +135,7 @@ export function ShiftsView({ final = false }: { final?: boolean }) {
   }, [final, mode, confDay, periodId, storeId, shifts]);
   const confirmDay = async () => { try { await api("/api/attendance", { periodId, storeId, action: "day-confirm", day: confDay }); setNote(`${md(confDay)} の退店時間を、登録しました`); setDayConf({ confirmed: true, unfixed: dayConf?.unfixed ?? 0 }); } catch (e) { setMsg((e as Error).message); } };
   const loading = loadedKey !== `${storeId}|${view.start}`;
-  const readOnlyReason = loading ? "" : !dbPeriod ? "この期間は、まだ作成されていません。" : editable ? "" : storeId !== me.storeId && me.level < 4 ? "他のお店の出勤簿です（見るだけ）。" : final ? "いまは出勤簿確定を変更できません（提出済み・確認済みなど）。" : pstatus === "preparing" ? "まだ準備中です。希望休の受付を始めるか、出勤簿づくりを始めると入力できます。" : "いまは出勤簿を変更できません（確定済みなど）。";
+  const readOnlyReason = loading ? "" : !dbPeriod ? "この期間は、まだ作成されていません。" : editable ? "" : storeId !== me.storeId && me.level < 4 ? "他のお店の出勤簿です（見るだけ）。" : final ? "いまは出勤簿確定を変更できません（確認済みです。直したいときは、正美さんに「ひとつ戻す」をお願いしてください）。" : pstatus === "preparing" ? "まだ準備中です。希望休の受付を始めるか、出勤簿づくりを始めると入力できます。" : "いまは出勤簿を変更できません（確定済みなど）。";
 
   const dayCount = (d: string) => roster.filter((r) => byKey.get(`${r.id}|${d}`)?.kind === "work").length;
 

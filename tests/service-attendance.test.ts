@@ -97,10 +97,12 @@ describe("見られる人・直せる人", () => {
 });
 
 describe("提出と確認", () => {
-  it("店長が提出 → 店長は直せない。オフィスは直せて、確認済みにできる。店長は確認済みにできない", async () => {
+  it("店長が提出 → 提出のあとも、店長・シフト担当・オフィスは訂正できる。確認済みにできるのはオフィスだけ。確認済みのあとは直せない", async () => {
     await svc.setAttendanceStatus(db, id.mgr1, periodId, st.s1, "submitted");
     expect((await svc.listPeriods(db, id.mgr1))[0].stores.find((s) => s.storeId === st.s1)?.attendanceStatus).toBe("submitted");
-    await expect(svc.saveAttendance(db, id.mgr1, periodId, st.s1, [{ membershipId: id.a, day: "2026-11-20", kind: "off" }])).rejects.toThrow("提出済み");
+    await svc.saveAttendance(db, id.mgr1, periodId, st.s1, [{ membershipId: id.a, day: "2026-11-20", kind: "off" }]);       // 店長の訂正
+    await svc.saveAttendance(db, id.shift1, periodId, st.s1, [{ membershipId: id.b, day: "2026-11-20", kind: "off" }]);     // シフト担当の訂正
+    await expect(svc.saveAttendance(db, id.mgr2, periodId, st.s1, [{ membershipId: id.a, day: "2026-11-20", kind: "work", clockIn: "10:00", clockOut: "19:00" }])).rejects.toThrow(svc.ForbiddenError);   // 他店の店長は不可
     await svc.saveAttendance(db, id.office, periodId, st.s1, [{ membershipId: id.a, day: "2026-11-20", kind: "off" }]);
     await expect(svc.setAttendanceStatus(db, id.mgr1, periodId, st.s1, "acknowledged")).rejects.toThrow(svc.ForbiddenError);
     await svc.setAttendanceStatus(db, id.office, periodId, st.s1, "acknowledged");
