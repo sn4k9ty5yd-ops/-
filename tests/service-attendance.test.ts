@@ -132,4 +132,12 @@ describe("有給の残り日数", () => {
     expect(await svc.listLeave(db, id.a, st.s2)).toEqual([]);
     expect(await svc.getMyLeave(db, id.a)).toMatchObject({ granted: 0, used: 0, remaining: 0 });
   });
+
+  it("シフト担当（レベル2）も、自店の出勤簿を、一括で直せる（他店は不可）", async () => {
+    const r = await svc.fillAttendance(db, id.shift1, { periodId, storeId: st.s1, days: ["2026-11-19"], clockIn: "10:00", clockOut: "19:00" });
+    expect(r.saved).toBeGreaterThan(0);
+    expect((await svc.fillAttendance(db, id.shift1, { periodId, storeId: st.s2, days: ["2026-11-19"], clockIn: "10:00", clockOut: "19:00" })).saved).toBe(0);   // 他店は、何も変わらない
+    expect(await svc.draftAttendanceFromShifts(db, id.shift1, periodId, st.s1, true)).toBeGreaterThanOrEqual(0);
+    expect(await svc.clearAttendance(db, id.shift1, periodId, st.s1, [{ membershipId: id.a, day: "2026-11-19" }])).toBe(1);
+  });
 });
